@@ -12,7 +12,7 @@ Below is a collection of projects on which I've worked with collaborators. The r
 
 
 <div style="clear: both;">
-  <div style="float: right; margin-right 5em;">
+  <div style="float: left; margin-right 5em;">
     <img src="/images/vesc.png" alt="vesc corner plot" width="250" height="250">
   </div>
   <div>
@@ -38,7 +38,7 @@ Below is a collection of projects on which I've worked with collaborators. The r
 
 
 <div style="clear: both;">
-  <div style="float: right; margin-right 1em;">
+  <div style="float: left; margin-right 1em;">
     <img src="/images/penrose.png" alt="penrose" width="350" height="350">
   </div>
   <div>
@@ -67,7 +67,7 @@ Below is a collection of projects on which I've worked with collaborators. The r
 
 
 <div style="clear: both;">
-  <div style="float: right; margin-right 1em;">
+  <div style="float: left; margin-right 1em;">
     <img src="/images/ippprok.png" alt="mag field" width="350" height="350">
   </div>
   <div>
@@ -94,7 +94,7 @@ Below is a collection of projects on which I've worked with collaborators. The r
 
 
 <div style="clear: both;">
-  <div style="float: right; margin-right 1em;">
+  <div style="float: left; margin-right 1em;">
     <img src="/images/92a.png" alt="sn1992a" width="350" height="350">
   </div>
   <div>
