@@ -23,7 +23,7 @@ Maybe make into a map? Drawn?
 and where those fields interact.
 
 ### What's on this website?
-Some things I've worked on in the past few years, some thoughts on ethics, a CV, and pictures of some adventures I've found myself on. Evidence: 
+Some things I've worked on in the past few years, some thoughts on ethics, a <a target="_blank" rel="noopener noreferrer" href="cianmroche.github.io/files/CV.pdf" target="_blank">CV</a>, and pictures of some adventures I've found myself on. Evidence: 
 
 <p align="center">
   <img alt="Fun image" src="/images/slip.jpg" width="45%">
