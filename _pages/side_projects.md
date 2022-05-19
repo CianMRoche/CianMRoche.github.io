@@ -26,3 +26,6 @@ This is a pdf containing links to videos I made, introducing topics from group a
 This is a presentation I made for fun in a day or two over Winter break. Very casual in tone, but in my opinion it’s an interesting connection between the world of locking mechanisms and that of introductory combinatorics.
 
 
+### Fundamentals of Special Relativity 
+<img style="left;" src="/images/sprel.png" width="500">
+A document which motivates in a self-contained fashion the fundamentals of special relativity, arriving at the Lorentz transformation and demonstrating the origins of length contraction and time dilation. The document is concluded by explicit demonstration that Lorentz transformations are isometries of Minkowski space. 
