@@ -71,8 +71,8 @@ Below is a collection of projects on which I've worked with collaborators. The r
     <img src="/images/ippprok.png" alt="mag field" width="350" height="350">
   </div>
   <div>
-    <h2>High Order Nulls in the Poloidal field Structure of ASDEX Upgrade</h2>
-    <p>ASDEX Upgrade (Axially Symmetric Divertor Experiment) is a magnetic confinement tokamak experiment in the Max Planck Institute for  Plasma Physics in Garching, Germany. Planned magnetic field control coils in the upper divertor of the tokamak will greatly change the magnetic field structure near the tungsten upper divertor plates in an attempt to flare out flux tubes, thus reducing heat flux on the divertor. This theoretical project estimates the accuracy with which the poloidal field probes can resolve the more complex magnetic field structure (ie higher order nulls) for varying upper divertor coil (UDC) currents. Assumptions previously made in the data pipeline of ASDEX Upgrade were also investigated and shown to break down with regular operation level currents in the UDCs. Report <a href="/files/nulls.pdf">here</a>.</p>
+    <h2>High Order Nulls in the Poloidal fields of ASDEX Upgrade</h2>
+    <p>ASDEX Upgrade (Axially Symmetric Divertor Experiment) is a magnetic confinement tokamak experiment in the Max Planck Institute for  Plasma Physics in Garching, Germany. Planned upgrades to the tokamak will greatly change the magnetic field structure near the tungsten upper divertor plates in an attempt to flare out flux tubes, thus reducing heat flux on the divertor. This project estimates the accuracy with which the poloidal field probes can resolve the more complex magnetic field structure for varying upper divertor coil (UDC) currents. Report <a href="/files/nulls.pdf">here</a>.</p>
   </div>
 </div>
 
