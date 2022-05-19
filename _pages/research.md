@@ -10,12 +10,14 @@ redirect_from:
 {% include base_path %}
 
 ### Measuring the Milky Way Mass Profile via Stellar Kinematics
-<p align="center">
-  <img style="float: left;" alt="vesc corner plot" src="/images/vesc.png" width="45%">
-&nbsp; &nbsp; &nbsp; &nbsp;
-   The escape velocity profile (and therefore mass profile) of a simulated galaxy or the Milky Way is inferred via Bayesian analysis applied to the local stellar velocity distribution. Simulated datasets from the FIRE collaboration and Milky Way data to come from Gaia DR3. Supervised by Prof. Lina Necib 
-</p>
-
+<div style="clear: both;">
+  <div style="float: left; margin-right 1em;">
+    <img src="/images/vesc.png" alt="vesc corner plot">
+  </div>
+  <div>
+    <p>The escape velocity profile (and therefore mass profile) of a simulated galaxy or the Milky Way is inferred via Bayesian analysis applied to the local stellar velocity distribution. Simulated datasets from the FIRE collaboration and Milky Way data to come from Gaia DR3. Supervised by Prof. Lina Necib.</p>
+  </div>
+</div>
 
 
 
