@@ -12,21 +12,13 @@ redirect_from:
 ### Measuring the Milky Way Mass Profile via Stellar Kinematics
 |   |   |
 |---|---|
-| <img src="/images/vesc.png" width="350" height="350"> | 
-The escape velocity profile (and therefore mass profile) of a simulated galaxy or the
-Milky Way is inferred via Bayesian analysis applied to the local stellar velocity distri-
-bution. Simulated datasets from the FIRE collaboration and Milky Way data to come
-from Gaia DR3. Supervised by Prof. Lina Necib |
+| <img src="/images/vesc.png" width="350" height="350"> | The escape velocity profile (and therefore mass profile) of a simulated galaxy or the Milky Way is inferred via Bayesian analysis applied to the local stellar velocity distribution. Simulated datasets from the FIRE collaboration and Milky Way data to come from Gaia DR3. Supervised by Prof. Lina Necib |
 
 
 ### Galaxy Mergers as Dark Matter Probes
 | column  | column  |
-|---|---|
-| High-resolution N-body simulations of galaxy mergers are used as probes of dark matter
-properties, and to test models of dark matter-deficient galaxy production (such as DF2
-and DF4). Supervised by Prof. Lina Necib. | 
-<img src="/images/merger.gif" width="350" height="350"> | 
-
+|:---:|:---|
+| High-resolution N-body simulations of galaxy mergers are used as probes of dark matter properties, and to test models of dark matter-deficient galaxy production (such as DF2 and DF4). Supervised by Prof. Lina Necib | <img src="/images/merger.gif" width="350" height="350"> | 
 
 
 ### Exact Wavelike Solutions in General Relativity
