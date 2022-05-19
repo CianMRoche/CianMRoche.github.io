@@ -15,10 +15,7 @@ redirect_from:
   </div>
   <div>
   <h2>Measuring the Milky Way Mass Profile via Stellar Kinematics</h2>
-    <p>The escape velocity profile (and therefore mass profile) of a simulated galaxy or the Milky Way is inferred via Bayesian analysis applied to the local stellar velocity distribution. Simulated datasets from the FIRE collaboration and Milky Way data to come from Gaia DR3. Supervised by Prof. Lina Necib.\
-    
-    Project report in preparation.
-  </p>
+    <p>The escape velocity profile (and therefore mass profile) of a simulated galaxy or the Milky Way is inferred via Bayesian analysis applied to the local stellar velocity distribution. Simulated datasets from the FIRE collaboration and Milky Way data to come from Gaia DR3. Supervised by Prof. Lina Necib. <br><br> Project report in preparation.</p>
   </div>
 </div>
 
@@ -30,10 +27,21 @@ redirect_from:
   </div>
   <div>
     <h2>Galaxy Mergers as Dark Matter Probes</h2>
-    <p>High-resolution N-body simulations of galaxy mergers are used as probes of dark matter properties, and to test models of dark matter-deficient galaxy production (such as DF2 and DF4). Supervised by Prof. Lina Necib.\
+    <p>High-resolution N-body simulations of galaxy mergers are used as probes of dark matter properties, and to test models of dark matter-deficient galaxy production (such as DF2 and DF4). Supervised by Prof. Lina Necib. <br><br> Project in progress.</p>
+  </div>
+</div>
 
-    Project in progress.
-  </p>
+<br clear="left"/>
+
+<div style="clear: both;">
+  <div style="float: left; margin-right 1em;">
+    <img src="/images/penrose.png" alt="merger gif" width="350" height="350">
+  </div>
+  <div>
+    <h2>Exact Wavelike Solutions in General Relativity</h2>
+    <p>This master thesis project motivates and investigates the mathematical structure of
+    pp-wave spacetimes. Topics include Penrose limits, the causal ladder and addressing
+    the Ehlers-Kundt conjecture. Supervised by Prof. Carla Cederbaum. <br><br> Submitted to general relativity and gravitation - draft available <a href="/files/Exact_Wavelike_Solutions_in_GR.pdf">here</a>.</p>
   </div>
 </div>
 
@@ -44,24 +52,14 @@ redirect_from:
     <img src="/images/penrose.png" alt="merger gif" width="350" height="350">
   </div>
   <div>
-    <h2>Exact Wavelike Solutions in General Relativity</h2>
-    <p>This master thesis project motivates and investigates the mathematical structure of
-    pp-wave spacetimes. Topics include Penrose limits, the causal ladder and addressing
-    the Ehlers-Kundt conjecture. Supervised by Prof. Carla Cederbaum.\
-
-    Submitted to general relativity and gravitation - draft available [here](/files/Exact_Wavelike_Solutions_in_GR.pdf)
+    <h2>Exotic State Preparation in a Triangular Optical Lattice</h2>
+    <p>Optical lattices provide highly controllable systems for trapping and exciting gases of ultracold atoms. They are ideal candidates for the quantum simulation of condensed matter systems, for which many implementations require higher orbital occupation. In this report, methods for creating higher orbital states in a triangular optical lattice are developed. This is the result of a long-form research project with the quantum optics group at University College Cork, Ireland. <br><br>Report available <a href="/files/lattice.pdf">here</a>
   </p>
   </div>
 </div>
 
 <br clear="left"/>
 
-
-
-### Exotic State Preparation in a Triangular Optical Lattice
-
-Optical lattices provide highly controllable systems for trapping and exciting gases of ultracold atoms. They are ideal candidates for the quantum simulation of condensed matter systems, for which many implementations require higher orbital occupation. In this report, methods for creating higher orbital states in a triangular optical lattice are developed. This is the result of a long-form research project with the quantum optics group at University College Cork, Ireland.
-<img style="right;" src="/images/lattice.gif" width="350" height="350">
 
 
 
