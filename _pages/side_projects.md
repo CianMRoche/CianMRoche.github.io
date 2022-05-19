@@ -10,7 +10,7 @@ redirect_from:
 {% include base_path %}
 
 <div style="clear: both;">
-  <div style="float: left; margin-right 5em;">
+  <div style="float: right; margin-right 5em;">
     <img src="/images/corner.png" alt="corner plot" width="250" height="250">
   </div>
   <div>
@@ -23,7 +23,7 @@ redirect_from:
 
 
 <div style="clear: both;">
-  <div style="float: left; margin-right 5em;">
+  <div style="float: right; margin-right 5em;">
     <img src="/images/young2.png" alt="Birdtrack diagram" width="250" height="250">
   </div>
   <div>
@@ -36,7 +36,7 @@ redirect_from:
 
 
 <div style="clear: both;">
-  <div style="float: left; margin-right 5em;">
+  <div style="float: right; margin-right 5em;">
     <img src="/images/lox.png" alt="Combination Lock" width="250" height="250">
   </div>
   <div>
@@ -49,7 +49,7 @@ redirect_from:
 
 
 <div style="clear: both;">
-  <div style="float: left; margin-right 5em;">
+  <div style="float: right; margin-right 5em;">
     <img src="/images/sprel.png" alt="frames" width="250" height="250">
   </div>
   <div>
