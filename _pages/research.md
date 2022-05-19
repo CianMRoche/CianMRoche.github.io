@@ -19,6 +19,7 @@ redirect_from:
   </div>
 </div>
 
+<br clear="left"/>
 
 ### Galaxy Mergers as Dark Matter Probes
 <div style="clear: both;">
@@ -29,6 +30,8 @@ redirect_from:
     <p>High-resolution N-body simulations of galaxy mergers are used as probes of dark matter properties, and to test models of dark matter-deficient galaxy production (such as DF2 and DF4). Supervised by Prof. Lina Necib.</p>
   </div>
 </div>
+
+<br clear="left"/>
 
 ### Exact Wavelike Solutions in General Relativity
 
