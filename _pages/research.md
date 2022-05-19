@@ -12,7 +12,7 @@ redirect_from:
 ### Measuring the Milky Way Mass Profile via Stellar Kinematics
 <div style="clear: both;">
   <div style="float: left; margin-right 1em;">
-    <img src="/images/vesc.png" alt="vesc corner plot" width="350" height="350">
+    <img src="/images/vesc.png" alt="vesc corner plot" width="250" height="250">
   </div>
   <div>
     <p>The escape velocity profile (and therefore mass profile) of a simulated galaxy or the Milky Way is inferred via Bayesian analysis applied to the local stellar velocity distribution. Simulated datasets from the FIRE collaboration and Milky Way data to come from Gaia DR3. Supervised by Prof. Lina Necib.</p>
@@ -23,7 +23,7 @@ redirect_from:
 
 ### Galaxy Mergers as Dark Matter Probes
 <div style="clear: both;">
-  <div style="float: left; margin-right 1em;">
+  <div style="float: right; margin-right 1em;">
     <img src="/images/merger.gif" alt="merger gif" width="350" height="350">
   </div>
   <div>

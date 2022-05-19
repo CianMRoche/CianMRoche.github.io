@@ -24,3 +24,13 @@ I was lucky enough to inherit vegetarianism on one side of my family (thanks mom
 [Here](https://www.youtube.com/watch?v=C1vW9iSpLLk) is a video from CosmicSkeptic last year, which is a purely philosophical and moral discussion about veganism, from the perspective of a person who at the time, did eat meat. (No slaughterhouse videos, no climate change graphs). This avoids the appeal to emotion which doesn’t always lead us in morally consistent directions.
 
 [Here](https://www.youtube.com/watch?v=tnykmsDetNo) is a more emotive appeal which came about one year later, presumably after he received no convincing rebuttal to the points made in the first video. This deals much more directly with the cognitive dissonance involved when an individual feels empathy for charismatic megafauna (like a dog or a penguin) but doesn’t think about the literal millions of animals suffering beyond comprehension their entire lives for the meat industry.
+
+![veganism](/images/global-meat-production.png)
+
+Above is an image I’m stealing from the fantastic source Our World in Data, who do an amazing job of presenting scientifically sound data in an intuitive way. There is a clear message in this graph; meat consumption and production is, and has essentially always been, on the rise. Here are three viewpoints from which one could approach the problem that is the meat industry:
+
+1. Meat consumption is an environmental issue. If everybody reduces their consumption over time, we may reach acceptable levels.
+2. Meat consumption is a moral issue, as soon as you realize what you’re doing, it is your responsibility to stop.
+3. It’s both, and the moral argument in many ways encapsulates the environmental one.
+
+Of course one could also say it’s not an issue or even “it is an issue and I don’t care”, but I don’t believe a productive conversation will come from this line of thinking. Also it’s important to note that it is no individual’s fault that they are part of a society which has normalized these practices, the goal here is not to shame anyone, but rather to identify inconsistencies in our moral framework and fix them as soon as we possibly can. I very much subscribe to the third idea above. That is, if we care about preventing the suffering of conscious beings in general (or even just humans!) we should each hold ourselves to a level of personal responsibility that either significantly reduces our meat and animal product consumption, or eradicates it entirely. If you still consume meat/ animal products, spend some time researching and thinking. Nobody is too busy to check if they’re committing gross affronts against life whenever they go to the supermarket.
