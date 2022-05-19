@@ -24,4 +24,8 @@ and where those fields interact.
 ### What's on this website?
 Some things I've worked on in the past few years, some thoughts on ethics, a CV, and pictures of some adventures I've found myself on. See below.
 
-| ![Research Image](https://github.com/CianMRoche/CianMRoche.github.io/blob/1968e82e87a07df9abae4e07fca6d463177c26ba/images/ippprok.png) |![Fun Image](https://github.com/CianMRoche/CianMRoche.github.io/blob/1968e82e87a07df9abae4e07fca6d463177c26ba/images/ippprok.png)|
+<p align="center">
+  <img alt="Fun Image" src="/images/ippprok.png" width="45%">
+&nbsp; &nbsp; &nbsp; &nbsp;
+  <img alt="Research Image" src="/images/ippprok.png" width="45%">
+</p>
