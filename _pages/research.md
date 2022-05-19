@@ -15,6 +15,7 @@ Below is a collection of projects on which I've worked with collaborators. The r
   <div style="float: left; margin-right 5em;">
     <img src="/images/vesc.png" alt="vesc corner plot" width="250" height="250">
   </div>
+  &nbsp; &nbsp;
   <div>
   <h2>Measuring the Milky Way Mass Profile via Stellar Kinematics</h2>
     <p>The escape velocity profile (and therefore mass profile) of a simulated galaxy or the Milky Way is inferred via Bayesian analysis applied to the local stellar velocity distribution. Simulated datasets from the FIRE collaboration and Milky Way data to come from Gaia DR3. Supervised by Prof. Lina Necib. <br><br> Article in preparation.</p>
