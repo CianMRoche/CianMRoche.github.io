@@ -8,14 +8,16 @@ redirect_from:
 ---
 
 {% include base_path %}
+Below is a collection of projects on which I've worked with collaborators. The relevant fields include observational astrophysics, theoretical quantum optics, gravitational wave interferometry, nuclear fusion in tokamaks, mathematical foundations of general relativity, and galaxy-scale dynamics as a probe of particle physics.  
+
 
 <div style="clear: both;">
-  <div style="float: left; margin-right 1em;">
+  <div style="float: left; margin-right 5em;">
     <img src="/images/vesc.png" alt="vesc corner plot" width="250" height="250">
   </div>
   <div>
   <h2>Measuring the Milky Way Mass Profile via Stellar Kinematics</h2>
-    <p>The escape velocity profile (and therefore mass profile) of a simulated galaxy or the Milky Way is inferred via Bayesian analysis applied to the local stellar velocity distribution. Simulated datasets from the FIRE collaboration and Milky Way data to come from Gaia DR3. Supervised by Prof. Lina Necib. <br><br> Project report in preparation.</p>
+    <p>The escape velocity profile (and therefore mass profile) of a simulated galaxy or the Milky Way is inferred via Bayesian analysis applied to the local stellar velocity distribution. Simulated datasets from the FIRE collaboration and Milky Way data to come from Gaia DR3. Supervised by Prof. Lina Necib. <br><br> Article in preparation.</p>
   </div>
 </div>
 
@@ -35,7 +37,7 @@ redirect_from:
 
 <div style="clear: both;">
   <div style="float: left; margin-right 1em;">
-    <img src="/images/penrose.png" alt="merger gif" width="350" height="350">
+    <img src="/images/penrose.png" alt="penrose" width="350" height="350">
   </div>
   <div>
     <h2>Exact Wavelike Solutions in General Relativity</h2>
@@ -49,7 +51,7 @@ redirect_from:
 
 <div style="clear: both;">
   <div style="float: right; margin-right 1em;">
-    <img src="/images/penrose.png" alt="merger gif" width="350" height="350">
+    <img src="/images/lattice.gif" alt="lattice gif" width="350" height="350">
   </div>
   <div>
     <h2>Exotic State Preparation in a Triangular Optical Lattice</h2>
@@ -61,21 +63,41 @@ redirect_from:
 <br clear="left"/>
 
 
+<div style="clear: both;">
+  <div style="float: left; margin-right 1em;">
+    <img src="/images/ippprok.png" alt="mag field" width="350" height="350">
+  </div>
+  <div>
+    <h2>High Order Nulls in the Poloidal field Structure of ASDEX Upgrade</h2>
+    <p>ASDEX Upgrade (Axially Symmetric Divertor Experiment) is a magnetic confinement tokamak experiment in the Max Planck Institute for  Plasma Physics in Garching, Germany. Planned magnetic field control coils in the upper divertor of the tokamak will greatly change the magnetic field structure near the tungsten upper divertor plates in an attempt to flare out flux tubes, thus reducing heat flux on the divertor. This theoretical project estimates the accuracy with which the poloidal field probes can resolve the more complex magnetic field structure (ie higher order nulls) for varying upper divertor coil (UDC) currents. Assumptions previously made in the data pipeline of ASDEX Upgrade were also investigated and shown to break down with regular operation level currents in the UDCs. Target level for document – undergraduate/masters student. <br><br> Submitted to general relativity and gravitation - Report available <a href="/files/nulls.pdf">here</a>.</p>
+  </div>
+</div>
+
+<br clear="left"/>
 
 
-### High Order Nulls in the Poloidal field Structure of ASDEX Upgrade
+<div style="clear: both;">
+  <div style="float: right; margin-right 1em;">
+    <img src="/images/sigpros.png" alt="interferometry" width="350" height="350">
+  </div>
+  <div>
+    <h2>An Introduction to Signal Processing in Interferometry</h2>
+    <p>The basic techniques of signal processing are presented in the context of the detection of gravitational radiation (gravitational wave event GW150914) produced by the merger of a binary black hole system as detected by the Hanford and Livingston LIGO detectors. The target level for this document is undergraduate, with the focus on introducing techniques and gaining intuition for signal processing in general. Largely based on documents and notebooks released by advanced LIGO as detailed in the document. <br><br>Report available <a href="/files/sigpros.pdf">here</a>
+  </p>
+  </div>
+</div>
 
-<img style="left;" src="/images/ippprok.png" width="350" height="350">
-ASDEX Upgrade (Axially Symmetric Divertor Experiment) is a magnetic confinement tokamak experiment in the Max Planck Institute for  Plasma Physics in Garching, Germany. Planned magnetic field control coils in the upper divertor of the tokamak will greatly change the magnetic field structure near the tungsten upper divertor plates in an attempt to flare out flux tubes, thus reducing heat flux on the divertor. This theoretical project estimates the accuracy with which the poloidal field probes can resolve the more complex magnetic field structure (ie higher order nulls) for varying upper divertor coil (UDC) currents. Assumptions previously made in the data pipeline of ASDEX Upgrade were also investigated and shown to break down with regular operation level currents in the UDCs. Target level for document – undergraduate/masters student.
+<br clear="left"/>
 
 
-### An Introduction to Signal Processing in Interferometry
+<div style="clear: both;">
+  <div style="float: left; margin-right 1em;">
+    <img src="/images/92a.png" alt="sn1992a" width="350" height="350">
+  </div>
+  <div>
+    <h2>The Progenitor System of Supernova 1992a</h2>
+    <p>An investigation of the progenitor system of supernova (SN) 1992a using late time photometry. The late time light curve of SNe 1a can be modelled via two primary decay mechanisms with intial relative isotopic abundances created by the SN as free parameters. It has been shown that isotopic abundances vary greatly with different progenitor models for SNe 1a, thus by modelling the late time light curve and comparing its evolution to a photometric analysis (using images from Hubble Space Telescope and Cerro Tololo Inter-American Observatory) we can infer a progenitor model.  Project completed Summer 2017 as part of University of Notre Dame research experience for undergraduates program, carried out with the financial support of the Naughton Fellowship program. <br><br> Submitted to general relativity and gravitation - Report available <a href="/files/92a.pdf">here</a>.</p>
+  </div>
+</div>
 
-The basic techniques of signal processing are presented in the context of the detection of gravitational radiation (gravitational wave event GW150914) produced by the merger of a binary black hole system as detected by the Hanford and Livingston LIGO detectors. The target level for this document is undergraduate, with the focus on introducing techniques and gaining intuition for signal processing in general. Largely based on documents and notebooks released by advanced LIGO as detailed in the document.
-<img style="right;" src="/images/sigpros.png" width="350" height="350">
-
-
-### The Progenitor System of Supernova 1992a
-
-<img style="left;" src="/images/92a.png" width="350" height="350">
-An investigation of the progenitor system of supernova (SN) 1992a using late time photometry. The late time light curve of SNe 1a can be modelled via two primary decay mechanisms with intial relative isotopic abundances created by the SN as free parameters. It has been shown that isotopic abundances vary greatly with different progenitor models for SNe 1a, thus by modelling the late time light curve and comparing its evolution to a photometric analysis (using images from Hubble Space Telescope and Cerro Tololo Inter-American Observatory) we can infer a progenitor model.  Project completed Summer 2017 as part of University of Notre Dame research experience for undergraduates program, carried out with the financial support of the Naughton Fellowship program.
+<br clear="left"/>
