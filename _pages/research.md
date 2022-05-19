@@ -15,18 +15,19 @@ Below is a collection of projects on which I've worked with collaborators. The r
   <div style="float: left; margin-right 5em;">
     <img src="/images/vesc.png" alt="vesc corner plot" width="250" height="250">
   </div>
-  &nbsp; &nbsp;
+  &nbsp;
   <div>
   <h2>Measuring the Milky Way Mass Profile via Stellar Kinematics</h2>
-    <p>The escape velocity profile (and therefore mass profile) of a simulated galaxy or the Milky Way is inferred via Bayesian analysis applied to the local stellar velocity distribution. Simulated datasets from the FIRE collaboration and Milky Way data to come from Gaia DR3. Supervised by Prof. Lina Necib. <br><br> Article in preparation.</p>
+    <p>The escape velocity profile (and therefore mass profile) of a simulated galaxy or the Milky Way is inferred via Bayesian analysis applied to the local stellar velocity distribution. Simulated datasets from the FIRE collaboration and Milky Way data to come from Gaia DR3. Supervised by Prof. Lina Necib. Article in preparation.</p>
   </div>
 </div>
 
 <br clear="left"/>
 
+
 <div style="clear: both;">
   <div style="float: right; margin-right 1em;">
-    <img src="/images/merger.gif" alt="merger gif" width="350" height="350">
+    <img src="/images/merger.gif" alt="merger gif" width="400" height="400">
   </div>
   <div>
     <h2>Galaxy Mergers as Dark Matter Probes</h2>
@@ -35,6 +36,7 @@ Below is a collection of projects on which I've worked with collaborators. The r
 </div>
 
 <br clear="left"/>
+
 
 <div style="clear: both;">
   <div style="float: left; margin-right 1em;">
@@ -49,6 +51,7 @@ Below is a collection of projects on which I've worked with collaborators. The r
 </div>
 
 <br clear="left"/>
+
 
 <div style="clear: both;">
   <div style="float: right; margin-right 1em;">
@@ -70,7 +73,7 @@ Below is a collection of projects on which I've worked with collaborators. The r
   </div>
   <div>
     <h2>High Order Nulls in the Poloidal field Structure of ASDEX Upgrade</h2>
-    <p>ASDEX Upgrade (Axially Symmetric Divertor Experiment) is a magnetic confinement tokamak experiment in the Max Planck Institute for  Plasma Physics in Garching, Germany. Planned magnetic field control coils in the upper divertor of the tokamak will greatly change the magnetic field structure near the tungsten upper divertor plates in an attempt to flare out flux tubes, thus reducing heat flux on the divertor. This theoretical project estimates the accuracy with which the poloidal field probes can resolve the more complex magnetic field structure (ie higher order nulls) for varying upper divertor coil (UDC) currents. Assumptions previously made in the data pipeline of ASDEX Upgrade were also investigated and shown to break down with regular operation level currents in the UDCs. Target level for document – undergraduate/masters student. <br><br> Submitted to general relativity and gravitation - Report available <a href="/files/nulls.pdf">here</a>.</p>
+    <p>ASDEX Upgrade (Axially Symmetric Divertor Experiment) is a magnetic confinement tokamak experiment in the Max Planck Institute for  Plasma Physics in Garching, Germany. Planned magnetic field control coils in the upper divertor of the tokamak will greatly change the magnetic field structure near the tungsten upper divertor plates in an attempt to flare out flux tubes, thus reducing heat flux on the divertor. This theoretical project estimates the accuracy with which the poloidal field probes can resolve the more complex magnetic field structure (ie higher order nulls) for varying upper divertor coil (UDC) currents. Assumptions previously made in the data pipeline of ASDEX Upgrade were also investigated and shown to break down with regular operation level currents in the UDCs. Report <a href="/files/nulls.pdf">here</a>.</p>
   </div>
 </div>
 
@@ -97,7 +100,7 @@ Below is a collection of projects on which I've worked with collaborators. The r
   </div>
   <div>
     <h2>The Progenitor System of Supernova 1992a</h2>
-    <p>An investigation of the progenitor system of supernova (SN) 1992a using late time photometry. The late time light curve of SNe 1a can be modelled via two primary decay mechanisms with intial relative isotopic abundances created by the SN as free parameters. It has been shown that isotopic abundances vary greatly with different progenitor models for SNe 1a, thus by modelling the late time light curve and comparing its evolution to a photometric analysis (using images from Hubble Space Telescope and Cerro Tololo Inter-American Observatory) we can infer a progenitor model.  Project completed Summer 2017 as part of University of Notre Dame research experience for undergraduates program, carried out with the financial support of the Naughton Fellowship program. <br><br> Submitted to general relativity and gravitation - Report available <a href="/files/92a.pdf">here</a>.</p>
+    <p>An investigation of the progenitor system of supernova (SN) 1992a using late time photometry. The late time light curve of SNe 1a can be modelled via two primary decay mechanisms with intial relative isotopic abundances created by the SN as free parameters. It has been shown that isotopic abundances vary greatly with different progenitor models for SNe 1a, thus by modelling the late time light curve and comparing its evolution to a photometric analysis (using images from Hubble Space Telescope and Cerro Tololo Inter-American Observatory) we can infer a progenitor model. Report available <a href="/files/92a.pdf">here</a>.</p>
   </div>
 </div>
 
