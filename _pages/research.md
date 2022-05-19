@@ -15,7 +15,6 @@ Below is a collection of projects on which I've worked with collaborators. The r
   <div style="float: left; margin-right 5em;">
     <img src="/images/vesc.png" alt="vesc corner plot" width="250" height="250">
   </div>
-  &nbsp;
   <div>
   <h2>Measuring the Milky Way Mass Profile via Stellar Kinematics</h2>
     <p>The escape velocity profile (and therefore mass profile) of a simulated galaxy or the Milky Way is inferred via Bayesian analysis applied to the local stellar velocity distribution. Simulated datasets from the FIRE collaboration and Milky Way data to come from Gaia DR3. Supervised by Prof. Lina Necib. Article in preparation.</p>
@@ -31,7 +30,7 @@ Below is a collection of projects on which I've worked with collaborators. The r
   </div>
   <div>
     <h2>Galaxy Mergers as Dark Matter Probes</h2>
-    <p>High-resolution N-body simulations of galaxy mergers are used as probes of dark matter properties, and to test models of dark matter-deficient galaxy production (such as DF2 and DF4). Supervised by Prof. Lina Necib. <br><br> Project in progress.</p>
+    <p>High-resolution N-body simulations of galaxy mergers are used as probes of dark matter properties, and to test models of dark matter-deficient galaxy production (such as DF2 and DF4). Supervised by Prof. Lina Necib. <br><br> Project ongoing.</p>
   </div>
 </div>
 
@@ -55,11 +54,11 @@ Below is a collection of projects on which I've worked with collaborators. The r
 
 <div style="clear: both;">
   <div style="float: right; margin-right 1em;">
-    <img src="/images/lattice.gif" alt="lattice gif" width="350" height="350">
+    <img src="/images/lattice.gif" alt="lattice gif" width="400" height="400">
   </div>
   <div>
     <h2>Exotic State Preparation in a Triangular Optical Lattice</h2>
-    <p>Optical lattices provide highly controllable systems for trapping and exciting gases of ultracold atoms. They are ideal candidates for the quantum simulation of condensed matter systems, for which many implementations require higher orbital occupation. In this report, methods for creating higher orbital states in a triangular optical lattice are developed. This is the result of a long-form research project with the quantum optics group at University College Cork, Ireland. <br><br>Report available <a href="/files/lattice.pdf">here</a>
+    <p>Optical lattices provide highly controllable systems for trapping and exciting gases of ultracold atoms. They are ideal candidates for the quantum simulation of condensed matter systems, for which many implementations require higher orbital occupation. In this report, methods for creating higher orbital states in a triangular optical lattice are developed. <br><br>Report available <a href="/files/lattice.pdf">here</a>
   </p>
   </div>
 </div>
