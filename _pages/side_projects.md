@@ -21,4 +21,8 @@ In this report, Markov chain Monte Carlo (MCMC) algorithms are implemented in bo
 This is a pdf containing links to videos I made, introducing topics from group and representation theory in a seminar setting. This was the first of a 3 part series, with the goal of introducing Hermitian Young operators for use in physics (eg. QCD).
 
 
+### The Combinatorics of Physical Security 
+<img style="left;" src="/images/lox.png" width="500">
+This is a presentation I made for fun in a day or two over Winter break. Very casual in tone, but in my opinion it’s an interesting connection between the world of locking mechanisms and that of introductory combinatorics.
+
 
