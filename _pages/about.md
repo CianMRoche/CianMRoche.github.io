@@ -22,10 +22,10 @@ Hi, I’m Cian (pronounced: "k"+"ian", pronouns: he/him) and I’m currently pur
 and where those fields interact.
 
 ### What's on this website?
-Some things I've worked on in the past few years, some thoughts on ethics, a CV, and pictures of some adventures I've found myself on. See below.
+Some things I've worked on in the past few years, some thoughts on ethics, a CV, and pictures of some adventures I've found myself on. Evidence: 
 
 <p align="center">
-  <img alt="Fun Image" src="/images/ippprok.png" width="45%">
-&nbsp; &nbsp; &nbsp; &nbsp;
-  <img alt="Research Image" src="/images/ippprok.png" width="45%">
+  <img alt="Fun image" src="/images/slip.png" width="45%">
+&nbsp; &nbsp; &nbsp;
+  <img alt="Also fun image" src="/images/smol.png" width="45%">
 </p>
