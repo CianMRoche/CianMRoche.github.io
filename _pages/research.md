@@ -15,7 +15,10 @@ redirect_from:
   </div>
   <div>
   <h2>Measuring the Milky Way Mass Profile via Stellar Kinematics</h2>
-    <p>The escape velocity profile (and therefore mass profile) of a simulated galaxy or the Milky Way is inferred via Bayesian analysis applied to the local stellar velocity distribution. Simulated datasets from the FIRE collaboration and Milky Way data to come from Gaia DR3. Supervised by Prof. Lina Necib.</p>
+    <p>The escape velocity profile (and therefore mass profile) of a simulated galaxy or the Milky Way is inferred via Bayesian analysis applied to the local stellar velocity distribution. Simulated datasets from the FIRE collaboration and Milky Way data to come from Gaia DR3. Supervised by Prof. Lina Necib.\
+    
+    Project report in preparation.
+  </p>
   </div>
 </div>
 
@@ -27,18 +30,32 @@ redirect_from:
   </div>
   <div>
     <h2>Galaxy Mergers as Dark Matter Probes</h2>
-    <p>High-resolution N-body simulations of galaxy mergers are used as probes of dark matter properties, and to test models of dark matter-deficient galaxy production (such as DF2 and DF4). Supervised by Prof. Lina Necib.</p>
+    <p>High-resolution N-body simulations of galaxy mergers are used as probes of dark matter properties, and to test models of dark matter-deficient galaxy production (such as DF2 and DF4). Supervised by Prof. Lina Necib.\
+
+    Project in progress.
+  </p>
   </div>
 </div>
 
 <br clear="left"/>
 
-### Exact Wavelike Solutions in General Relativity
+<div style="clear: both;">
+  <div style="float: right; margin-right 1em;">
+    <img src="/images/penrose.png" alt="merger gif" width="350" height="350">
+  </div>
+  <div>
+    <h2>Exact Wavelike Solutions in General Relativity</h2>
+    <p>This master thesis project motivates and investigates the mathematical structure of
+    pp-wave spacetimes. Topics include Penrose limits, the causal ladder and addressing
+    the Ehlers-Kundt conjecture. Supervised by Prof. Carla Cederbaum.\
 
-<img style="left;" src="/images/penrose.png" width="350" height="350">
-This master thesis project motivates and investigates the mathematical structure of
-pp-wave spacetimes. Topics include Penrose limits, the causal ladder and addressing
-the Ehlers-Kundt conjecture. Supervised by Prof. Carla Cederbaum.
+    Submitted to general relativity and gravitation - draft available [here](/files/Exact_Wavelike_Solutions_in_GR.pdf)
+  </p>
+  </div>
+</div>
+
+<br clear="left"/>
+
 
 
 ### Exotic State Preparation in a Triangular Optical Lattice
