@@ -17,5 +17,5 @@ Some things I've worked on in the past few years, some thoughts on ethics, a <a 
 
 ### Here's a high-level overview of the areas I'm interested in: 
 <p align="center">
-  <img alt="Research Map" src="/images/research_map.jpg" width="85%">
+  <img alt="Research Map" src="/images/research_map.png" width="85%">
 </p>
