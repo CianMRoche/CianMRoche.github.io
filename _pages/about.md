@@ -8,6 +8,7 @@ redirect_from:
   - /about.html
 ---
 
+### Who am I?
 Hi, I’m Cian (pronounced: "k"+"ian", pronouns: he/him) and I’m currently pursuing a PhD in physics at Massachusetts Institute of Technology.
 
 You can find me in the MIT Kavli Institute for Astrophysics and Space Research, room 37-624

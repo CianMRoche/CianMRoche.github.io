@@ -12,12 +12,12 @@ Here are some of the initiatives I am currently or have been involved with. This
 
 <div style="clear: both;">
   <div style="float: right; margin-right 1em;">
-    <img src="/images/gaga.png" alt="GAGA" width="350" height="350">
+    <img src="/images/gaga.png" alt="GAGA" width="250" height="250">
   </div>
   <div>
     <h2>Graduates Advising Graduate Admissions (GAGA)</h2>
     <p> Co-Lead: 06/2022 - ongoing<br>
-        Organising Committee: 01/2021 - 06/2022<br>
+        Organising Committee: 01/2021 - 06/2022<br><br>
         The Graduates Advising Graduate Admissions (GAGA) program provides the graduate student perspective to the Chair of Graduate Admissions and advises on improvements to the admissions process.
         <br><br>More information <a target="_blank" href="https://physics-gsc.scripts.mit.edu/home/gaga/">here</a>
         </p>
@@ -29,14 +29,28 @@ Here are some of the initiatives I am currently or have been involved with. This
 
 <div style="clear: both;">
   <div style="float: right; margin-right 1em;">
-    <img src="/images/gsu.jpg" alt="MIT GSU" width="350" height="350">
+    <img src="/images/gsu.jpg" alt="MIT GSU" width="250" height="250">
   </div>
   <div>
     <h2>MIT Graduate Student Union</h2>
-    <p> Organising Committee: 01/2022 - ongoing<br>
+    <p> Organising Committee: 01/2022 - ongoing<br><br>
         The MIT Graduate Student Union operates fairly and democratically by distributing responsibility to the division-level. I assist with union operations in the physics department and astrophysics division.
         <br><br>More information <a target="_blank" href="https://mitgsu.org/">here</a>
         </p>
+  </div>
+</div>
+
+<br clear="left"/>
+
+
+<div style="clear: both;">
+  <div style="float: right; margin-right 1em;">
+    <img src="/images/physsoc.jpg" alt="UCC Physics Society" width="250" height="250">
+  </div>
+  <div>
+    <h2>UCC Physics and Astronomy Society</h2>
+    <p> Organising Committee: 2017-2019<br><br>
+        I worked with the committee of the University College Cork (UCC) physics and astronomy society for two years, acting primarily as astronomy officer. This involved organizing stargazing trips and a visit to Iceland to see the Northern lights (no aurora were witnessed, not even entirely localized within our kitchen).</p>
   </div>
 </div>
 
