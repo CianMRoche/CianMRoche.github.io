@@ -22,8 +22,9 @@ I was lucky enough to inherit vegetarianism on one side of my family (thanks mom
 [Here](https://www.youtube.com/watch?v=C1vW9iSpLLk) is a video from CosmicSkeptic last year, which is a purely philosophical and moral discussion about veganism, from the perspective of a person who at the time, did eat meat. (No slaughterhouse videos, no climate change graphs). This avoids the appeal to emotion which doesn’t always lead us in morally consistent directions.
 
 [Here](https://www.youtube.com/watch?v=tnykmsDetNo) is a more emotive appeal which came about one year later, presumably after he received no convincing rebuttal to the points made in the first video. This deals much more directly with the cognitive dissonance involved when an individual feels empathy for charismatic megafauna (like a dog or a penguin) but doesn’t think about the literal millions of animals suffering beyond comprehension their entire lives for the meat industry.
-
-<img src="/images/global-meat-production.png" alt="meat" width="700"/>
+<p align="center">
+  <img src="/images/global-meat-production.png" alt="meat" width="700"/>
+</p>
 
 Above is an image I’m stealing from the fantastic source Our World in Data, who do an amazing job of presenting scientifically sound data in an intuitive way. There is a clear message in this graph; meat consumption and production is, and has essentially always been, on the rise. Here are three viewpoints from which one could approach the problem that is the meat industry:
 
