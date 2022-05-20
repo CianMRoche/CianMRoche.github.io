@@ -10,7 +10,7 @@ redirect_from:
 {% include base_path %}
 Here are some of the initiatives I am currently or have been involved with. This information can also be found in my <a target="_blank" href="/files/CV.pdf" target="_blank">CV</a>.
 
----
+<hr style="border:1px solid gray">
 
 <div style="clear: both;">
   <div style="float: right; margin-right 1em;">
@@ -28,7 +28,7 @@ Here are some of the initiatives I am currently or have been involved with. This
 
 <br clear="left"/>
 
-<hr style="border:2px #AAA">
+<hr style="border:1px solid gray">
 
 <div style="clear: both;">
   <div style="float: right; margin-right 1em;">
@@ -45,7 +45,7 @@ Here are some of the initiatives I am currently or have been involved with. This
 
 <br clear="left"/>
 
-<hr style="border:2px solid gray">
+<hr style="border:1px solid gray">
 
 <div style="clear: both;">
   <div style="float: right; margin-right 1em;">
@@ -60,6 +60,6 @@ Here are some of the initiatives I am currently or have been involved with. This
 
 <br clear="left"/>
 
-<hr style="border:2px solid gray">
+<hr style="border:1px solid gray">
 
 Im also a **co-organiser** of the MIT Kavli Institute for Astrophysics and Space Research Graduate Student Lunch and Talk Series ("Grad Lunch") since January 2022, but lunch doesnt have a logo :'^)

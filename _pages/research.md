@@ -10,6 +10,7 @@ redirect_from:
 {% include base_path %}
 Below is a collection of projects on which I've worked with collaborators. The relevant fields include observational astrophysics, theoretical quantum optics, gravitational wave interferometry, nuclear fusion in tokamaks, mathematical foundations of general relativity, and galaxy-scale dynamics as a probe of particle physics.  
 
+<hr style="border:1px solid gray">
 
 <div style="clear: both;">
   <div style="float: left; margin-right 5em;">
@@ -22,6 +23,7 @@ Below is a collection of projects on which I've worked with collaborators. The r
 </div>
 
 <br clear="left"/>
+<hr style="border:1px solid gray">
 
 
 <div style="clear: both;">
@@ -35,6 +37,7 @@ Below is a collection of projects on which I've worked with collaborators. The r
 </div>
 
 <br clear="left"/>
+<hr style="border:1px solid gray">
 
 
 <div style="clear: both;">
@@ -50,6 +53,7 @@ Below is a collection of projects on which I've worked with collaborators. The r
 </div>
 
 <br clear="left"/>
+<hr style="border:1px solid gray">
 
 
 <div style="clear: both;">
@@ -64,6 +68,7 @@ Below is a collection of projects on which I've worked with collaborators. The r
 </div>
 
 <br clear="left"/>
+<hr style="border:1px solid gray">
 
 
 <div style="clear: both;">
@@ -77,6 +82,7 @@ Below is a collection of projects on which I've worked with collaborators. The r
 </div>
 
 <br clear="left"/>
+<hr style="border:1px solid gray">
 
 
 <div style="clear: both;">
@@ -91,6 +97,7 @@ Below is a collection of projects on which I've worked with collaborators. The r
 </div>
 
 <br clear="left"/>
+<hr style="border:1px solid gray">
 
 
 <div style="clear: both;">
