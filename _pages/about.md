@@ -1,7 +1,7 @@
 ---
 permalink: /
 title: "Who am I?"
-excerpt: "About me"
+excerpt: "Personal webpage for Cian Roche"
 author_profile: true
 redirect_from: 
   - /about/
