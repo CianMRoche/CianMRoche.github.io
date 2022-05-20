@@ -8,16 +8,18 @@ redirect_from:
   - /about.html
 ---
 
-Hi, I’m Cian (pronounced: "k"+"ian", pronouns: he/him) and I’m currently pursuing a **PhD in physics** at Massachusetts Institute of Technology.
+Hi, I’m Cian (pronounced: "k"+"ian", pronouns: he/him) and I’m currently pursuing a PhD in physics at Massachusetts Institute of Technology.
 
 You can find me in the MIT Kavli Institute for Astrophysics and Space Research, room 37-624
 
 ## What's on this website?
-Some things I've worked on in the past few years, some thoughts on ethics, a <a href="/files/CV.pdf" target="_blank">CV</a>, and pictures of some adventures I've found myself on.
+Some things I've worked on in the past few years, a <a href="/files/CV.pdf" target="_blank">CV</a> and some thoughts on ethics.
 
 ## Here's a high-level overview of the areas I'm interested in: 
 <p align="center">
   <img alt="Research Map" src="/images/research_map.png" width="100%">
 </p>
 
-In black are the areas in which I'm interested, and the coloured portions represent roughly the real-world connections between those topics.
+and high-performance computing, though I would have had to connect that to just about everything[^1]. In black are the areas in which I'm interested, and the coloured portions represent roughly the real-world connections between those topics.
+
+[^1]: I suppose I could reasonably connect *all* nodes on the graph and not be particularly wrong about anything.
