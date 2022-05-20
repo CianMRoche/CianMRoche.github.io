@@ -28,7 +28,7 @@ Here are some of the initiatives I am currently or have been involved with. This
 
 <br clear="left"/>
 
----
+<hr style="border:2px solid gray">
 
 <div style="clear: both;">
   <div style="float: right; margin-right 1em;">
@@ -45,7 +45,7 @@ Here are some of the initiatives I am currently or have been involved with. This
 
 <br clear="left"/>
 
----
+<hr style="border:2px solid gray">
 
 <div style="clear: both;">
   <div style="float: right; margin-right 1em;">
@@ -60,6 +60,6 @@ Here are some of the initiatives I am currently or have been involved with. This
 
 <br clear="left"/>
 
----
+<hr style="border:2px solid gray">
 
 Im also a **co-organiser** of the MIT Kavli Institute for Astrophysics and Space Research Graduate Student Lunch and Talk Series ("Grad Lunch") since January 2022, but lunch doesnt have a logo :'^)
