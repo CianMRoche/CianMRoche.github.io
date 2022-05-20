@@ -28,7 +28,7 @@ Here are some of the initiatives I am currently or have been involved with. This
 
 <br clear="left"/>
 
-<hr style="border:2px solid gray">
+<hr style="border:2px #AAA">
 
 <div style="clear: both;">
   <div style="float: right; margin-right 1em;">
