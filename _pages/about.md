@@ -1,6 +1,6 @@
 ---
 permalink: /
-title: "Who am I?"
+title: "Hi ^_^"
 excerpt: "Personal webpage for Cian Roche"
 author_profile: true
 redirect_from: 
@@ -12,10 +12,10 @@ Hi, I’m Cian (pronounced: "k"+"ian", pronouns: he/him) and I’m currently pur
 
 You can find me in the MIT Kavli Institute for Astrophysics and Space Research, room 37-624
 
-## What's on this website?
+### What's on this website?
 Some things I've worked on in the past few years, a <a href="/files/CV.pdf" target="_blank">CV</a> and some thoughts on ethics.
 
-## Here's a high-level overview of the areas I'm interested in: 
+### Here's a high-level overview of the areas I'm interested in: 
 <p align="center">
   <img alt="Research Map" src="/images/research_map.png" width="100%">
 </p>
