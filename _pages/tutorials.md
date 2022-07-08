@@ -11,6 +11,19 @@ redirect_from:
 
 Here is a collection of tutorials for tasks that I had trouble with at some point or another.
 
+# A collapsible section with markdown
+<details>
+  <summary>Click to expand!</summary>
+  
+  ## Heading
+  1. A numbered
+  2. list
+     * With some
+     * Sub bullets
+</details>
+
+
+
 ## Running a Jupyter Notebook on a Computing Cluster
 <details>
   <summary>Click to view instructions</summary>
