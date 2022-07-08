@@ -13,14 +13,14 @@ Here is a collection of tutorials for tasks that I had trouble with at some poin
 
 # A collapsible section with markdown
 <details>
-  <summary>Click to expand!</summary>
+  <summary>Click to expand!</summary><p>
   
   ## Heading
   1. A numbered
   2. list
      * With some
      * Sub bullets
-</details>
+</p></details>
 
 
 
