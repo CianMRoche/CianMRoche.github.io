@@ -11,7 +11,10 @@ redirect_from:
 
 Here is a collection of tutorials for tasks that I had trouble with at some point or another.
 
-### Running a Jupyter Notebook on a Computing Cluster
+## Running a Jupyter Notebook on a Computing Cluster
+<details>
+  <summary>Click to expand!</summary>
+
 Instructions courtesy of [Chelsea](https://hangchelseasu.github.io/) and [Xiaowei](https://space.mit.edu/people/ou-xiaowei/). Assume your cluster has an interactive compute node session utility, accessed by the command "idev" (interactive development, exact command changes for each cluster). The following steps allow you to use its compute resources for a jupyter notebook which is accessed locally in your personal machine's browser.  
 
 **1. On cluster:**  
@@ -32,3 +35,4 @@ Then note the output in that terminal, as it will give you a URL which looks lik
 - Enter your password, and you will see the notebooks.
 
 [^1]: I.e. if you usually type `ssh clusterThatIWorkOn` then you can replace `user@cluster` above with `clusterThatIWorkOn`
+</details>
