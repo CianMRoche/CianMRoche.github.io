@@ -11,6 +11,9 @@ redirect_from:
 
 Here is a collection of tutorials for tasks that I had trouble with at some point or another.
 
+## Making and Using Custom Python Packages
+If you want to write some python functions or classes and have them be easily available on your local machine, without interacting with conda or pip at all (to keep things as simple as possible) see [this gist](https://gist.github.com/CianMRoche/7ad0396bc4eecfaa83a42e52b090ec4f).
+
 ## Getting Started With Computing Clusters
 For some general cluster setup information, see [this repo (more recent)](https://github.com/CianMRoche/subMIT-setup) which was designed for the SubMIT cluster, or [this repo (a bit older)](https://github.com/CianMRoche/stampede2Setup) for Stampede2. There should be some transferrable information within, when combined with your cluster's documentation.
 
