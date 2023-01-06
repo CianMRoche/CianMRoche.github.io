@@ -12,13 +12,14 @@ Below is a collection of projects on which I've worked with collaborators. The r
 
 <hr style="border:1px solid gray">
 
+
 <div style="clear: both;">
   <div style="float: left; margin-right 5em;">
-    <img src="/images/vesc.png" alt="vesc corner plot" width="250" height="250">
+    <img src="/images/lens.png" alt="strong lensing for estimation of potential minimum" width="250" height="250">
   </div>
   <div>
-  <h2>Measuring the Milky Way Mass Profile via Stellar Kinematics</h2>
-    <p>The escape velocity profile (and therefore mass profile) of a simulated galaxy or the Milky Way is inferred via Bayesian analysis applied to the local stellar velocity distribution. Simulated datasets from the FIRE collaboration and Milky Way data to come from Gaia DR3. Supervised by Prof. Lina Necib. Article in preparation.</p>
+  <h2>Constraining Dark Matter via BCG Wobbling</h2>
+    <p>The BCG (brightest cluster galaxy) of a galaxy cluster should "wobble" over time in the potential well of the host cluster. By looking at the distribution of distances between BCGs and the potential minimums of galaxy clusters (obtained via strong lensing measurements) one can place constraints on the self-interaction cross section of dark matter. Roughly, the warmer the dark matter, the higher the amplitude of the BCG's wobble.  Supervised by Prof. Michael McDonald and Prof. Mark Vogelsberger. Article in preparation.</p>
   </div>
 </div>
 
@@ -27,12 +28,12 @@ Below is a collection of projects on which I've worked with collaborators. The r
 
 
 <div style="clear: both;">
-  <div style="float: right; margin-right 1em;">
-    <img src="/images/merger.gif" alt="merger gif" width="400" height="400">
+  <div style="float: left; margin-right 5em;">
+    <img src="/images/vesc2.png" alt="vesc corner plot" width="250" height="250">
   </div>
   <div>
-    <h2>Galaxy Mergers as Dark Matter Probes</h2>
-    <p>High-resolution N-body simulations of galaxy mergers are used as probes of dark matter properties, and to test models of dark matter-deficient galaxy production (such as DF2 and DF4). Supervised by Prof. Lina Necib. <br><br> Project ongoing.</p>
+  <h2>Measuring the Milky Way Mass Profile via Stellar Kinematics</h2>
+    <p>The escape velocity profile (and therefore mass profile) of a simulated galaxy or the Milky Way is inferred via Bayesian analysis applied to the local stellar velocity distribution. Simulated datasets from the FIRE collaboration and Milky Way data from Gaia DR3. Results suggest the existing methods of modelling these distributions are unreliable, and so new modelling and systematic error analyses are presented. Supervised by Prof. Lina Necib. Article in preparation.</p>
   </div>
 </div>
 
@@ -48,7 +49,7 @@ Below is a collection of projects on which I've worked with collaborators. The r
     <h2>Exact Wavelike Solutions in General Relativity</h2>
     <p>This master thesis project motivates and investigates the mathematical structure of
     pp-wave spacetimes. Topics include Penrose limits, the causal ladder and addressing
-    the Ehlers-Kundt conjecture. Supervised by Prof. Carla Cederbaum. <br><br> Submitted to general relativity and gravitation - draft available <a href="/files/Exact_Wavelike_Solutions_in_GR.pdf">here</a>.</p>
+    the Ehlers-Kundt conjecture. Supervised by Prof. Carla Cederbaum. <br><br> Accepted by general relativity and gravitation -  available <a href="https://arxiv.org/abs/2207.03591">here</a>.</p>
   </div>
 </div>
 

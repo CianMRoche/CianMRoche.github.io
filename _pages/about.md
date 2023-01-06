@@ -1,6 +1,6 @@
 ---
 permalink: /
-title: "Hi ^_^"
+title: ""
 excerpt: "Personal webpage for Cian Roche"
 author_profile: true
 redirect_from: 
@@ -8,14 +8,14 @@ redirect_from:
   - /about.html
 ---
 
-Hi, I’m Cian (pronounced: "k"+"ian", pronouns: he/him) and I’m currently pursuing a PhD in physics at Massachusetts Institute of Technology.
+Hi, I’m Cian (pronounced: "k"+"ian", pronouns: he/they) and I’m currently pursuing a PhD in physics at Massachusetts Institute of Technology.
 
 You can find me in the MIT Kavli Institute for Astrophysics and Space Research, room 37-624
 
 ### What's on this website?
-Some things I've worked on in the past few years, a <a href="/files/CV.pdf" target="_blank">CV</a> and some thoughts on ethics.
+Some things I've worked on in the past few years, a <a href="/files/CV.pdf" target="_blank">CV</a> and some random code tutorials I've written.
 
-### Here's a high-level overview of the areas I'm interested in: 
+Here's a high-level overview of the areas I'm interested in: 
 <p align="center">
   <img alt="Research Map" src="/images/research_map.png" width="100%">
 </p>
