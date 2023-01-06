@@ -15,7 +15,7 @@ You can find me in the MIT Kavli Institute for Astrophysics and Space Research, 
 ### What's on this website?
 Some things I've worked on in the past few years, a <a href="/files/CV.pdf" target="_blank">CV</a> and some random code tutorials I've written.
 
-Here's a high-level overview of the areas I'm interested in: 
+### Here's a high-level overview of the areas I'm interested in: 
 <p align="center">
   <img alt="Research Map" src="/images/research_map.png" width="100%">
 </p>

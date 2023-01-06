@@ -15,7 +15,7 @@ Below is a collection of projects on which I've worked with collaborators. The r
 
 <div style="clear: both;">
   <div style="float: left; margin-right 5em;">
-    <img src="/images/lens.png" alt="strong lensing for estimation of potential minimum" width="250" height="250">
+    <img src="/images/grid.png" alt="Galaxy clusters in stellar and dark matter mass" width="250" height="250">
   </div>
   <div>
   <h2>Constraining Dark Matter via BCG Wobbling</h2>
