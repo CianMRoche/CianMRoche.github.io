@@ -28,7 +28,7 @@ Below is a collection of projects on which I've worked with collaborators. The r
 
 
 <div style="clear: both;">
-  <div style="float: left; margin-right 5em;">
+  <div style="float: right; margin-right 5em;">
     <img src="/images/vesc2.png" alt="vesc corner plot" width="250" height="250">
   </div>
   <div>
