@@ -11,6 +11,19 @@ redirect_from:
 
 <div style="clear: both;">
   <div style="float: right; margin-right 5em;">
+    <img src="/images/astrowiki.png" alt="astrowiki connected graph" width="250" height="250">
+  </div>
+  <div>
+  <h2>AstroWiki</h2>
+    <p><a href="https://publish.obsidian.md/astrowiki/">Astrowiki</a> is a set of living notes I maintain on much of astrophysics, intended to supplement study for the MIT astrophysics division oral qualification exam, currently referred to as "the 168". Pictured is a graphical representation of most of the wiki, with the strongly connected nodes representing things like "compact objects" and "cosmology", though finer granularity is available too.</p>
+  </div>
+</div>
+
+<br clear="left"/>
+
+
+<div style="clear: both;">
+  <div style="float: right; margin-right 5em;">
     <img src="/images/corner.png" alt="corner plot" width="250" height="250">
   </div>
   <div>
@@ -48,7 +61,7 @@ redirect_from:
 <br clear="left"/>
 
 
-<div style="clear: both;">
+<!-- <div style="clear: both;">
   <div style="float: right; margin-right 5em;">
     <img src="/images/sprel.png" alt="frames" width="250" height="250">
   </div>
@@ -58,4 +71,4 @@ redirect_from:
   </div>
 </div>
 
-<br clear="left"/>
+<br clear="left"/> -->
