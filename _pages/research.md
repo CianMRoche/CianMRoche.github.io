@@ -29,11 +29,11 @@ Below is a collection of projects on which I've worked with collaborators. The r
 
 <div style="clear: both;">
   <div style="float: right; margin-right 5em;">
-    <img src="/images/vesc2.png" alt="vesc corner plot" width="250" height="250">
+    <img src="/images/vesc3.png" alt="Escape velocity profiles of the Milky Way" width="250" height="250">
   </div>
   <div>
   <h2>Measuring the Milky Way Mass Profile via Stellar Kinematics</h2>
-    <p>The escape velocity profile (and therefore mass profile) of a simulated galaxy or the Milky Way is inferred via Bayesian analysis applied to the local stellar velocity distribution. Simulated datasets from the FIRE collaboration and Milky Way data from Gaia DR3. Results suggest the existing methods of modelling these distributions are unreliable, and so new modelling and systematic error analyses are presented. Supervised by Prof. Lina Necib. Article in preparation.</p>
+    <p>The escape velocity profile of the Milky Way is a valuable probe of the underlying mass distribution and dark matter properties. By modelling the tail of the stellar speed distribution of halo stars in Gaia DR3, we obtain an escape velocity profile of the Milky Way from 4 kpc to 11 kpc. We can use this profile to constrain the parameters of any dark matter halo model, and do so for the NFW, generalized NFW and Burkert profiles, finding a light Milky Way that is however consistent with previous estimates. Supervised by Prof. Lina Necib. Article in preparation.</p>
   </div>
 </div>
 
