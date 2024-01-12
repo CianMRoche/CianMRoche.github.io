@@ -102,7 +102,7 @@ Below is a collection of projects on which I've worked with collaborators. The r
 
 
 <div style="clear: both;">
-  <div style="float: left; margin-right 1em;">
+  <div style="float: left; margin-right: 1em;">
     <img src="/images/92a.png" alt="sn1992a" width="350" height="350">
   </div>
   <div>
