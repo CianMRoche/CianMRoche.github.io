@@ -8,7 +8,7 @@ redirect_from:
   - /about.html
 ---
 
-Hi, I’m Cian (pronounced: "k"+"ian", pronouns: he/they) and I’m currently pursuing a PhD in physics at Massachusetts Institute of Technology.
+Hi, I’m Cian (pronounced: "k"+"ian", pronouns: he/they) and I’m currently pursuing a PhD in physics at Massachusetts Institute of Technology. My work aims to understand the particle nature of dark matter using kinematics and gravitational lensing, and to bridge the gap between cosmological simulations and observations. 
 
 You can find me in the MIT Kavli Institute for Astrophysics and Space Research, room 37-624
 
