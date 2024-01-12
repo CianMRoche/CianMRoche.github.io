@@ -19,8 +19,8 @@ Here are some of the initiatives I am currently or have been involved with. This
   </div>
   <div>
     <h2>Graduates Advising Graduate Admissions (GAGA)</h2>
-    <p> <strong>Co-Lead</strong>: 06/2022 - ongoing<br>
-        <strong>Organising Committee</strong>: 01/2021 - 06/2022<br><br>
+    <p> <strong>Co-Lead</strong>: 06/2022 - 09/2023<br>
+        <strong>Organising Committee</strong>: 01/2021 - ongoing<br><br>
         The Graduates Advising Graduate Admissions (GAGA) program provides the graduate student perspective to the Chair of Graduate Admissions and advises on improvements to the admissions process. (It doesnt have a logo so I made this one up as a placeholder). More information <a target="_blank" href="https://physics-gsc.scripts.mit.edu/home/gaga/">here</a>. 
         <br><br>This has also lead me to serve on the admissions committee for the <a target="_blank" href="https://physics.mit.edu/academic-programs/graduate-students/graduate-admissions/">MIT graduate program in physics</a> (2023 & 2024 cycles), and the admissions commitee for the <a target="_blank" href="https://oge.mit.edu/msrp/">MIT Summer Research Program</a> (2023 cycle).
         </p>
@@ -37,7 +37,7 @@ Here are some of the initiatives I am currently or have been involved with. This
   </div>
   <div>
     <h2>MIT Graduate Student Union</h2>
-    <p> <strong>Organising Committee</strong>: 01/2022 - ongoing<br><br>
+    <p> <strong>Organising Committee</strong>: 01/2022 - 05/2023<br><br>
         The MIT Graduate Student Union operates fairly and democratically by distributing responsibility to the division-level. I assist with union operations in the physics department and astrophysics division.
         <br><br>More information <a target="_blank" href="https://mitgsu.org/">here</a>.
         </p>
@@ -63,4 +63,4 @@ Here are some of the initiatives I am currently or have been involved with. This
 
 <hr style="border:1px solid gray">
 
-Im also a **co-organiser** of the MIT Kavli Institute for Astrophysics and Space Research Graduate Student Lunch and Talk Series ("Grad Lunch") since January 2022, but lunch doesnt have a logo :'^)
+Im also a **co-organiser** of the MIT Kavli Institute for Astrophysics and Space Research Graduate Student Lunch and Talk Series ("Grad Lunch") since January 2022, and a volunteer office management liason for the same institute, but neither lunch nor desks have a logo :'^)

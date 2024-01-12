@@ -15,11 +15,11 @@ Below is a collection of projects on which I've worked with collaborators. The r
 
 <div style="clear: both;">
   <div style="float: left; margin-right 5em;">
-    <img src="/images/grid.png" alt="Galaxy clusters in stellar and dark matter mass" width="250" height="250">
+    <img src="/images/BCG_offsets.png" alt="Galaxy clusters in stellar and dark matter mass" width="250" height="250">
   </div>
   <div>
-  <h2>Constraining Dark Matter via BCG Wobbling</h2>
-    <p>The BCG (brightest cluster galaxy) of a galaxy cluster should "wobble" over time in the potential well of the host cluster. By looking at the distribution of distances between BCGs and the potential minimums of galaxy clusters (obtained via strong lensing measurements) one can place constraints on the self-interaction cross section of dark matter. Roughly, the warmer the dark matter, the higher the amplitude of the BCG's wobble.  Supervised by Prof. Michael McDonald and Prof. Mark Vogelsberger. Article in preparation.</p>
+  <h2>Dark Matter Self-Interaction via Galaxy Wobbling</h2>
+    <p>The BCG (brightest cluster galaxy) sitting in the core of a galaxy cluster can "wobble" over time in the potential well of the host cluster, which is primarily set by the dark matter. By looking at the distribution of distances between BCGs and the potential minimums of galaxy clusters (obtained via strong lensing measurements) one can place constraints on the self-interaction cross section of dark matter. Roughly, the more the dark matter interactis with itself, the flatter the potential and the higher the amplitude of the BCG's wobble.  Supervised by Prof. Michael McDonald and Prof. Mark Vogelsberger. Article in preparation.</p>
   </div>
 </div>
 
