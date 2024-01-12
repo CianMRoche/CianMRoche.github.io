@@ -14,7 +14,7 @@ Below is a collection of projects on which I've worked with collaborators. The r
 
 
 <div style="clear: both;">
-  <div style="float: left; margin-right 15em;">
+  <div style="float: left; margin-right: 10em;">
     <img src="/images/BCG_offsets.png" alt="Galaxy clusters in stellar and dark matter mass" width="250" height="250">
   </div>
   <div>
