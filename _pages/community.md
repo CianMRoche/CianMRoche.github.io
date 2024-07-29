@@ -20,7 +20,7 @@ Here are some of the initiatives I am currently or have been involved with. This
   <div>
     <h2>Graduates Advising Graduate Admissions (GAGA)</h2>
     <p> <strong>Co-Lead</strong>: 06/2022 - 09/2023<br>
-        <strong>Organising Committee</strong>: 01/2021 - ongoing<br><br>
+        <strong>Organising Committee</strong>: 01/2021 - 05/2024<br><br>
         The Graduates Advising Graduate Admissions (GAGA) program provides the graduate student perspective to the Chair of Graduate Admissions and advises on improvements to the admissions process. (It doesnt have a logo so I made this one up as a placeholder). More information <a target="_blank" href="https://physics-gsc.scripts.mit.edu/home/gaga/">here</a>. 
         <br><br>This has also lead me to serve on the admissions committee for the <a target="_blank" href="https://physics.mit.edu/academic-programs/graduate-students/graduate-admissions/">MIT graduate program in physics</a> (2023 & 2024 cycles), and the admissions commitee for the <a target="_blank" href="https://oge.mit.edu/msrp/">MIT Summer Research Program</a> (2023 cycle).
         </p>
