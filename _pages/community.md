@@ -79,6 +79,18 @@ Here are some of the initiatives I am currently or have been involved with. This
 <div class="community-grid">
 
   <div class="community-card">
+    <img src="/images/astrogazers.png" alt="MIT astrogazers">
+    <div class="community-card-body">
+      <h3>MIT Astrogazers</h3>
+      <div class="community-role">
+        <strong>Member</strong>: 2024-Present<br>
+      </div>
+      <p>Astrogazers is a student organization at MIT that aims to bring astronomy to the public, educating all those interested about telescopes, astrophysics, and everything else space.<br>
+      <a href="https://astrogazers.mit.edu/" target="_blank">More info →</a></p>
+    </div>
+  </div>
+
+  <div class="community-card">
     <img src="/images/gaga.png" alt="GAGA logo">
     <div class="community-card-body">
       <h3>Graduates Advising Graduate Admissions (GAGA)</h3>
@@ -86,7 +98,8 @@ Here are some of the initiatives I am currently or have been involved with. This
         <strong>Co-Lead</strong>: 06/2022 – 09/2023<br>
         <strong>Organising Committee</strong>: 01/2021 – 05/2024
       </div>
-      <p>Provides the graduate student perspective to the Chair of Graduate Admissions and advises on improvements to the admissions process. This led me to serve on the admissions committee for the <a href="https://physics.mit.edu/academic-programs/graduate-students/graduate-admissions/" target="_blank">MIT graduate program in physics</a> (2023 & 2024 cycles) and the <a href="https://oge.mit.edu/msrp/" target="_blank">MIT Summer Research Program</a> (2023 cycle). <a href="https://physics-gsc.scripts.mit.edu/home/gaga/" target="_blank">More info →</a></p>
+      <p>Provides the graduate student perspective to the Chair of Graduate Admissions and advises on improvements to the admissions process. This led me to serve on the admissions committee for the <a href="https://physics.mit.edu/academic-programs/graduate-students/graduate-admissions/" target="_blank">MIT graduate program in physics</a> (2023 & 2024 cycles) and the <a href="https://oge.mit.edu/msrp/" target="_blank">MIT Summer Research Program</a> (2023 cycle).<br>
+      <a href="https://physics-gsc.scripts.mit.edu/home/gaga/" target="_blank">More info →</a></p>
     </div>
   </div>
 
@@ -97,7 +110,8 @@ Here are some of the initiatives I am currently or have been involved with. This
       <div class="community-role">
         <strong>Organising Committee</strong>: 01/2022 – 05/2023
       </div>
-      <p>The MIT GSU operates fairly and democratically by distributing responsibility to the division level. I assisted with union operations in the physics department and astrophysics division. <a href="https://mitgsu.org/" target="_blank">More info →</a></p>
+      <p>The MIT GSU operates fairly and democratically by distributing responsibility to the division level. I assisted with union operations in the physics department and astrophysics division.<br>
+      <a href="https://mitgsu.org/" target="_blank">More info →</a></p>
     </div>
   </div>
 
@@ -108,7 +122,7 @@ Here are some of the initiatives I am currently or have been involved with. This
       <div class="community-role">
         <strong>Astronomy Officer</strong>: 2017 – 2019
       </div>
-      <p>Worked with the committee of the University College Cork physics and astronomy society for two years, organising stargazing trips and a visit to Iceland to see the Northern Lights (no aurora were witnessed, not even entirely localized within our kitchen).</p>
+      <p>I worked with the committee of the University College Cork physics and astronomy society for two years, organising stargazing trips and a visit to Iceland to see the Northern Lights (no aurora were witnessed, not even entirely localized within our kitchen).</p>
     </div>
   </div>
 
