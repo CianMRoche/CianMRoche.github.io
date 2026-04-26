@@ -27,7 +27,9 @@ and high-performance computing, though I would have had to connect that to just 
 [^1]: I suppose I could reasonably connect *all* nodes on the graph and not be particularly wrong about anything.
 
 
+One concrete thing I work on is gravitational lensing — where a massive object (like a galaxy cluster) bends the light from something behind it, distorting how it looks to us. You can play with a live simulation of it below — paste in any image and drag the sliders to see the effect:
+
 <iframe src="/assets/lensing_demo/index.html" 
-        width="100%" height="680" 
+        width="100%" height="960" 
         frameborder="0" style="border:none;">
 </iframe>
