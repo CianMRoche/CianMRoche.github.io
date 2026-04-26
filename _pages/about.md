@@ -27,7 +27,7 @@ and high-performance computing, though I would have had to connect that to just 
 [^1]: I suppose I could reasonably connect *all* nodes on the graph and not be particularly wrong about anything.
 
 
-<iframe src="/assets/lensing-demo/index.html" 
+<iframe src="/assets/lensing_demo/index.html" 
         width="100%" height="680" 
         frameborder="0" style="border:none;">
 </iframe>
