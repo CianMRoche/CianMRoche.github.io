@@ -352,6 +352,7 @@
 
   <div class="demos">
     <span class="demos-label">Or load a built-in demo:</span>
+    <button onclick="loadDemo('astrowiki')">astrowiki graph</button>
     <button onclick="loadDemo('galaxy')">galaxy field</button>
     <button onclick="loadDemo('grid')">coordinate grid</button>
     <button onclick="loadDemo('text')">text</button>
@@ -599,6 +600,7 @@ document.getElementById('profile').addEventListener('change', render);
 /* ── Demo scenes ───────────────────────────────────────────────── */
 
 function loadDemo(type) {
+  if (type === 'astrowiki') { loadImageDemo('/images/astrowiki_graph.png'); return; }
   const c   = document.createElement('canvas');
   c.width   = SIZE; c.height = SIZE;
   const ctx = c.getContext('2d');
@@ -688,6 +690,13 @@ function loadDemo(type) {
   srcCanvas.style.display = 'block';
   dropHint.style.display = 'none';
   uploadTexture(srcCanvas);
+}
+
+function loadImageDemo(src) {
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => drawToSource(img);
+  img.src = src;
 }
 
 /* Load galaxy demo on startup */

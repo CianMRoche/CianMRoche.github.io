@@ -17,15 +17,6 @@ Some things I've worked on in the past few years, a <a href="/files/CV.pdf" targ
 
 Also check out [AstroWiki](https://publish.obsidian.md/astrowiki/) which is a comprehensive set of living notes I developed and now co-maintain to aid in studying to for the MIT astrophysics oral qualifying exam.
 
-### Here's a high-level overview of the research areas I'm interested in: 
-<p align="center">
-  <img alt="Research Map" src="/images/research_map.png" width="100%">
-</p>
-
-and high-performance computing, though I would have had to connect that to just about everything[^1]. In black are the areas in which I'm interested, and the coloured portions represent roughly the real-world connections between those topics.
-
-[^1]: I suppose I could reasonably connect *all* nodes on the graph and not be particularly wrong about anything.
-
 
 One concrete thing I work on is gravitational lensing — where a massive object (like a galaxy cluster) bends the light from something behind it, distorting how it looks to us. You can play with a live simulation of it below — paste in any image and drag the sliders to see the effect:
 
