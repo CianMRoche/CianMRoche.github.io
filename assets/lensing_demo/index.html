@@ -45,11 +45,12 @@
   }
 
   .canvas-label {
-    font-size: 0.72rem;
-    color: #9ca3af;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: #6b7280;
     text-align: center;
-    margin-top: 6px;
-    letter-spacing: 0.06em;
+    margin-top: 8px;
+    letter-spacing: 0.05em;
     text-transform: uppercase;
   }
 
@@ -266,7 +267,7 @@
 
 <div class="container">
   <h1>Fun Gravitational Lensing Demo</h1>
-  <p class="subtitle">Here you can see how an image gets distorted by a single (very simple) gravitational lens. <br>
+  <p class="subtitle">Here you can see how an image gets distorted by a single (very simple) gravitational lens. <br><br>
     <strong>Step 1 — Pick an image:</strong> paste from clipboard (Ctrl+V / Cmd+V), or drag a file onto the left box, or click it to browse local files, or pick one of the demos below.<br>
     <strong>Step 2 — Adjust lens:</strong> use the sliders to move it, change its mass, or switch mass profile.
   </p>
@@ -312,7 +313,7 @@
     </div>
 
     <div class="ctrl-group">
-      <label>Einstein radius &theta;<sub>E</sub></label>
+      <label>Lens strength</label>
       <div class="slider-row">
         <input type="range" id="einstein-r" min="0.05" max="0.55" step="0.01" value="0.20">
         <span class="slider-val" id="einstein-r-out">0.20</span>
@@ -355,20 +356,19 @@
 
   <div class="demos">
     <span class="demos-label">Or load a built-in demo:</span>
-    <button onclick="loadDemo('astrowiki')">astrowiki graph</button>
     <button onclick="loadDemo('galaxy')">galaxy field</button>
     <button onclick="loadDemo('grid')">coordinate grid</button>
     <button onclick="loadDemo('text')">text</button>
+    <button onclick="loadDemo('astrowiki')">astrowiki graph</button>
   </div>
 
   <div class="physics-note">
-    <strong style="color:#6b7280;">What's going on:</strong>
-    For each output pixel at angular position <code>&theta;</code>, the shader solves
+    <strong style="color:#6b7280;">How is the lensed image computed?</strong>
+    For each output pixel at angular position <code>&theta;</code>, this solves
     the lens equation <code>&beta; = &theta; &minus; &alpha;(&theta;)</code> to find the source-plane position <code>&beta;</code>,
-    then samples the source image there (inverse ray tracing).
-    SIS deflection: <code>&alpha; = &theta;_E &middot; (&theta;&minus;&theta;_L)/|&theta;&minus;&theta;_L|</code>.
-    NFW adds a softening core radius. EPL applies an elliptical coordinate transform.
-    Bright arcs appear where the mapping is nearly singular (caustic crossings).
+    then samples the source image there (inverse ray tracing).<br><br>
+    Singular Isothermal Sphere (SIS) deflection: <code>&alpha; = &theta;_E &middot; (&theta;&minus;&theta;_L)/|&theta;&minus;&theta;_L|</code>.
+    Navarro-Frenck-White profile (NFW) adds a softening core radius. Elliptical Power Law (EPL) applies an elliptical coordinate transformation.
   </div>
 </div>
 
@@ -646,25 +646,34 @@ function loadDemo(type) {
     }
 
   } else if (type === 'grid') {
-    ctx.fillStyle = '#0a0a0f';
+    ctx.fillStyle = '#f8f9fa';
     ctx.fillRect(0, 0, SIZE, SIZE);
-    /* Grid lines */
-    ctx.lineWidth = 0.75;
-    for (let i = 0; i <= 16; i++) {
-      const v = i * (SIZE / 16);
-      ctx.strokeStyle = '#1a3a2a';
+    const N = 12;
+    const step = SIZE / N;
+    /* Minor grid lines */
+    ctx.strokeStyle = '#dde1e9'; ctx.lineWidth = 0.8;
+    for (let i = 0; i <= N; i++) {
+      const v = i * step;
       ctx.beginPath(); ctx.moveTo(v, 0); ctx.lineTo(v, SIZE); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0, v); ctx.lineTo(SIZE, v); ctx.stroke();
     }
-    /* Concentric circles */
-    for (let r = 1; r <= 5; r++) {
-      ctx.beginPath(); ctx.arc(SIZE/2, SIZE/2, r * 48, 0, Math.PI * 2);
-      ctx.strokeStyle = '#c0431a'; ctx.lineWidth = 1.2; ctx.stroke();
+    /* Major grid lines every 3 */
+    ctx.strokeStyle = '#adb5c2'; ctx.lineWidth = 1.2;
+    for (let i = 0; i <= N; i += 3) {
+      const v = i * step;
+      ctx.beginPath(); ctx.moveTo(v, 0); ctx.lineTo(v, SIZE); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, v); ctx.lineTo(SIZE, v); ctx.stroke();
     }
-    /* Centre cross */
-    ctx.strokeStyle = '#4af'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(SIZE/2, 0); ctx.lineTo(SIZE/2, SIZE); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, SIZE/2); ctx.lineTo(SIZE, SIZE/2); ctx.stroke();
+    /* Concentric rings centred on image (where the lens starts) */
+    ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 1.5;
+    for (let r = 1; r <= 5; r++) {
+      ctx.beginPath(); ctx.arc(SIZE/2, SIZE/2, r * step * 1.4, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    /* Centre dot */
+    ctx.fillStyle = '#ef4444';
+    ctx.beginPath(); ctx.arc(SIZE/2, SIZE/2, 4, 0, Math.PI * 2);
+    ctx.fill();
 
   } else { /* text */
     ctx.fillStyle = '#050510';
