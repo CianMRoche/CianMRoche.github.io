@@ -35,7 +35,7 @@ redirect_from:
 <br clear="left"/>
 
 
-<div style="clear: both;">
+<!-- <div style="clear: both;">
   <div style="float: right; margin-right 5em;">
     <img src="/images/young2.png" alt="Birdtrack diagram" width="250" height="250">
   </div>
@@ -45,7 +45,7 @@ redirect_from:
   </div>
 </div>
 
-<br clear="left"/>
+<br clear="left"/> -->
 
 
 <!-- <div style="clear: both;">

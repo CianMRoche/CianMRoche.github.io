@@ -28,9 +28,11 @@ A collection of projects across observational astrophysics, theoretical physics,
 .research-card img {
   width: 100%;
   aspect-ratio: 1;
-  object-fit: cover;
+  object-fit: contain;
   object-position: center;
   display: block;
+  background: #f9fafb;
+  padding: 0.5rem;
 }
 .research-card-body {
   padding: 1rem 1.125rem 1.25rem;
