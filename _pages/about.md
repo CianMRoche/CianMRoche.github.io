@@ -35,9 +35,9 @@ You can find me in the MIT Kavli Institute for Astrophysics and Space Research, 
   top: 0; left: 0; right: 0;
   height: 3px;
 }
-.nav-card-research::before { background: #0072B2; }
-.nav-card-cv::before { background: #d652c5; }
-.nav-card-astrowiki::before { background: #E69F00; }
+.nav-card-research::before { background: #4aaee9; }
+.nav-card-cv::before { background: #dd72cf; }
+.nav-card-astrowiki::before { background: #e0af44; }
 .nav-card:hover {
   box-shadow: 0 4px 14px rgba(0,0,0,0.1);
   transform: translateY(-2px);

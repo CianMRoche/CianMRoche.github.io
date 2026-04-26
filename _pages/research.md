@@ -27,7 +27,7 @@ A collection of projects across observational astrophysics, theoretical physics,
 }
 .research-card img {
   width: 100%;
-  height: 200px;
+  aspect-ratio: 1;
   object-fit: cover;
   object-position: center;
   display: block;
