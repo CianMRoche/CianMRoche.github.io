@@ -9,8 +9,8 @@ main:
   - title: "Community"
     url: /community/
     
-  - title: "CV"
-    url: /files/CV.pdf
-
   - title: "Tutorials"
     url: "/tutorials/"
+
+  - title: "CV"
+    url: /files/CV.pdf
