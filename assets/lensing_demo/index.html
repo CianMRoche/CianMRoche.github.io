@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gravitational Lensing Simulator</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0d1117;
+    color: #e6edf3;
+    min-height: 100vh;
+    padding: 2rem 1rem;
+  }
+
+  h1 {
+    font-size: 1.4rem;
+    font-weight: 500;
+    margin-bottom: 0.25rem;
+    letter-spacing: -0.01em;
+  }
+
+  .subtitle {
+    font-size: 0.85rem;
+    color: #7d8590;
+    margin-bottom: 1.5rem;
+  }
+
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .canvases {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+  }
+
+  .canvas-wrap {
+    flex: 1;
+    min-width: 240px;
+  }
+
+  .canvas-label {
+    font-size: 0.75rem;
+    color: #7d8590;
+    text-align: center;
+    margin-top: 6px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  #drop-zone {
+    border: 1.5px dashed #30363d;
+    border-radius: 10px;
+    aspect-ratio: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    background: #161b22;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+
+  #drop-zone:hover { border-color: #58a6ff; }
+  #drop-zone.drag-over { border-color: #58a6ff; background: #1c2230; }
+
+  #source-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: none;
+    object-fit: contain;
+  }
+
+  #drop-hint {
+    text-align: center;
+    padding: 1rem;
+    pointer-events: none;
+  }
+
+  .drop-icon {
+    font-size: 2rem;
+    opacity: 0.3;
+    margin-bottom: 0.5rem;
+  }
+
+  .drop-hint-main {
+    font-size: 0.85rem;
+    color: #7d8590;
+    margin-bottom: 4px;
+  }
+
+  .drop-hint-sub {
+    font-size: 0.75rem;
+    color: #484f58;
+  }
+
+  #file-input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .lens-wrap {
+    border: 1px solid #21262d;
+    border-radius: 10px;
+    aspect-ratio: 1;
+    overflow: hidden;
+    background: #000;
+    position: relative;
+  }
+
+  #lens-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  #no-image-msg {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    color: #30363d;
+    pointer-events: none;
+  }
+
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem 1.5rem;
+    background: #161b22;
+    border: 1px solid #21262d;
+    border-radius: 10px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+  }
+
+  @media (max-width: 480px) {
+    .controls { grid-template-columns: 1fr; }
+  }
+
+  .ctrl-group label {
+    display: block;
+    font-size: 0.75rem;
+    color: #7d8590;
+    margin-bottom: 5px;
+    letter-spacing: 0.02em;
+  }
+
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .slider-row input[type="range"] {
+    flex: 1;
+    -webkit-appearance: none;
+    height: 4px;
+    background: #21262d;
+    border-radius: 2px;
+    outline: none;
+  }
+
+  .slider-row input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #58a6ff;
+    cursor: pointer;
+  }
+
+  .slider-row input[type="range"]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #58a6ff;
+    cursor: pointer;
+    border: none;
+  }
+
+  .slider-val {
+    font-size: 0.75rem;
+    color: #7d8590;
+    min-width: 36px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  select {
+    width: 100%;
+    background: #0d1117;
+    color: #e6edf3;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 5px 8px;
+    font-size: 0.8rem;
+    outline: none;
+    cursor: pointer;
+  }
+
+  select:focus { border-color: #58a6ff; }
+
+  .demos {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .demos button {
+    background: transparent;
+    border: 1px solid #30363d;
+    color: #7d8590;
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+
+  .demos button:hover {
+    border-color: #58a6ff;
+    color: #58a6ff;
+  }
+
+  .physics-note {
+    margin-top: 1.25rem;
+    font-size: 0.75rem;
+    color: #484f58;
+    line-height: 1.6;
+    border-top: 1px solid #21262d;
+    padding-top: 1rem;
+  }
+
+  .physics-note code {
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: 0.8em;
+    color: #8b949e;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <h1>Gravitational Lensing Simulator</h1>
+  <p class="subtitle">Paste or upload a source image — the shader ray-traces it through the lens in real time.</p>
+
+  <div class="canvases">
+    <div class="canvas-wrap">
+      <div id="drop-zone">
+        <canvas id="source-canvas"></canvas>
+        <div id="drop-hint">
+          <div class="drop-icon">⊕</div>
+          <p class="drop-hint-main">Paste image (Ctrl+V / ⌘V)</p>
+          <p class="drop-hint-sub">or click to upload</p>
+        </div>
+        <input type="file" id="file-input" accept="image/*">
+      </div>
+      <p class="canvas-label">source plane</p>
+    </div>
+
+    <div class="canvas-wrap">
+      <div class="lens-wrap">
+        <canvas id="lens-canvas"></canvas>
+        <div id="no-image-msg">lensed output</div>
+      </div>
+      <p class="canvas-label">image plane</p>
+    </div>
+  </div>
+
+  <div class="controls">
+
+    <div class="ctrl-group">
+      <label>Lens profile</label>
+      <select id="profile">
+        <option value="sis">Point mass / SIS</option>
+        <option value="nfw">NFW-like (softened)</option>
+        <option value="epl">Elliptical power-law</option>
+      </select>
+    </div>
+
+    <div class="ctrl-group">
+      <label>Einstein radius θ<sub>E</sub></label>
+      <div class="slider-row">
+        <input type="range" id="einstein-r" min="0.05" max="0.55" step="0.01" value="0.20">
+        <span class="slider-val" id="einstein-r-out">0.20</span>
+      </div>
+    </div>
+
+    <div class="ctrl-group">
+      <label>Lens position X</label>
+      <div class="slider-row">
+        <input type="range" id="lens-x" min="-0.45" max="0.45" step="0.01" value="0.00">
+        <span class="slider-val" id="lens-x-out">0.00</span>
+      </div>
+    </div>
+
+    <div class="ctrl-group">
+      <label>Lens position Y</label>
+      <div class="slider-row">
+        <input type="range" id="lens-y" min="-0.45" max="0.45" step="0.01" value="0.00">
+        <span class="slider-val" id="lens-y-out">0.00</span>
+      </div>
+    </div>
+
+    <div class="ctrl-group">
+      <label>Ellipticity <em>e</em> (EPL only)</label>
+      <div class="slider-row">
+        <input type="range" id="ellip" min="0.0" max="0.7" step="0.05" value="0.30">
+        <span class="slider-val" id="ellip-out">0.30</span>
+      </div>
+    </div>
+
+    <div class="ctrl-group">
+      <label>Position angle (deg, EPL only)</label>
+      <div class="slider-row">
+        <input type="range" id="angle" min="0" max="180" step="5" value="45">
+        <span class="slider-val" id="angle-out">45°</span>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="demos">
+    <span style="font-size:0.78rem;color:#484f58;align-self:center;">Try a demo:</span>
+    <button onclick="loadDemo('galaxy')">galaxy field</button>
+    <button onclick="loadDemo('grid')">coordinate grid</button>
+    <button onclick="loadDemo('text')">text</button>
+  </div>
+
+  <div class="physics-note">
+    <strong style="color:#8b949e;">Physics:</strong>
+    For each output pixel at angular position <code>θ</code>, the shader solves
+    the lens equation <code>β = θ − α(θ)</code> to find the source-plane position <code>β</code>,
+    then samples the source image there (inverse ray tracing).
+    SIS deflection: <code>α = θ_E · (θ−θ_L)/|θ−θ_L|</code>.
+    NFW adds a softening core radius. EPL applies an elliptical coordinate transform.
+    Magnification follows from the Jacobian of <code>β(θ)</code> — bright arcs appear where
+    the mapping is nearly singular (caustic crossings).
+  </div>
+</div>
+
+<script>
+const SIZE = 512;
+
+const glCanvas = document.getElementById('lens-canvas');
+const srcCanvas = document.getElementById('source-canvas');
+const srcCtx = srcCanvas.getContext('2d');
+const dropHint = document.getElementById('drop-hint');
+const noImageMsg = document.getElementById('no-image-msg');
+
+glCanvas.width = SIZE; glCanvas.height = SIZE;
+srcCanvas.width = SIZE; srcCanvas.height = SIZE;
+
+/* ── WebGL setup ───────────────────────────────────────────────── */
+
+const gl = glCanvas.getContext('webgl', { antialias: false, preserveDrawingBuffer: true });
+if (!gl) { alert('WebGL not supported in this browser.'); }
+
+const VS = `
+attribute vec2 a_pos;
+varying vec2 v_uv;
+void main() {
+  v_uv = a_pos * 0.5 + 0.5;
+  gl_Position = vec4(a_pos, 0.0, 1.0);
+}`;
+
+/* Lens deflection angle α(θ).
+   profile: 0 = SIS/point-mass, 1 = softened NFW, 2 = elliptical power-law */
+const FS = `
+precision highp float;
+varying vec2 v_uv;
+uniform sampler2D u_src;
+uniform float u_re;
+uniform float u_lx;
+uniform float u_ly;
+uniform int   u_profile;
+uniform float u_ellip;
+uniform float u_angle;
+
+vec2 sis_deflect(vec2 d, float re) {
+  float r = length(d);
+  if (r < 1e-4) return vec2(0.0);
+  return re * d / r;
+}
+
+vec2 nfw_deflect(vec2 d, float re) {
+  float rs = re * 0.18;
+  float r  = length(d);
+  if (r < 1e-4) return vec2(0.0);
+  float alpha = re * re / (r + rs);
+  return alpha * d / r;
+}
+
+/* atanh not available in GLSL ES 1.0 — inline via log identity */
+float atanh_safe(float x) {
+  x = clamp(x, -0.9999, 0.9999);
+  return 0.5 * log((1.0 + x) / (1.0 - x));
+}
+
+vec2 epl_deflect(vec2 d, float re, float e, float pa) {
+  float ca = cos(pa);
+  float sa = sin(pa);
+  vec2 dr = vec2(ca * d.x + sa * d.y, -sa * d.x + ca * d.y);
+  float q   = 1.0 - e;
+  float eps = 1e-6 * re * re;
+  float psi = sqrt(q * q * dr.x * dr.x + dr.y * dr.y + eps);
+  float sq  = sqrt(max(1.0 - q * q, 0.0001));
+  vec2 al = re * vec2(
+    (q / sq) * atan(sq * dr.x / psi),
+    (q / sq) * atanh_safe(sq * dr.y / psi)
+  );
+  return vec2(ca * al.x - sa * al.y, sa * al.x + ca * al.y);
+}
+
+void main() {
+  vec2 theta = (v_uv - 0.5) * 2.0;
+  vec2 lp    = vec2(u_lx, u_ly);
+  vec2 d     = theta - lp;
+  float pa   = u_angle;
+
+  vec2 alpha;
+  if (u_profile == 0) {
+    alpha = sis_deflect(d, u_re);
+  } else if (u_profile == 1) {
+    alpha = nfw_deflect(d, u_re);
+  } else {
+    alpha = epl_deflect(d, u_re, u_ellip, pa);
+  }
+
+  vec2 beta   = theta - alpha;
+  vec2 src_uv = beta * 0.5 + 0.5;
+
+  if (src_uv.x < 0.0 || src_uv.x > 1.0 || src_uv.y < 0.0 || src_uv.y > 1.0) {
+    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+  } else {
+    gl_FragColor = texture2D(u_src, src_uv);
+  }
+}`;
+
+function compileShader(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS))
+    console.error('Shader error:', gl.getShaderInfoLog(s));
+  return s;
+}
+
+const prog = gl.createProgram();
+gl.attachShader(prog, compileShader(gl.VERTEX_SHADER, VS));
+gl.attachShader(prog, compileShader(gl.FRAGMENT_SHADER, FS));
+gl.linkProgram(prog);
+gl.useProgram(prog);
+
+const quadBuf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+const aPos = gl.getAttribLocation(prog, 'a_pos');
+gl.enableVertexAttribArray(aPos);
+gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+const uSrc     = gl.getUniformLocation(prog, 'u_src');
+const uRe      = gl.getUniformLocation(prog, 'u_re');
+const uLx      = gl.getUniformLocation(prog, 'u_lx');
+const uLy      = gl.getUniformLocation(prog, 'u_ly');
+const uProfile = gl.getUniformLocation(prog, 'u_profile');
+const uEllip   = gl.getUniformLocation(prog, 'u_ellip');
+const uAngle   = gl.getUniformLocation(prog, 'u_angle');
+
+let sourceTexture = null;
+let hasImage = false;
+
+function uploadTexture(imgEl) {
+  if (sourceTexture) gl.deleteTexture(sourceTexture);
+  sourceTexture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, sourceTexture);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, imgEl);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.uniform1i(uSrc, 0);
+  hasImage = true;
+  noImageMsg.style.display = 'none';
+  render();
+}
+
+function render() {
+  if (!hasImage || !gl) return;
+  const re    = parseFloat(document.getElementById('einstein-r').value);
+  const lx    = parseFloat(document.getElementById('lens-x').value);
+  const ly    = -parseFloat(document.getElementById('lens-y').value);
+  const prof  = document.getElementById('profile').value;
+  const pInt  = prof === 'sis' ? 0 : prof === 'nfw' ? 1 : 2;
+  const ellip = parseFloat(document.getElementById('ellip').value);
+  const angDeg= parseFloat(document.getElementById('angle').value);
+  const ang   = angDeg * Math.PI / 180.0;
+
+  gl.uniform1f(uRe, re);
+  gl.uniform1f(uLx, lx);
+  gl.uniform1f(uLy, ly);
+  gl.uniform1i(uProfile, pInt);
+  gl.uniform1f(uEllip, ellip);
+  gl.uniform1f(uAngle, ang);
+  gl.viewport(0, 0, SIZE, SIZE);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+
+/* ── Image loading ─────────────────────────────────────────────── */
+
+function drawToSource(img) {
+  srcCanvas.width = SIZE; srcCanvas.height = SIZE;
+  srcCtx.clearRect(0, 0, SIZE, SIZE);
+  const scale = Math.min(SIZE / img.width, SIZE / img.height);
+  const w = img.width * scale, h = img.height * scale;
+  srcCtx.drawImage(img, (SIZE - w) / 2, (SIZE - h) / 2, w, h);
+  srcCanvas.style.display = 'block';
+  dropHint.style.display = 'none';
+  uploadTexture(srcCanvas);
+}
+
+function handleFile(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => { drawToSource(img); URL.revokeObjectURL(url); };
+  img.src = url;
+}
+
+document.addEventListener('paste', e => {
+  const items = e.clipboardData?.items || [];
+  for (const item of items) {
+    if (item.type.startsWith('image/')) { handleFile(item.getAsFile()); break; }
+  }
+});
+
+document.getElementById('file-input').addEventListener('change', e => {
+  handleFile(e.target.files[0]);
+});
+
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault();
+  dz.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+
+/* ── Controls ──────────────────────────────────────────────────── */
+
+const sliderDefs = [
+  { id: 'einstein-r', fmt: v => v.toFixed(2) },
+  { id: 'lens-x',     fmt: v => v.toFixed(2) },
+  { id: 'lens-y',     fmt: v => v.toFixed(2) },
+  { id: 'ellip',      fmt: v => v.toFixed(2) },
+  { id: 'angle',      fmt: v => v.toFixed(0) + '°' },
+];
+
+sliderDefs.forEach(({ id, fmt }) => {
+  const el  = document.getElementById(id);
+  const out = document.getElementById(id + '-out');
+  el.addEventListener('input', () => { out.textContent = fmt(parseFloat(el.value)); render(); });
+});
+
+document.getElementById('profile').addEventListener('change', render);
+
+/* ── Demo scenes ───────────────────────────────────────────────── */
+
+function loadDemo(type) {
+  const c   = document.createElement('canvas');
+  c.width   = SIZE; c.height = SIZE;
+  const ctx = c.getContext('2d');
+
+  if (type === 'galaxy') {
+    ctx.fillStyle = '#00000f';
+    ctx.fillRect(0, 0, SIZE, SIZE);
+    /* Deterministic pseudo-random via sin hash */
+    const rng = n => { const x = Math.sin(n + 1) * 43758.5453; return x - Math.floor(x); };
+    /* Stars */
+    for (let i = 0; i < 700; i++) {
+      const x = rng(i * 3.1) * SIZE;
+      const y = rng(i * 7.4) * SIZE;
+      const r = rng(i * 2.9) * 1.6 + 0.2;
+      const b = rng(i * 5.1);
+      const col = b > 0.75 ? '#fff8e7' : b > 0.45 ? '#c0d0ff' : '#ffddaa';
+      ctx.globalAlpha = 0.4 + b * 0.6;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = col; ctx.fill();
+    }
+    /* Blob galaxies */
+    ctx.globalAlpha = 1;
+    for (let i = 0; i < 10; i++) {
+      const x = rng(i * 11.3) * SIZE;
+      const y = rng(i * 9.1)  * SIZE;
+      const rx = 10 + rng(i * 3.7) * 35;
+      const ry = 6  + rng(i * 2.1) * 20;
+      const angle = rng(i * 1.9) * Math.PI;
+      ctx.save();
+      ctx.translate(x, y); ctx.rotate(angle);
+      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, rx);
+      const hue = 30 + rng(i * 7.3) * 40;
+      g.addColorStop(0,   `hsla(${hue},60%,80%,0.85)`);
+      g.addColorStop(0.4, `hsla(${hue},40%,55%,0.4)`);
+      g.addColorStop(1,   'rgba(0,0,0,0)');
+      ctx.scale(1, ry / rx);
+      ctx.beginPath(); ctx.arc(0, 0, rx, 0, Math.PI * 2);
+      ctx.fillStyle = g; ctx.fill();
+      ctx.restore();
+    }
+
+  } else if (type === 'grid') {
+    ctx.fillStyle = '#0a0a0f';
+    ctx.fillRect(0, 0, SIZE, SIZE);
+    /* Grid lines */
+    ctx.lineWidth = 0.75;
+    for (let i = 0; i <= 16; i++) {
+      const v = i * (SIZE / 16);
+      ctx.strokeStyle = '#1a3a2a';
+      ctx.beginPath(); ctx.moveTo(v, 0); ctx.lineTo(v, SIZE); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, v); ctx.lineTo(SIZE, v); ctx.stroke();
+    }
+    /* Concentric circles */
+    for (let r = 1; r <= 5; r++) {
+      ctx.beginPath(); ctx.arc(SIZE/2, SIZE/2, r * 48, 0, Math.PI * 2);
+      ctx.strokeStyle = '#c0431a'; ctx.lineWidth = 1.2; ctx.stroke();
+    }
+    /* Centre cross */
+    ctx.strokeStyle = '#4af'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(SIZE/2, 0); ctx.lineTo(SIZE/2, SIZE); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, SIZE/2); ctx.lineTo(SIZE, SIZE/2); ctx.stroke();
+
+  } else { /* text */
+    ctx.fillStyle = '#050510';
+    ctx.fillRect(0, 0, SIZE, SIZE);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+
+    ctx.font = 'bold 72px sans-serif';
+    ctx.fillStyle = '#ddeeff';
+    ctx.fillText('LENSED', SIZE/2, 170);
+
+    ctx.font = '500 28px sans-serif';
+    ctx.fillStyle = '#7aaacc';
+    ctx.fillText('strong gravitational lensing', SIZE/2, 240);
+
+    ctx.font = '20px monospace';
+    ctx.fillStyle = '#3a5566';
+    ctx.fillText('β = θ − α(θ)', SIZE/2, 300);
+
+    ctx.font = '16px monospace';
+    ctx.fillStyle = '#2a3a44';
+    ctx.fillText('θ_E² = (4GM/c²) · D_ls / (D_l · D_s)', SIZE/2, 340);
+  }
+
+  srcCanvas.width = SIZE; srcCanvas.height = SIZE;
+  srcCtx.drawImage(c, 0, 0);
+  srcCanvas.style.display = 'block';
+  dropHint.style.display = 'none';
+  uploadTexture(srcCanvas);
+}
+
+/* Load galaxy demo on startup */
+loadDemo('galaxy');
+</script>
+
+</body>
+</html>

@@ -8,14 +8,14 @@ redirect_from:
   - /about.html
 ---
 
-Hi, I’m Cian (pronounced: "k"+"ian", pronouns: he/they) and I’m currently pursuing a PhD in physics at Massachusetts Institute of Technology. My work aims to understand the particle nature of dark matter using kinematics and gravitational lensing, and to bridge the gap between cosmological simulations and observations. 
+Hi, I’m Cian (pronounced: "k"+"ian", he/they) and I’m currently pursuing a PhD in physics at Massachusetts Institute of Technology. My work aims to understand the particle nature of dark matter using kinematics and gravitational lensing, and to bridge the gap between cosmological simulations and observations. 
 
 You can find me in the MIT Kavli Institute for Astrophysics and Space Research, room 37-624
 
 ### What's on this website?
 Some things I've worked on in the past few years, a <a href="/files/CV.pdf" target="_blank">CV</a> and some random code tutorials I've written. 
 
-Also check out [AstroWiki](https://publish.obsidian.md/astrowiki/) which is a comprehensive set of living notes I maintain to aid in studying to for the MIT astrophysics oral qualifying exam.
+Also check out [AstroWiki](https://publish.obsidian.md/astrowiki/) which is a comprehensive set of living notes I developed and now co-maintain to aid in studying to for the MIT astrophysics oral qualifying exam.
 
 ### Here's a high-level overview of the research areas I'm interested in: 
 <p align="center">
@@ -25,3 +25,9 @@ Also check out [AstroWiki](https://publish.obsidian.md/astrowiki/) which is a co
 and high-performance computing, though I would have had to connect that to just about everything[^1]. In black are the areas in which I'm interested, and the coloured portions represent roughly the real-world connections between those topics.
 
 [^1]: I suppose I could reasonably connect *all* nodes on the graph and not be particularly wrong about anything.
+
+
+<iframe src="/assets/lensing-demo/index.html" 
+        width="100%" height="680" 
+        frameborder="0" style="border:none;">
+</iframe>
