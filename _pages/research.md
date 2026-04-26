@@ -49,8 +49,26 @@ A collection of projects across observational astrophysics, theoretical physics,
   color: #6b7280;
   line-height: 1.55;
   margin: 0;
-  flex: 1;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
+.research-card p.expanded {
+  display: block;
+  overflow: visible;
+}
+.read-more-btn {
+  background: none;
+  border: none;
+  color: #3b82f6;
+  font-size: 0.78rem;
+  cursor: pointer;
+  padding: 0;
+  margin-top: 0.3rem;
+  display: block;
+}
+.read-more-btn:hover { text-decoration: underline; }
 .research-card-footer {
   margin-top: 0.875rem;
   display: flex;
@@ -185,3 +203,19 @@ A collection of projects across observational astrophysics, theoretical physics,
   </div> -->
 
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('.research-card p').forEach(function(p) {
+    if (p.scrollHeight <= p.clientHeight + 1) return;
+    var btn = document.createElement('button');
+    btn.className = 'read-more-btn';
+    btn.textContent = 'Read more';
+    btn.addEventListener('click', function() {
+      var expanded = p.classList.toggle('expanded');
+      btn.textContent = expanded ? 'Show less' : 'Read more';
+    });
+    p.after(btn);
+  });
+});
+</script>
