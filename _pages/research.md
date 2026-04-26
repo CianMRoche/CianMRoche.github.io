@@ -81,10 +81,22 @@ A collection of projects across observational astrophysics, theoretical physics,
   <div class="research-card">
     <img src="/images/BCG_offsets.png" alt="BCG offsets in galaxy clusters">
     <div class="research-card-body">
+      <h3>Light Cone Strong Gravitational Lensing in Cosmological Simulations</h3>
+      <p>Generating strong gravitational lensing images directly from cosmological simulation data is incredibly difficult due to the mismatched geometry of the lensing problem (a long, thin cone) and simulaiton boxes (cubes). We establish a methodology for generating images of strong lenses from full light cones in cosmological simualtions, for which the lens, sources and all intervening matter are drawn consistently from the parent simulation. Supervised by Prof. Michael McDonald and Prof. Mark Vogelsberger.</p>
+      <div class="research-card-footer">
+        <span class="badge badge-prep">In preparation</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="research-card">
+    <img src="/images/BCG_offsets.png" alt="BCG offsets in galaxy clusters">
+    <div class="research-card-body">
       <h3>Dark Matter Self-Interaction via Galaxy Wobbling</h3>
       <p>The brightest cluster galaxy (BCG) can wobble over time in the potential well of its host cluster, which is dominated by dark matter. Distributions of BCG–potential-minimum offsets, obtained via strong lensing, constrain the self-interaction cross section of dark matter. Supervised by Prof. Michael McDonald and Prof. Mark Vogelsberger.</p>
       <div class="research-card-footer">
-        <span class="badge badge-prep">In preparation</span>
+        <span class="badge badge-pub">Published</span>
+        <a class="research-link" href="https://arxiv.org/abs/2402.00928" target="_blank">arXiv →</a>
       </div>
     </div>
   </div>
@@ -93,9 +105,10 @@ A collection of projects across observational astrophysics, theoretical physics,
     <img src="/images/vesc3.png" alt="Escape velocity profiles of the Milky Way">
     <div class="research-card-body">
       <h3>Measuring the Milky Way Mass Profile via Stellar Kinematics</h3>
-      <p>By modelling the tail of the stellar speed distribution of halo stars in Gaia DR3, we obtain an escape velocity profile of the Milky Way from 4–11 kpc. This constrains dark matter halo parameters (NFW, generalized NFW, Burkert), finding a light but consistent Milky Way mass. Supervised by Prof. Lina Necib.</p>
+      <p>By modelling the tail of the stellar speed distribution of halo stars in Gaia DR3, we obtain an escape velocity profile of the Milky Way from 4–11 kpc. This constrains dark matter halo parameters (NFW, generalized NFW, Burkert), finding a light but consistent Milky Way mass. Supervised by Prof. Lina Necib. and Prof. Tongyan Lin.</p>
       <div class="research-card-footer">
-        <span class="badge badge-prep">In preparation</span>
+        <span class="badge badge-pub">Published</span>
+        <a class="research-link" href="https://arxiv.org/abs/2402.00108" target="_blank">arXiv →</a>
       </div>
     </div>
   </div>
@@ -104,7 +117,7 @@ A collection of projects across observational astrophysics, theoretical physics,
     <img src="/images/penrose.png" alt="Penrose diagram for pp-wave spacetimes">
     <div class="research-card-body">
       <h3>Exact Wavelike Solutions in General Relativity</h3>
-      <p>Master's thesis investigating the mathematical structure of pp-wave spacetimes, covering Penrose limits, the causal ladder, and the Ehlers-Kundt conjecture. Supervised by Prof. Carla Cederbaum.</p>
+      <p>Master's thesis investigating the mathematical structure of pp-wave spacetimes, covering Penrose limits, the causal ladder, and the Ehlers-Kundt conjecture. Supervised by Prof. Carla Cederbaum. and Prof. Amir Babak Aazami.</p>
       <div class="research-card-footer">
         <span class="badge badge-pub">Published</span>
         <a class="research-link" href="https://arxiv.org/abs/2207.03591" target="_blank">arXiv →</a>
@@ -112,7 +125,7 @@ A collection of projects across observational astrophysics, theoretical physics,
     </div>
   </div>
 
-  <div class="research-card">
+  <!-- <div class="research-card">
     <img src="/images/lattice.gif" alt="Triangular optical lattice simulation">
     <div class="research-card-body">
       <h3>Exotic State Preparation in a Triangular Optical Lattice</h3>
@@ -158,6 +171,6 @@ A collection of projects across observational astrophysics, theoretical physics,
         <a class="research-link" href="/files/92a.pdf" target="_blank">PDF →</a>
       </div>
     </div>
-  </div>
+  </div> -->
 
 </div>

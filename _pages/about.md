@@ -8,7 +8,7 @@ redirect_from:
   - /about.html
 ---
 
-I'm Cian (pronounced "k-ian", he/they), a physics PhD student at MIT. I work on understanding the particle nature of dark matter — using stellar kinematics, gravitational lensing, and the tension between cosmological simulations and observations to figure out what it actually is.
+I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work on understanding the particle nature of dark matter using gravitational lensing and stellar kinematics, and bridging the gap between cosmological simulations and real observations.
 
 You can find me in the MIT Kavli Institute for Astrophysics and Space Research, room 37-624.
 
@@ -36,8 +36,8 @@ You can find me in the MIT Kavli Institute for Astrophysics and Space Research, 
   height: 3px;
 }
 .nav-card-research::before { background: #0072B2; }
-.nav-card-cv::before { background: #E69F00; }
-.nav-card-astrowiki::before { background: #009E73; }
+.nav-card-cv::before { background: #d652c5; }
+.nav-card-astrowiki::before { background: #E69F00; }
 .nav-card:hover {
   box-shadow: 0 4px 14px rgba(0,0,0,0.1);
   transform: translateY(-2px);
@@ -70,7 +70,7 @@ You can find me in the MIT Kavli Institute for Astrophysics and Space Research, 
   </a>
 </div>
 
-Take a look at the research I'm involved in, my academic CV, or AstroWiki, which is a set of living notes I started and now co-maintain with Alex Yelland to help students study for astrophysics qualifying exams at MIT. Also below is a little gravitational lensing demo :)
+Take a look at the research I'm involved in, my academic CV, or AstroWiki, which is a set of living notes I started and now co-maintain with Alex Yelland to help students study for astrophysics qualifying exams at MIT. <br><br>
 
 <div class="demo-wrap">
   <iframe src="/assets/lensing_demo/index.html" 
