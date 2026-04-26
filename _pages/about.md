@@ -35,9 +35,9 @@ You can find me in the MIT Kavli Institute for Astrophysics and Space Research, 
   top: 0; left: 0; right: 0;
   height: 3px;
 }
-.nav-card-research::before { background: #3b82f6; }
-.nav-card-astrowiki::before { background: #8b5cf6; }
-.nav-card-cv::before { background: #10b981; }
+.nav-card-research::before { background: #0072B2; }
+.nav-card-cv::before { background: #E69F00; }
+.nav-card-astrowiki::before { background: #009E73; }
 .nav-card:hover {
   box-shadow: 0 4px 14px rgba(0,0,0,0.1);
   transform: translateY(-2px);
@@ -60,17 +60,17 @@ You can find me in the MIT Kavli Institute for Astrophysics and Space Research, 
     <div class="nav-card-title">Research</div>
     <div class="nav-card-sub">Dark matter, lensing, kinematics</div>
   </a>
-  <a href="https://publish.obsidian.md/astrowiki/" target="_blank" class="nav-card nav-card-astrowiki">
-    <div class="nav-card-title">AstroWiki</div>
-    <div class="nav-card-sub">MIT astrophysics qual notes</div>
-  </a>
   <a href="/files/CV.pdf" target="_blank" class="nav-card nav-card-cv">
     <div class="nav-card-title">CV</div>
     <div class="nav-card-sub">Full academic CV (PDF)</div>
   </a>
+  <a href="https://publish.obsidian.md/astrowiki/" target="_blank" class="nav-card nav-card-astrowiki">
+    <div class="nav-card-title">AstroWiki</div>
+    <div class="nav-card-sub">Online Astro Notes</div>
+  </a>
 </div>
 
-Below is a live gravitational lensing simulator — paste in any image and watch it get warped by a simulated lens:
+Take a look at the research I'm involved in, my academic CV, or AstroWiki, which is a set of living notes I started and now co-maintain with Alex Yelland to help students study for astrophysics qualifying exams at MIT. Also below is a little gravitational lensing demo :)
 
 <div class="demo-wrap">
   <iframe src="/assets/lensing_demo/index.html" 
