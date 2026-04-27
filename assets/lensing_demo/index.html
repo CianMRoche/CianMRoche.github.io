@@ -129,6 +129,14 @@
     display: block;
   }
 
+  #lens-overlay {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+
   #no-image-msg {
     position: absolute;
     inset: 0;
@@ -218,6 +226,37 @@
 
   select:focus { border-color: #3b82f6; }
 
+  .scenarios {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 0.75rem;
+  }
+
+  .scenarios-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #374151;
+  }
+
+  .scenarios button {
+    background: #fff;
+    border: 1.5px solid #3b82f6;
+    color: #3b82f6;
+    border-radius: 6px;
+    padding: 5px 13px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .scenarios button:hover {
+    background: #3b82f6;
+    color: #fff;
+  }
+
   .demos {
     display: flex;
     gap: 8px;
@@ -267,10 +306,7 @@
 
 <div class="container">
   <h1>Fun Gravitational Lensing Demo</h1>
-  <p class="subtitle">Here you can see how an image gets distorted by a single (very simple) gravitational lens. <br><br>
-    <strong>Step 1 — Pick an image:</strong> paste from clipboard (Ctrl+V / Cmd+V), or drag a file onto the left box, or click it to browse local files, or pick one of the demos below.<br>
-    <strong>Step 2 — Adjust lens:</strong> use the sliders to move it, change its mass, or switch mass profile.
-  </p>
+  <p class="subtitle">The crosshair marks the lens position. Click a scenario to jump to an interesting configuration, then drag the sliders to explore — or load your own image.</p>
 
   <div class="canvases">
     <div class="canvas-wrap">
@@ -295,6 +331,7 @@
     <div class="canvas-wrap">
       <div class="lens-wrap">
         <canvas id="lens-canvas"></canvas>
+        <canvas id="lens-overlay"></canvas>
         <div id="no-image-msg">lensed output</div>
       </div>
       <p class="canvas-label">image plane</p>
@@ -354,8 +391,16 @@
 
   </div>
 
+  <div class="scenarios">
+    <span class="scenarios-label">Try:</span>
+    <button onclick="applyScenario(0)">Einstein ring</button>
+    <button onclick="applyScenario(1)">Strong arcs</button>
+    <button onclick="applyScenario(2)">Elliptical lens</button>
+    <button onclick="applyScenario(3)">NFW cluster</button>
+  </div>
+
   <div class="demos">
-    <span class="demos-label">Or load a built-in demo:</span>
+    <span class="demos-label">Change source image:</span>
     <button onclick="loadDemo('galaxy')">galaxy field</button>
     <button onclick="loadDemo('grid')">coordinate grid</button>
     <button onclick="loadDemo('text')">text</button>
@@ -368,7 +413,7 @@
     the lens equation <code>&beta; = &theta; &minus; &alpha;(&theta;)</code> to find the source-plane position <code>&beta;</code>,
     then samples the source image there (inverse ray tracing).<br><br>
     Singular Isothermal Sphere (SIS) deflection: <code>&alpha; = &theta;_E &middot; (&theta;&minus;&theta;_L)/|&theta;&minus;&theta;_L|</code>.
-    Navarro-Frenck-White profile (NFW) adds a softening core radius. Elliptical Power Law (EPL) applies an elliptical coordinate transformation.
+    NFW adds a softening core radius. EPL applies an elliptical coordinate transform.
   </div>
 </div>
 
@@ -381,8 +426,12 @@ const srcCtx = srcCanvas.getContext('2d');
 const dropHint = document.getElementById('drop-hint');
 const noImageMsg = document.getElementById('no-image-msg');
 
+const overlayCanvas = document.getElementById('lens-overlay');
+const overlayCtx = overlayCanvas.getContext('2d');
+
 glCanvas.width = SIZE; glCanvas.height = SIZE;
 srcCanvas.width = SIZE; srcCanvas.height = SIZE;
+overlayCanvas.width = SIZE; overlayCanvas.height = SIZE;
 
 /* ── WebGL setup ───────────────────────────────────────────────── */
 
@@ -397,8 +446,6 @@ void main() {
   gl_Position = vec4(a_pos, 0.0, 1.0);
 }`;
 
-/* Lens deflection angle α(θ).
-   profile: 0 = SIS/point-mass, 1 = softened NFW, 2 = elliptical power-law */
 const FS = `
 precision highp float;
 varying vec2 v_uv;
@@ -424,7 +471,6 @@ vec2 nfw_deflect(vec2 d, float re) {
   return alpha * d / r;
 }
 
-/* atanh not available in GLSL ES 1.0 — inline via log identity */
 float atanh_safe(float x) {
   x = clamp(x, -0.9999, 0.9999);
   return 0.5 * log((1.0 + x) / (1.0 - x));
@@ -519,6 +565,34 @@ function uploadTexture(imgEl) {
   render();
 }
 
+/* ── Crosshair overlay ─────────────────────────────────────────── */
+
+function drawCrosshair() {
+  const lxSlider = parseFloat(document.getElementById('lens-x').value);
+  const lySlider = parseFloat(document.getElementById('lens-y').value);
+  const cx = (lxSlider * 0.5 + 0.5) * SIZE;
+  const cy = (lySlider * 0.5 + 0.5) * SIZE;
+
+  overlayCtx.clearRect(0, 0, SIZE, SIZE);
+
+  const R = 13, T = 9;
+  function drawShapes(lineWidth, style) {
+    overlayCtx.lineWidth = lineWidth;
+    overlayCtx.strokeStyle = style;
+    overlayCtx.beginPath();
+    overlayCtx.arc(cx, cy, R, 0, Math.PI * 2);
+    overlayCtx.stroke();
+    [[1,0],[-1,0],[0,1],[0,-1]].forEach(([dx, dy]) => {
+      overlayCtx.beginPath();
+      overlayCtx.moveTo(cx + dx * (R + 3), cy + dy * (R + 3));
+      overlayCtx.lineTo(cx + dx * (R + T), cy + dy * (R + T));
+      overlayCtx.stroke();
+    });
+  }
+  drawShapes(3, 'rgba(0,0,0,0.55)');
+  drawShapes(1.5, 'rgba(255,255,255,0.95)');
+}
+
 function render() {
   if (!hasImage || !gl) return;
   const re    = parseFloat(document.getElementById('einstein-r').value);
@@ -538,6 +612,7 @@ function render() {
   gl.uniform1f(uAngle, ang);
   gl.viewport(0, 0, SIZE, SIZE);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  drawCrosshair();
 }
 
 /* ── Image loading ─────────────────────────────────────────────── */
@@ -600,6 +675,29 @@ sliderDefs.forEach(({ id, fmt }) => {
 
 document.getElementById('profile').addEventListener('change', render);
 
+/* ── Scenarios ─────────────────────────────────────────────────── */
+
+const SCENARIOS = [
+  { profile: 'sis', re: 0.35, lx:  0.00, ly:  0.00, ellip: 0.30, angle:  45, image: 'grid' },
+  { profile: 'sis', re: 0.23, lx:  0.20, ly:  0.06, ellip: 0.30, angle:  45, image: 'grid' },
+  { profile: 'epl', re: 0.30, lx:  0.03, ly:  0.03, ellip: 0.55, angle:  45, image: 'grid' },
+  { profile: 'nfw', re: 0.45, lx:  0.05, ly:  0.05, ellip: 0.30, angle:  45, image: 'galaxy' },
+];
+
+function applyScenario(idx) {
+  const cfg = SCENARIOS[idx];
+  document.getElementById('profile').value = cfg.profile;
+  const vals = { 'einstein-r': cfg.re, 'lens-x': cfg.lx, 'lens-y': cfg.ly,
+                 'ellip': cfg.ellip, 'angle': cfg.angle };
+  sliderDefs.forEach(({ id, fmt }) => {
+    const el = document.getElementById(id);
+    const out = document.getElementById(id + '-out');
+    el.value = vals[id];
+    out.textContent = fmt(vals[id]);
+  });
+  loadDemo(cfg.image);
+}
+
 /* ── Demo scenes ───────────────────────────────────────────────── */
 
 function loadDemo(type) {
@@ -611,9 +709,7 @@ function loadDemo(type) {
   if (type === 'galaxy') {
     ctx.fillStyle = '#00000f';
     ctx.fillRect(0, 0, SIZE, SIZE);
-    /* Deterministic pseudo-random via sin hash */
     const rng = n => { const x = Math.sin(n + 1) * 43758.5453; return x - Math.floor(x); };
-    /* Stars */
     for (let i = 0; i < 700; i++) {
       const x = rng(i * 3.1) * SIZE;
       const y = rng(i * 7.4) * SIZE;
@@ -624,7 +720,6 @@ function loadDemo(type) {
       ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
       ctx.fillStyle = col; ctx.fill();
     }
-    /* Blob galaxies */
     ctx.globalAlpha = 1;
     for (let i = 0; i < 10; i++) {
       const x = rng(i * 11.3) * SIZE;
@@ -650,27 +745,23 @@ function loadDemo(type) {
     ctx.fillRect(0, 0, SIZE, SIZE);
     const N = 12;
     const step = SIZE / N;
-    /* Minor grid lines */
     ctx.strokeStyle = '#dde1e9'; ctx.lineWidth = 0.8;
     for (let i = 0; i <= N; i++) {
       const v = i * step;
       ctx.beginPath(); ctx.moveTo(v, 0); ctx.lineTo(v, SIZE); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0, v); ctx.lineTo(SIZE, v); ctx.stroke();
     }
-    /* Major grid lines every 3 */
     ctx.strokeStyle = '#adb5c2'; ctx.lineWidth = 1.2;
     for (let i = 0; i <= N; i += 3) {
       const v = i * step;
       ctx.beginPath(); ctx.moveTo(v, 0); ctx.lineTo(v, SIZE); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0, v); ctx.lineTo(SIZE, v); ctx.stroke();
     }
-    /* Concentric rings centred on image (where the lens starts) */
     ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 1.5;
     for (let r = 1; r <= 5; r++) {
       ctx.beginPath(); ctx.arc(SIZE/2, SIZE/2, r * step * 1.4, 0, Math.PI * 2);
       ctx.stroke();
     }
-    /* Centre dot */
     ctx.fillStyle = '#ef4444';
     ctx.beginPath(); ctx.arc(SIZE/2, SIZE/2, 4, 0, Math.PI * 2);
     ctx.fill();
@@ -679,19 +770,15 @@ function loadDemo(type) {
     ctx.fillStyle = '#050510';
     ctx.fillRect(0, 0, SIZE, SIZE);
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-
     ctx.font = 'bold 72px sans-serif';
     ctx.fillStyle = '#ddeeff';
     ctx.fillText('LENSED', SIZE/2, 170);
-
     ctx.font = '500 28px sans-serif';
     ctx.fillStyle = '#7aaacc';
     ctx.fillText('strong gravitational lensing', SIZE/2, 240);
-
     ctx.font = '20px monospace';
     ctx.fillStyle = '#3a5566';
     ctx.fillText('β = θ − α(θ)', SIZE/2, 300);
-
     ctx.font = '16px monospace';
     ctx.fillStyle = '#2a3a44';
     ctx.fillText('θ_E² = (4GM/c²) · D_ls / (D_l · D_s)', SIZE/2, 340);
@@ -711,8 +798,8 @@ function loadImageDemo(src) {
   img.src = src;
 }
 
-/* Load galaxy demo on startup */
-loadDemo('galaxy');
+/* Start with Einstein ring so the page is immediately interesting */
+applyScenario(0);
 </script>
 
 </body>

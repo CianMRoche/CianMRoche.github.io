@@ -1,4 +1,4 @@
----
+﻿---
 permalink: /
 title: ""
 excerpt: "Personal webpage for Cian Roche"
@@ -71,6 +71,8 @@ I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work o
 </div>
 
 Take a look at the research I'm involved in, my academic CV, or AstroWiki, which is a set of living notes I started and now co-maintain with Alex Yelland to help students study for astrophysics qualifying exams at MIT. <br><br> -->
+
+A large part of my research involves gravitational lensing, where massive objects bend light from things behind them, distorting their apparent shapes into arcs and rings. By modelling those distortions we can measure invisible dark matter. Try out the simulator below to build some intuition:
 
 <div class="demo-wrap">
   <iframe src="/assets/lensing_demo/index.html" 
