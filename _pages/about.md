@@ -1,4 +1,4 @@
----
+﻿---
 permalink: /
 title: ""
 excerpt: "Personal webpage for Cian Roche"
@@ -12,6 +12,7 @@ I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work o
 
 <!-- You can find me in the MIT Kavli Institute for Astrophysics and Space Research, room 37-624. -->
 
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&display=swap" rel="stylesheet">
 <style>
 .nav-cards { display: flex; gap: 0.75rem; flex-wrap: wrap; margin: 1.5rem 0; }
 .nav-card {
@@ -46,12 +47,42 @@ I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work o
 }
 .nav-card-title { font-weight: 600; margin-bottom: 3px; }
 .nav-card-sub { font-size: 0.8rem; color: #6b7280; }
+.slip-banner {
+  width: 100%;
+  height: 220px;
+  overflow: hidden;
+  border-radius: 10px;
+  margin: 1.5rem 0;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+}
+.slip-banner img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center bottom;
+  display: block;
+}
 .demo-wrap {
   border: 1.5px solid #e5e7eb;
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 2px 10px rgba(0,0,0,0.07);
   margin-top: 0.5rem;
+}
+.simulator-teaser {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 2.25rem 0 1.25rem;
+  gap: 0.4rem;
+}
+.teaser-text {
+  font-family: 'Caveat', cursive;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #6b7280;
+  text-align: center;
+  line-height: 1.2;
 }
 </style>
 
@@ -70,7 +101,19 @@ I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work o
   </a>
 </div>
 
-A large part of my research involves gravitational lensing, where massive objects bend light from things behind them, distorting their apparent shapes into arcs and rings. By modelling those distortions we can measure invisible dark matter.
+<!-- <div class="slip-banner">
+  <img src="/images/slip.jpg" alt="Strong gravitational lensing observation">
+</div> -->
+<!-- 
+A large part of my research involves gravitational lensing, where massive objects bend light from things behind them, distorting their apparent shapes into arcs and rings. By modelling those distortions we can measure invisible dark matter. -->
+
+<div class="simulator-teaser">
+  <span class="teaser-text">Get some gravitational lensing intuition</span>
+  <svg width="50" height="68" viewBox="0 0 50 68" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M 25 3 C 39 18, 13 38, 27 58" stroke="#9ca3af" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M 15 51 L 27 63 L 38 51" stroke="#9ca3af" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+</div>
 
 <div class="demo-wrap">
   <iframe src="/assets/lensing_demo/index.html" 
