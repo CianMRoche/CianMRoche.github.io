@@ -8,6 +8,8 @@ redirect_from:
   - /about.html
 ---
 
+I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work on understanding the particle nature of dark matter using gravitational lensing and stellar kinematics, and bridging the gap between cosmological simulations and real observations.
+
 <!-- You can find me in the MIT Kavli Institute for Astrophysics and Space Research, room 37-624. -->
 
 <style>
@@ -51,49 +53,6 @@ redirect_from:
   box-shadow: 0 2px 10px rgba(0,0,0,0.07);
   margin-top: 0.5rem;
 }
-.hero {
-  position: relative;
-  width: 100%;
-  height: 400px;
-  border-radius: 12px;
-  overflow: hidden;
-  margin: 0 0 1.5rem;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-}
-.hero-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center;
-  display: block;
-}
-.hero-overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(to top, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.25) 55%, rgba(0,0,0,0.05) 100%);
-  display: flex;
-  align-items: flex-end;
-  padding: 1.75rem 2rem;
-}
-.hero-bio {
-  color: #fff;
-  font-size: 0.975rem;
-  line-height: 1.65;
-  margin: 0;
-  max-width: 560px;
-  text-shadow: 0 1px 3px rgba(0,0,0,0.4);
-}
-.hero-credit {
-  position: absolute;
-  bottom: 8px;
-  right: 10px;
-  font-size: 0.65rem;
-  color: rgba(255,255,255,0.70);
-  background: rgba(0,0,0,0.35);
-  padding: 2px 7px;
-  border-radius: 4px;
-  letter-spacing: 0.01em;
-}
 </style>
 
 <!-- <div class="nav-cards">
@@ -112,14 +71,6 @@ redirect_from:
 </div>
 
 Take a look at the research I'm involved in, my academic CV, or AstroWiki, which is a set of living notes I started and now co-maintain with Alex Yelland to help students study for astrophysics qualifying exams at MIT. <br><br> -->
-
-<div class="hero">
-  <img class="hero-img" src="/images/jwst_lensing.jpg" alt="Galaxy cluster imaged by the James Webb Space Telescope, showing strong gravitational lensing arcs">
-  <div class="hero-overlay">
-    <p class="hero-bio">I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work on understanding the particle nature of dark matter using gravitational lensing and stellar kinematics, and bridging the gap between cosmological simulations and real observations.</p>
-  </div>
-  <span class="hero-credit">Credit: NASA, ESA, CSA, STScI</span>
-</div>
 
 A large part of my research involves gravitational lensing, where massive objects bend light from things behind them, distorting their apparent shapes into arcs and rings. By modelling those distortions we can measure invisible dark matter. Try out the simulator below to build some intuition:
 
