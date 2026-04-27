@@ -395,7 +395,7 @@
     <span class="scenarios-label">Try:</span>
     <button onclick="applyScenario(0)">Einstein ring</button>
     <button onclick="applyScenario(1)">Giant arc</button>
-    <button onclick="applyScenario(3)">NFW cluster</button>
+    <button onclick="applyScenario(2)">NFW cluster</button>
   </div>
 
   <div class="demos">
@@ -765,16 +765,13 @@ function loadDemo(type) {
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = 'bold 72px sans-serif';
     ctx.fillStyle = '#ddeeff';
-    ctx.fillText('LENSED', SIZE/2, 170);
+    ctx.fillText('LENSED', SIZE/2, 190);
     ctx.font = '500 28px sans-serif';
     ctx.fillStyle = '#7aaacc';
-    ctx.fillText('strong gravitational lensing', SIZE/2, 240);
+    ctx.fillText('strong gravitational lensing', SIZE/2, 270);
     ctx.font = '20px monospace';
     ctx.fillStyle = '#3a5566';
-    ctx.fillText('β = θ − α(θ)', SIZE/2, 300);
-    ctx.font = '16px monospace';
-    ctx.fillStyle = '#2a3a44';
-    ctx.fillText('θ_E² = (4GM/c²) · D_ls / (D_l · D_s)', SIZE/2, 340);
+    ctx.fillText('β = θ − α(θ)', SIZE/2, 330);
   }
 
   srcCanvas.width = SIZE; srcCanvas.height = SIZE;
