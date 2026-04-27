@@ -310,7 +310,7 @@
 
 <div class="container">
   <!-- <h1>Fun Gravitational Lensing Demo</h1> -->
-  <p class="subtitle">Click a preset configuration or load your own image by pasting (Ctrl+V or Cmd+V), clicking the left panel to upload an image, or dragging an image onto the left panel.</p>
+  <!-- <p class="subtitle"></p> -->
 
   <div class="scenarios">
     <span class="scenarios-label">Preset configurations:</span>
@@ -607,8 +607,8 @@ sliderDefs.forEach(({ id, fmt }) => {
 /* ── Scenarios ─────────────────────────────────────────────────── */
 
 const SCENARIOS = [
-  { re: 0.40, lx: 0.09, ly: 0.09, image: 'grid' },
-  { re: 0.40, lx: 0.45, ly: 0.06, image: 'grid' },
+  { re: 0.40, lx: 0.09, ly: 0.09, image: 'galaxy' },
+  { re: 0.40, lx: 0.45, ly: 0.06, image: 'galaxy' },
 ];
 
 function applyScenario(idx) {
@@ -715,7 +715,7 @@ function loadImageDemo(src) {
   img.src = src;
 }
 
-applyScenario(0);
+applyScenario(1);
 </script>
 
 </body>

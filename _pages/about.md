@@ -216,6 +216,8 @@ A large part of my research involves gravitational lensing, where massive object
 When a <span style="color:#BA7517">massive object</span> sits between us and a distant <span style="color:#378ADD">source</span>, its gravity bends the light into arcs and rings. Because the bending depends only on the mass of the lens and geometry, it is one of the cleanest ways to map dark matter.
 </p>
 
+<p>Below is a simulator to help gain some intuition about gravitational lensing. Click a preset configuration or load your own image by pasting (Ctrl+V or Cmd+V), clicking the left panel to upload an image, or dragging an image onto the left panel.</p>
+
 <div class="demo-wrap">
   <iframe id="lensing-iframe" src="/assets/lensing_demo/index.html" 
           width="100%" height="800" 
