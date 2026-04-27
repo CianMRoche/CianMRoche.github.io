@@ -1,4 +1,4 @@
-﻿---
+---
 permalink: /
 title: ""
 excerpt: "Personal webpage for Cian Roche"
@@ -7,8 +7,6 @@ redirect_from:
   - /about/
   - /about.html
 ---
-
-I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work on understanding the particle nature of dark matter using gravitational lensing and stellar kinematics, and bridging the gap between cosmological simulations and real observations.
 
 <!-- You can find me in the MIT Kavli Institute for Astrophysics and Space Research, room 37-624. -->
 
@@ -53,45 +51,48 @@ I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work o
   box-shadow: 0 2px 10px rgba(0,0,0,0.07);
   margin-top: 0.5rem;
 }
-.lens-split {
-  display: flex;
-  gap: 1.5rem;
-  align-items: center;
-  margin: 1.5rem 0 1rem;
-}
-.lens-split-text {
-  flex: 1;
-  line-height: 1.6;
-  color: #374151;
-}
-.lens-split-img {
+.hero {
   position: relative;
-  flex: 0 0 52%;
+  width: 100%;
+  height: 400px;
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.10);
+  margin: 0 0 1.5rem;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
 }
-.lens-split-img img {
+.hero-img {
   width: 100%;
-  height: 280px;
+  height: 100%;
   object-fit: cover;
   object-position: center;
   display: block;
 }
-.lens-banner-credit {
+.hero-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.25) 55%, rgba(0,0,0,0.05) 100%);
+  display: flex;
+  align-items: flex-end;
+  padding: 1.75rem 2rem;
+}
+.hero-bio {
+  color: #fff;
+  font-size: 0.975rem;
+  line-height: 1.65;
+  margin: 0;
+  max-width: 560px;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+.hero-credit {
   position: absolute;
   bottom: 8px;
   right: 10px;
   font-size: 0.65rem;
-  color: rgba(255,255,255,0.80);
-  background: rgba(0,0,0,0.40);
+  color: rgba(255,255,255,0.70);
+  background: rgba(0,0,0,0.35);
   padding: 2px 7px;
   border-radius: 4px;
   letter-spacing: 0.01em;
-}
-@media (max-width: 600px) {
-  .lens-split { flex-direction: column; }
-  .lens-split-img { flex: none; width: 100%; }
 }
 </style>
 
@@ -112,15 +113,15 @@ I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work o
 
 Take a look at the research I'm involved in, my academic CV, or AstroWiki, which is a set of living notes I started and now co-maintain with Alex Yelland to help students study for astrophysics qualifying exams at MIT. <br><br> -->
 
-<div class="lens-split">
-  <div class="lens-split-text">
-    A large part of my research involves gravitational lensing, where massive objects bend light from things behind them, distorting their apparent shapes into arcs and rings. By modelling those distortions we can measure invisible dark matter. Try out the simulator below to build some intuition:
+<div class="hero">
+  <img class="hero-img" src="/images/jwst_lensing.jpg" alt="Galaxy cluster imaged by the James Webb Space Telescope, showing strong gravitational lensing arcs">
+  <div class="hero-overlay">
+    <p class="hero-bio">I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work on understanding the particle nature of dark matter using gravitational lensing and stellar kinematics, and bridging the gap between cosmological simulations and real observations.</p>
   </div>
-  <div class="lens-split-img">
-    <img src="https://cdn.esahubble.org/archives/images/screen/heic0814a.jpg" alt="Gravitational lensing arcs in galaxy cluster Abell 2218, imaged by the Hubble Space Telescope">
-    <span class="lens-banner-credit">Credit: NASA, ESA, J.-P. Kneib et al.</span>
-  </div>
+  <span class="hero-credit">Credit: NASA, ESA, CSA, STScI</span>
 </div>
+
+A large part of my research involves gravitational lensing, where massive objects bend light from things behind them, distorting their apparent shapes into arcs and rings. By modelling those distortions we can measure invisible dark matter. Try out the simulator below to build some intuition:
 
 <div class="demo-wrap">
   <iframe src="/assets/lensing_demo/index.html" 

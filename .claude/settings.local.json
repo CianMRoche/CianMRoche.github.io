@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:www.nasa.gov)",
+      "WebFetch(domain:esahubble.org)",
+      "WebFetch(domain:arxiv.org)"
+    ]
+  }
+}
