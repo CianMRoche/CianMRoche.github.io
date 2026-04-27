@@ -15,7 +15,7 @@ redirect_from:
   </div>
   <div>
   <h2>AstroWiki</h2>
-    <p><a href="https://publish.obsidian.md/astrowiki/">Astrowiki</a> is a set of living notes I maintain on much of astrophysics, intended to supplement study for the MIT astrophysics division oral qualification exam, currently referred to as "the 168". Pictured is a graphical representation of most of the wiki, with the strongly connected nodes representing things like "compact objects" and "cosmology", though finer granularity is available too.</p>
+    <p><a href="https://publish.obsidian.md/astrowiki/">Astrowiki</a> is a set of living notes I created and now co-maintain with Alex Yelland (MIT) on much of astrophysics, intended to supplement study for the MIT astrophysics division oral qualification exam, currently referred to as "the 168". Pictured is a graphical representation of most of the original wiki. The current website hosts astrowiki version 2 which was almost entirely written by Alex, based upon the original wiki and various sets of notes provided by our peers.</p>
   </div>
 </div>
 
