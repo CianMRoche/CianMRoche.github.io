@@ -1,4 +1,4 @@
----
+﻿---
 permalink: /
 title: ""
 excerpt: "Personal webpage for Cian Roche"
@@ -56,7 +56,7 @@ I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work o
 </style>
 
 <div class="nav-cards">
-  <a href="https://ui.adsabs.harvard.edu/search/q=author%3A%22Roche%2C+Cian%22&sort=date%20desc" target="_blank" class="nav-card nav-card-research">
+  <a href="https://ui.adsabs.harvard.edu/search/q=author%3A%22Roche%2C+Cian%22+year%3A2020-2050&sort=date%20desc" target="_blank" class="nav-card nav-card-research">
     <div class="nav-card-title">Papers</div>
     <div class="nav-card-sub">ADS library</div>
   </a>
@@ -70,7 +70,9 @@ I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work o
   </a>
 </div>
 
-A large part of my research involves gravitational lensing, where massive objects bend light from things behind them, distorting their apparent shapes into arcs and rings. By modelling those distortions we can measure invisible dark matter. Try out the simulator below to build some intuition:
+A large part of my research involves gravitational lensing, where massive objects bend light from things behind them, distorting their apparent shapes into arcs and rings. By modelling those distortions we can measure invisible dark matter. 
+
+<h3 style="text-align:center; margin-bottom:0.5rem;">Gravitational Lensing Simulator</h3>
 
 <div class="demo-wrap">
   <iframe src="/assets/lensing_demo/index.html" 
