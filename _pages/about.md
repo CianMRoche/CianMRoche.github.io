@@ -36,9 +36,9 @@ I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work o
   top: 0; left: 0; right: 0;
   height: 3px;
 }
-.nav-card-research::before { background: #2563eb; }
-.nav-card-cv::before { background: #059669; }
-.nav-card-astrowiki::before { background: #374151; }
+.nav-card-research::before { background: #4aaee9; }
+.nav-card-cv::before { background: #dd72cf; }
+.nav-card-astrowiki::before { background: #e0af44; }
 .nav-card:hover {
   box-shadow: 0 4px 14px rgba(0,0,0,0.1);
   transform: translateY(-2px);
@@ -213,7 +213,7 @@ A large part of my research involves gravitational lensing, where massive object
 </svg>
 
 <p style="font-size:0.875rem; color:#6b7280; line-height:1.65; margin: 0.25rem 0 1.25rem;">
-When a <span style="color:#BA7517">massive object</span> sits between us and a distant <span style="color:#378ADD">source</span>, its gravity bends the light into arcs and rings. Because the bending depends only on the mass of the lens and geometry, it is one of the cleanest ways to map <span style="color:#C084FC">dark matter</span>.
+When a <span style="color:#BA7517">massive object</span> sits between us and a distant <span style="color:#378ADD">source</span>, its gravity bends the light into arcs and rings. Because the bending depends only on the mass of the lens and geometry, it is one of the cleanest ways to map <strong>dark matter</strong>.
 </p>
 
 <p style="font-size:0.875rem; color:#6b7280; line-height:1.65; margin: 1rem 0 1.25rem;">
