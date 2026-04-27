@@ -306,7 +306,7 @@
 
 <div class="container">
   <!-- <h1>Fun Gravitational Lensing Demo</h1> -->
-  <p class="subtitle">The crosshair marks the lens position. Click a preset configuration to jump to an interesting configuration, then drag the sliders to explore — or load your own image by pasting (Ctrl+V or Cmd+V), clicking the left panel to upload an image, or dragging an image onto the left panel.</p>
+  <p class="subtitle">Click a preset configuration or load your own image by pasting (Ctrl+V or Cmd+V), clicking the left panel to upload an image, or dragging an image onto the left panel.</p>
 
   <div class="canvases">
     <div class="canvas-wrap">
@@ -341,15 +341,6 @@
   <div class="controls">
 
     <div class="ctrl-group">
-      <label>Lens profile</label>
-      <select id="profile">
-        <option value="sis">Point mass / SIS</option>
-        <option value="nfw">NFW-like (softened)</option>
-        <option value="epl">Elliptical power-law</option>
-      </select>
-    </div>
-
-    <div class="ctrl-group">
       <label>Lens strength</label>
       <div class="slider-row">
         <input type="range" id="einstein-r" min="0.05" max="0.55" step="0.01" value="0.20">
@@ -373,29 +364,12 @@
       </div>
     </div>
 
-    <div class="ctrl-group">
-      <label>Ellipticity <em>e</em> (EPL only)</label>
-      <div class="slider-row">
-        <input type="range" id="ellip" min="0.0" max="0.7" step="0.05" value="0.30">
-        <span class="slider-val" id="ellip-out">0.30</span>
-      </div>
-    </div>
-
-    <div class="ctrl-group">
-      <label>Position angle (deg, EPL only)</label>
-      <div class="slider-row">
-        <input type="range" id="angle" min="0" max="180" step="5" value="45">
-        <span class="slider-val" id="angle-out">45&deg;</span>
-      </div>
-    </div>
-
   </div>
 
   <div class="scenarios">
     <span class="scenarios-label">Preset configurations:</span>
     <button onclick="applyScenario(0)">Einstein ring</button>
     <button onclick="applyScenario(1)">Giant arc</button>
-    <button onclick="applyScenario(2)">NFW cluster</button>
   </div>
 
   <div class="demos">
@@ -453,62 +427,14 @@ uniform sampler2D u_src;
 uniform float u_re;
 uniform float u_lx;
 uniform float u_ly;
-uniform int   u_profile;
-uniform float u_ellip;
-uniform float u_angle;
-
-vec2 sis_deflect(vec2 d, float re) {
-  float r = length(d);
-  if (r < 1e-4) return vec2(0.0);
-  return re * d / r;
-}
-
-vec2 nfw_deflect(vec2 d, float re) {
-  float rs = re * 0.18;
-  float r  = length(d);
-  if (r < 1e-4) return vec2(0.0);
-  float alpha = re * re / (r + rs);
-  return alpha * d / r;
-}
-
-float atanh_safe(float x) {
-  x = clamp(x, -0.9999, 0.9999);
-  return 0.5 * log((1.0 + x) / (1.0 - x));
-}
-
-vec2 epl_deflect(vec2 d, float re, float e, float pa) {
-  float ca = cos(pa);
-  float sa = sin(pa);
-  vec2 dr = vec2(ca * d.x + sa * d.y, -sa * d.x + ca * d.y);
-  float q   = 1.0 - e;
-  float eps = 1e-6 * re * re;
-  float psi = sqrt(q * q * dr.x * dr.x + dr.y * dr.y + eps);
-  float sq  = sqrt(max(1.0 - q * q, 0.0001));
-  vec2 al = re * vec2(
-    (q / sq) * atan(sq * dr.x / psi),
-    (q / sq) * atanh_safe(sq * dr.y / psi)
-  );
-  return vec2(ca * al.x - sa * al.y, sa * al.x + ca * al.y);
-}
 
 void main() {
-  vec2 theta = (v_uv - 0.5) * 2.0;
-  vec2 lp    = vec2(u_lx, u_ly);
-  vec2 d     = theta - lp;
-  float pa   = u_angle;
-
-  vec2 alpha;
-  if (u_profile == 0) {
-    alpha = sis_deflect(d, u_re);
-  } else if (u_profile == 1) {
-    alpha = nfw_deflect(d, u_re);
-  } else {
-    alpha = epl_deflect(d, u_re, u_ellip, pa);
-  }
-
-  vec2 beta   = theta - alpha;
-  vec2 src_uv = beta * 0.5 + 0.5;
-
+  vec2 theta  = (v_uv - 0.5) * 2.0;
+  vec2 d      = theta - vec2(u_lx, u_ly);
+  float r     = length(d);
+  float rs    = u_re * 0.18;
+  vec2 alpha  = r < 1e-4 ? vec2(0.0) : (u_re * u_re / (r + rs)) * d / r;
+  vec2 src_uv = (theta - alpha) * 0.5 + 0.5;
   if (src_uv.x < 0.0 || src_uv.x > 1.0 || src_uv.y < 0.0 || src_uv.y > 1.0) {
     gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
   } else {
@@ -538,13 +464,10 @@ const aPos = gl.getAttribLocation(prog, 'a_pos');
 gl.enableVertexAttribArray(aPos);
 gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
 
-const uSrc     = gl.getUniformLocation(prog, 'u_src');
-const uRe      = gl.getUniformLocation(prog, 'u_re');
-const uLx      = gl.getUniformLocation(prog, 'u_lx');
-const uLy      = gl.getUniformLocation(prog, 'u_ly');
-const uProfile = gl.getUniformLocation(prog, 'u_profile');
-const uEllip   = gl.getUniformLocation(prog, 'u_ellip');
-const uAngle   = gl.getUniformLocation(prog, 'u_angle');
+const uSrc = gl.getUniformLocation(prog, 'u_src');
+const uRe  = gl.getUniformLocation(prog, 'u_re');
+const uLx  = gl.getUniformLocation(prog, 'u_lx');
+const uLy  = gl.getUniformLocation(prog, 'u_ly');
 
 let sourceTexture = null;
 let hasImage = false;
@@ -575,41 +498,50 @@ function drawCrosshair() {
 
   overlayCtx.clearRect(0, 0, SIZE, SIZE);
 
-  const R = 13, T = 9;
-  function drawShapes(lineWidth, style) {
-    overlayCtx.lineWidth = lineWidth;
-    overlayCtx.strokeStyle = style;
-    overlayCtx.beginPath();
-    overlayCtx.arc(cx, cy, R, 0, Math.PI * 2);
-    overlayCtx.stroke();
+  function drawTarget(x, y, R, T, outerW, innerW) {
+    overlayCtx.lineWidth = outerW;
+    overlayCtx.strokeStyle = 'rgba(0,0,0,0.55)';
+    overlayCtx.beginPath(); overlayCtx.arc(x, y, R, 0, Math.PI * 2); overlayCtx.stroke();
     [[1,0],[-1,0],[0,1],[0,-1]].forEach(([dx, dy]) => {
       overlayCtx.beginPath();
-      overlayCtx.moveTo(cx + dx * (R + 3), cy + dy * (R + 3));
-      overlayCtx.lineTo(cx + dx * (R + T), cy + dy * (R + T));
+      overlayCtx.moveTo(x + dx * (R + 3), y + dy * (R + 3));
+      overlayCtx.lineTo(x + dx * (R + T), y + dy * (R + T));
+      overlayCtx.stroke();
+    });
+    overlayCtx.lineWidth = innerW;
+    overlayCtx.strokeStyle = 'rgba(255,255,255,0.95)';
+    overlayCtx.beginPath(); overlayCtx.arc(x, y, R, 0, Math.PI * 2); overlayCtx.stroke();
+    [[1,0],[-1,0],[0,1],[0,-1]].forEach(([dx, dy]) => {
+      overlayCtx.beginPath();
+      overlayCtx.moveTo(x + dx * (R + 3), y + dy * (R + 3));
+      overlayCtx.lineTo(x + dx * (R + T), y + dy * (R + T));
       overlayCtx.stroke();
     });
   }
-  drawShapes(3, 'rgba(0,0,0,0.55)');
-  drawShapes(1.5, 'rgba(255,255,255,0.95)');
+
+  /* moving crosshair at lens position */
+  drawTarget(cx, cy, 13, 9, 3, 1.5);
+
+  /* legend: fixed top-left */
+  const lx = 28, ly = 28, lR = 10, lT = 7;
+  drawTarget(lx, ly, lR, lT, 2.5, 1.2);
+  overlayCtx.font = '19px system-ui, sans-serif';
+  overlayCtx.textBaseline = 'middle';
+  overlayCtx.fillStyle = 'rgba(0,0,0,0.5)';
+  overlayCtx.fillText('lens position', lx + lR + lT + 7, ly + 1);
+  overlayCtx.fillStyle = 'rgba(255,255,255,0.9)';
+  overlayCtx.fillText('lens position', lx + lR + lT + 6, ly);
 }
 
 function render() {
   if (!hasImage || !gl) return;
-  const re    = parseFloat(document.getElementById('einstein-r').value);
-  const lx    = parseFloat(document.getElementById('lens-x').value);
-  const ly    = -parseFloat(document.getElementById('lens-y').value);
-  const prof  = document.getElementById('profile').value;
-  const pInt  = prof === 'sis' ? 0 : prof === 'nfw' ? 1 : 2;
-  const ellip = parseFloat(document.getElementById('ellip').value);
-  const angDeg= parseFloat(document.getElementById('angle').value);
-  const ang   = angDeg * Math.PI / 180.0;
+  const re = parseFloat(document.getElementById('einstein-r').value);
+  const lx = parseFloat(document.getElementById('lens-x').value);
+  const ly = -parseFloat(document.getElementById('lens-y').value);
 
   gl.uniform1f(uRe, re);
   gl.uniform1f(uLx, lx);
   gl.uniform1f(uLy, ly);
-  gl.uniform1i(uProfile, pInt);
-  gl.uniform1f(uEllip, ellip);
-  gl.uniform1f(uAngle, ang);
   gl.viewport(0, 0, SIZE, SIZE);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   drawCrosshair();
@@ -663,8 +595,6 @@ const sliderDefs = [
   { id: 'einstein-r', fmt: v => v.toFixed(2) },
   { id: 'lens-x',     fmt: v => v.toFixed(2) },
   { id: 'lens-y',     fmt: v => v.toFixed(2) },
-  { id: 'ellip',      fmt: v => v.toFixed(2) },
-  { id: 'angle',      fmt: v => v.toFixed(0) + '°' },
 ];
 
 sliderDefs.forEach(({ id, fmt }) => {
@@ -673,21 +603,16 @@ sliderDefs.forEach(({ id, fmt }) => {
   el.addEventListener('input', () => { out.textContent = fmt(parseFloat(el.value)); render(); });
 });
 
-document.getElementById('profile').addEventListener('change', render);
-
 /* ── Scenarios ─────────────────────────────────────────────────── */
 
 const SCENARIOS = [
-  { profile: 'sis', re: 0.35, lx:  0.00, ly:  0.00, ellip: 0.30, angle:  45, image: 'grid' },
-  { profile: 'epl', re: 0.53, lx:  0.04, ly:  0.00, ellip: 0.25, angle: 135, image: 'grid' },
-  { profile: 'nfw', re: 0.45, lx:  0.05, ly:  0.05, ellip: 0.30, angle:  45, image: 'galaxy' },
+  { re: 0.45, lx: 0.00, ly: 0.00, image: 'grid' },
+  { re: 0.45, lx: 0.08, ly: 0.00, image: 'grid' },
 ];
 
 function applyScenario(idx) {
   const cfg = SCENARIOS[idx];
-  document.getElementById('profile').value = cfg.profile;
-  const vals = { 'einstein-r': cfg.re, 'lens-x': cfg.lx, 'lens-y': cfg.ly,
-                 'ellip': cfg.ellip, 'angle': cfg.angle };
+  const vals = { 'einstein-r': cfg.re, 'lens-x': cfg.lx, 'lens-y': cfg.ly };
   sliderDefs.forEach(({ id, fmt }) => {
     const el = document.getElementById(id);
     const out = document.getElementById(id + '-out');
@@ -789,8 +714,7 @@ function loadImageDemo(src) {
   img.src = src;
 }
 
-/* Start with NFW cluster */
-applyScenario(2);
+applyScenario(0);
 </script>
 
 </body>

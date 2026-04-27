@@ -63,10 +63,8 @@ I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work o
   display: block;
 }
 .demo-wrap {
-  border: 1.5px solid #e5e7eb;
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.07);
   margin-top: 0.5rem;
 }
 .simulator-teaser {
@@ -215,7 +213,7 @@ A large part of my research involves gravitational lensing, where massive object
 </svg>
 
 <p style="font-size:0.875rem; color:#6b7280; line-height:1.65; margin: 1rem 0 1.25rem;">
-Gravitational lensing occurs when a <span style="color:#BA7517">massive object</span> — a galaxy or cluster of galaxies — sits between us and a more distant <span style="color:#378ADD">source</span>. Its gravity bends the <span style="color:#378ADD">light</span> from the source into <span style="color:#378ADD">arcs, rings, or multiple images</span>. Because the bending depends only on the <span style="color:#BA7517">total mass</span> (not whether it glows), lensing is one of the cleanest ways to map <span style="color:#BA7517">dark matter</span>: by modelling the <span style="color:#378ADD">distorted images</span> we can reconstruct the invisible <span style="color:#BA7517">mass distribution</span> that produced them.
+When a <span style="color:#BA7517">massive object</span> sits between us and a distant <span style="color:#378ADD">source</span>, its gravity bends the light into arcs and rings. Because the bending depends only on the mass of the lens and geometry, it is one of the cleanest ways to map dark matter.
 </p>
 
 <div class="demo-wrap">
