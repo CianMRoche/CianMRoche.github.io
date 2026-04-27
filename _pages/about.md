@@ -53,18 +53,27 @@ I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work o
   box-shadow: 0 2px 10px rgba(0,0,0,0.07);
   margin-top: 0.5rem;
 }
-.lens-banner {
+.lens-split {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+  margin: 1.5rem 0 1rem;
+}
+.lens-split-text {
+  flex: 1;
+  line-height: 1.6;
+  color: #374151;
+}
+.lens-split-img {
   position: relative;
-  width: 100%;
-  height: 340px;
-  margin: 1.5rem 0;
+  flex: 0 0 52%;
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 2px 10px rgba(0,0,0,0.10);
 }
-.lens-banner img {
+.lens-split-img img {
   width: 100%;
-  height: 100%;
+  height: 280px;
   object-fit: cover;
   object-position: center;
   display: block;
@@ -79,6 +88,10 @@ I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work o
   padding: 2px 7px;
   border-radius: 4px;
   letter-spacing: 0.01em;
+}
+@media (max-width: 600px) {
+  .lens-split { flex-direction: column; }
+  .lens-split-img { flex: none; width: 100%; }
 }
 </style>
 
@@ -99,12 +112,15 @@ I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work o
 
 Take a look at the research I'm involved in, my academic CV, or AstroWiki, which is a set of living notes I started and now co-maintain with Alex Yelland to help students study for astrophysics qualifying exams at MIT. <br><br> -->
 
-<div class="lens-banner">
-  <img src="https://cdn.esahubble.org/archives/images/screen/heic0814a.jpg" alt="Gravitational lensing arcs in galaxy cluster Abell 2218, imaged by the Hubble Space Telescope">
-  <span class="lens-banner-credit">Credit: NASA, ESA, J.-P. Kneib et al.</span>
+<div class="lens-split">
+  <div class="lens-split-text">
+    A large part of my research involves gravitational lensing, where massive objects bend light from things behind them, distorting their apparent shapes into arcs and rings. By modelling those distortions we can measure invisible dark matter. Try out the simulator below to build some intuition:
+  </div>
+  <div class="lens-split-img">
+    <img src="https://cdn.esahubble.org/archives/images/screen/heic0814a.jpg" alt="Gravitational lensing arcs in galaxy cluster Abell 2218, imaged by the Hubble Space Telescope">
+    <span class="lens-banner-credit">Credit: NASA, ESA, J.-P. Kneib et al.</span>
+  </div>
 </div>
-
-A large part of my research involves gravitational lensing, where massive objects bend light from things behind them, distorting their apparent shapes into arcs and rings. By modelling those distortions we can measure invisible dark matter. Try out the simulator below to build some intuition:
 
 <div class="demo-wrap">
   <iframe src="/assets/lensing_demo/index.html" 
