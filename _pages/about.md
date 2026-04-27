@@ -115,11 +115,14 @@ A large part of my research involves gravitational lensing, where massive object
   </svg>
 </div> -->
 
-<svg width="100%" viewBox="0 0 680 240" role="img" xmlns="http://www.w3.org/2000/svg">
+<svg width="100%" viewBox="0 0 680 250" role="img" xmlns="http://www.w3.org/2000/svg">
   <title>Gravitational lensing divider illustration</title>
-  <desc>Gravitational lensing with three light rays, single deflection, apparent source images marked.</desc>
+  <desc>Gravitational lensing with source and image plane shaded bands.</desc>
 
   <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M2 2 L8 5 L2 8" fill="none" stroke="#85B7EB" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
     <radialGradient id="glow" cx="50%" cy="50%" r="50%">
       <stop offset="0%" stop-color="#EF9F27" stop-opacity="0.35"/>
       <stop offset="100%" stop-color="#EF9F27" stop-opacity="0"/>
@@ -129,6 +132,21 @@ A large part of my research involves gravitational lensing, where massive object
       <stop offset="100%" stop-color="#378ADD" stop-opacity="0"/>
     </radialGradient>
   </defs>
+
+  <!-- Plane bands -->
+  <rect x="68" y="88" width="24" height="130" rx="3" fill="#378ADD" opacity="0.07"/>
+  <line x1="80" y1="88" x2="80" y2="218" stroke="#378ADD" stroke-width="0.8" opacity="0.25" stroke-dasharray="4 3"/>
+  <rect x="608" y="88" width="24" height="130" rx="3" fill="#888" opacity="0.07"/>
+  <line x1="620" y1="88" x2="620" y2="218" stroke="#888" stroke-width="0.8" opacity="0.25" stroke-dasharray="4 3"/>
+
+  <!-- Plane labels -->
+  <text text-anchor="middle" x="80" y="82" fill="#378ADD" font-family="system-ui, sans-serif" font-size="10" letter-spacing="0.06em" opacity="0.7">SOURCE PLANE</text>
+  <text text-anchor="middle" x="620" y="82" fill="#888" font-family="system-ui, sans-serif" font-size="10" letter-spacing="0.06em" opacity="0.7">IMAGE PLANE</text>
+
+  <!-- apparent images label -->
+  <text x="10" y="148" text-anchor="middle"
+    fill="#85B7EB" font-family="system-ui, sans-serif" font-size="10" opacity="0.85"
+    transform="rotate(-90 10 148)">apparent images</text>
 
   <!-- Handwritten-style label -->
   <text x="340" y="26" text-anchor="middle"
@@ -144,42 +162,41 @@ A large part of my research involves gravitational lensing, where massive object
     fill="none" stroke="#888" stroke-width="1.6"
     stroke-linecap="round" opacity="0.7"/>
 
-  <!-- Stars -->
-  <circle cx="52" cy="100" r="1" fill="#aaa" opacity="0.5"/>
-  <circle cx="120" cy="82" r="1.2" fill="#aaa" opacity="0.4"/>
-  <circle cx="88" cy="130" r="0.8" fill="#aaa" opacity="0.6"/>
-  <circle cx="36" cy="165" r="1.2" fill="#aaa" opacity="0.5"/>
-  <circle cx="72" cy="205" r="0.8" fill="#aaa" opacity="0.4"/>
-  <circle cx="620" cy="85" r="1" fill="#aaa" opacity="0.5"/>
-  <circle cx="648" cy="175" r="1" fill="#aaa" opacity="0.4"/>
-  <circle cx="460" cy="80" r="0.8" fill="#aaa" opacity="0.5"/>
-  <circle cx="500" cy="195" r="1" fill="#aaa" opacity="0.3"/>
-
   <!-- Apparent source dotted lines -->
-  <line x1="590" y1="148" x2="148" y2="109"
+  <line x1="620" y1="148" x2="105" y2="106"
     fill="none" stroke="#85B7EB" stroke-width="1" stroke-dasharray="4 3" opacity="0.5"/>
-  <line x1="590" y1="148" x2="148" y2="187"
+  <line x1="620" y1="148" x2="105" y2="190"
     fill="none" stroke="#85B7EB" stroke-width="1" stroke-dasharray="4 3" opacity="0.5"/>
 
   <!-- Apparent image markers -->
-  <ellipse cx="148" cy="109" rx="9" ry="5.5" fill="#378ADD" opacity="0.3" transform="rotate(-20 148 109)"/>
-  <ellipse cx="148" cy="109" rx="5" ry="3" fill="#85B7EB" opacity="0.6" transform="rotate(-20 148 109)"/>
-  <circle cx="148" cy="109" r="1.5" fill="white" opacity="0.85"/>
+  <ellipse cx="80" cy="102" rx="9" ry="5.5" fill="#378ADD" opacity="0.3" transform="rotate(-20 80 102)"/>
+  <ellipse cx="80" cy="102" rx="5" ry="3" fill="#85B7EB" opacity="0.6" transform="rotate(-20 80 102)"/>
+  <circle cx="80" cy="102" r="1.5" fill="white" opacity="0.85"/>
 
-  <ellipse cx="148" cy="187" rx="9" ry="5.5" fill="#378ADD" opacity="0.3" transform="rotate(-20 148 187)"/>
-  <ellipse cx="148" cy="187" rx="5" ry="3" fill="#85B7EB" opacity="0.6" transform="rotate(-20 148 187)"/>
-  <circle cx="148" cy="187" r="1.5" fill="white" opacity="0.85"/>
+  <ellipse cx="80" cy="194" rx="9" ry="5.5" fill="#378ADD" opacity="0.3" transform="rotate(-20 80 194)"/>
+  <ellipse cx="80" cy="194" rx="5" ry="3" fill="#85B7EB" opacity="0.6" transform="rotate(-20 80 194)"/>
+  <circle cx="80" cy="194" r="1.5" fill="white" opacity="0.85"/>
+
+  <!-- Top S-curve arrow -->
+  <path d="M 28,122 C 22,112 50,108 63,103"
+    fill="none" stroke="#85B7EB" stroke-width="1" opacity="0.65"
+    stroke-linecap="round" marker-end="url(#arr)"/>
+
+  <!-- Bottom inverted-S arrow -->
+  <path d="M 28,174 C 22,184 50,188 63,193"
+    fill="none" stroke="#85B7EB" stroke-width="1" opacity="0.65"
+    stroke-linecap="round" marker-end="url(#arr)"/>
 
   <!-- Solid light rays -->
-  <polyline points="163,136 340,126 590,148" fill="none" stroke="#85B7EB" stroke-width="1.2" opacity="0.7"/>
-  <polyline points="163,148 340,148 590,148" fill="none" stroke="#85B7EB" stroke-width="1.2" opacity="0.5"/>
-  <polyline points="163,160 340,170 590,148" fill="none" stroke="#85B7EB" stroke-width="1.2" opacity="0.7"/>
+  <polyline points="96,136 340,124 620,148" fill="none" stroke="#85B7EB" stroke-width="1.2" opacity="0.7"/>
+  <polyline points="96,148 340,148 620,148" fill="none" stroke="#85B7EB" stroke-width="1.2" opacity="0.5"/>
+  <polyline points="96,160 340,172 620,148" fill="none" stroke="#85B7EB" stroke-width="1.2" opacity="0.7"/>
 
   <!-- Source galaxy -->
-  <ellipse cx="148" cy="148" rx="34" ry="34" fill="url(#glowblue)"/>
-  <ellipse cx="148" cy="148" rx="12" ry="7" fill="#378ADD" opacity="0.6" transform="rotate(-20 148 148)"/>
-  <ellipse cx="148" cy="148" rx="6" ry="4" fill="#B5D4F4" opacity="0.85" transform="rotate(-20 148 148)"/>
-  <circle cx="148" cy="148" r="2" fill="white" opacity="0.9"/>
+  <ellipse cx="80" cy="148" rx="34" ry="34" fill="url(#glowblue)"/>
+  <ellipse cx="80" cy="148" rx="12" ry="7" fill="#378ADD" opacity="0.6" transform="rotate(-20 80 148)"/>
+  <ellipse cx="80" cy="148" rx="6" ry="4" fill="#B5D4F4" opacity="0.85" transform="rotate(-20 80 148)"/>
+  <circle cx="80" cy="148" r="2" fill="white" opacity="0.9"/>
 
   <!-- Lens mass -->
   <ellipse cx="340" cy="148" rx="50" ry="50" fill="url(#glow)"/>
@@ -191,25 +208,19 @@ A large part of my research involves gravitational lensing, where massive object
   <line x1="324" y1="148" x2="330" y2="148" stroke="#999" stroke-width="0.6" opacity="0.5"/>
   <line x1="350" y1="148" x2="356" y2="148" stroke="#999" stroke-width="0.6" opacity="0.5"/>
 
-  <!-- Einstein ring -->
-  <!-- <ellipse cx="340" cy="148" rx="42" ry="42" fill="none" stroke="#85B7EB" stroke-width="2.2" opacity="0.65"/>
-  <ellipse cx="340" cy="148" rx="42" ry="30" fill="none" stroke="#85B7EB" stroke-width="0.8" opacity="0.2"/> -->
-
   <!-- Observer eye -->
-  <g transform="translate(590, 148)">
+  <g transform="translate(620, 148)">
     <path d="M-14 0 Q0 -10 14 0 Q0 10 -14 0Z"
       fill="none" stroke="#888" stroke-width="1.3" opacity="0.8"/>
     <circle cx="0" cy="0" r="5" fill="none" stroke="#888" stroke-width="1.1" opacity="0.7"/>
     <circle cx="0" cy="0" r="2.2" fill="#888" opacity="0.7"/>
   </g>
 
-  <!-- Labels -->
-  <text text-anchor="middle" x="148" y="98" fill="#85B7EB" font-family="system-ui, sans-serif" font-size="11" opacity="0.9">apparent image</text>
-  <text text-anchor="middle" x="148" y="163" fill="#888" font-family="system-ui, sans-serif" font-size="11">source galaxy</text>
-  <text text-anchor="middle" x="148" y="202" fill="#85B7EB" font-family="system-ui, sans-serif" font-size="11" opacity="0.9">apparent image</text>
-  <text text-anchor="middle" x="340" y="207" fill="#888" font-family="system-ui, sans-serif" font-size="12">lens mass</text>
-  <text text-anchor="middle" x="340" y="220" fill="#aaa" font-family="system-ui, sans-serif" font-size="11">(dark matter halo)</text>
-  <text text-anchor="middle" x="590" y="170" fill="#888" font-family="system-ui, sans-serif" font-size="12">observer</text>
+  <!-- Object labels -->
+  <text text-anchor="middle" x="80" y="163" fill="#888" font-family="system-ui, sans-serif" font-size="11">source galaxy</text>
+  <text text-anchor="middle" x="340" y="210" fill="#888" font-family="system-ui, sans-serif" font-size="11">lens mass</text>
+  <text text-anchor="middle" x="340" y="222" fill="#aaa" font-family="system-ui, sans-serif" font-size="10">(dark matter halo)</text>
+  <text text-anchor="middle" x="620" y="172" fill="#888" font-family="system-ui, sans-serif" font-size="11">observer</text>
 </svg>
 
 <div class="demo-wrap">
