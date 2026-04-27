@@ -55,10 +55,10 @@ I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work o
 }
 </style>
 
-<!-- <div class="nav-cards">
-  <a href="/research/" class="nav-card nav-card-research">
-    <div class="nav-card-title">Research</div>
-    <div class="nav-card-sub">Dark matter, lensing, kinematics</div>
+<div class="nav-cards">
+  <a href="https://ui.adsabs.harvard.edu/search/q=author%3A%22Roche%2C+Cian%22&sort=date%20desc" target="_blank" class="nav-card nav-card-research">
+    <div class="nav-card-title">Papers</div>
+    <div class="nav-card-sub">ADS library</div>
   </a>
   <a href="/files/CV.pdf" target="_blank" class="nav-card nav-card-cv">
     <div class="nav-card-title">CV</div>
@@ -66,11 +66,9 @@ I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work o
   </a>
   <a href="https://publish.obsidian.md/astrowiki/" target="_blank" class="nav-card nav-card-astrowiki">
     <div class="nav-card-title">AstroWiki</div>
-    <div class="nav-card-sub">Online Astro Notes</div>
+    <div class="nav-card-sub">Online astro notes</div>
   </a>
 </div>
-
-Take a look at the research I'm involved in, my academic CV, or AstroWiki, which is a set of living notes I started and now co-maintain with Alex Yelland to help students study for astrophysics qualifying exams at MIT. <br><br> -->
 
 A large part of my research involves gravitational lensing, where massive objects bend light from things behind them, distorting their apparent shapes into arcs and rings. By modelling those distortions we can measure invisible dark matter. Try out the simulator below to build some intuition:
 
