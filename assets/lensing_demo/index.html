@@ -392,7 +392,7 @@
   </div>
 
   <div class="scenarios">
-    <span class="scenarios-label">Try:</span>
+    <span class="scenarios-label">Preset configurations:</span>
     <button onclick="applyScenario(0)">Einstein ring</button>
     <button onclick="applyScenario(1)">Giant arc</button>
     <button onclick="applyScenario(2)">NFW cluster</button>
@@ -410,9 +410,10 @@
     <strong style="color:#6b7280;">How is the lensed image computed?</strong>
     For each output pixel at angular position <code>&theta;</code>, this solves
     the lens equation <code>&beta; = &theta; &minus; &alpha;(&theta;)</code> to find the source-plane position <code>&beta;</code>,
-    then samples the source image there (inverse ray tracing).<br><br>
+    then samples the source image there (inverse ray tracing).
+    <!-- <br><br>
     Singular Isothermal Sphere (SIS) deflection: <code>&alpha; = &theta;_E &middot; (&theta;&minus;&theta;_L)/|&theta;&minus;&theta;_L|</code>.
-    NFW adds a softening core radius. EPL applies an elliptical coordinate transform.
+    NFW adds a softening core radius. EPL applies an elliptical coordinate transform. -->
   </div>
 </div>
 
