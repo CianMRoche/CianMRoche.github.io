@@ -385,7 +385,7 @@
     <strong style="color:#6b7280;">How is the lensed image computed?</strong>
     For each output pixel at angular position <code>&theta;</code>, this solves
     the lens equation <code>&beta; = &theta; &minus; &alpha;(&theta;)</code> to find the source-plane position <code>&beta;</code>,
-    then samples the source image there (inverse ray tracing).
+    then samples the source image there (inverse ray tracing). The deflection <code>&alpha;</code> is computed from a Navarro-Frenck-white lens mass profile.
     <!-- <br><br>
     Singular Isothermal Sphere (SIS) deflection: <code>&alpha; = &theta;_E &middot; (&theta;&minus;&theta;_L)/|&theta;&minus;&theta;_L|</code>.
     NFW adds a softening core radius. EPL applies an elliptical coordinate transform. -->
