@@ -11,7 +11,7 @@
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     background: #ffffff;
     color: #374151;
-    padding: 1rem 0.75rem;
+    padding: 0.75rem 0;
   }
 
   h1 {
@@ -148,19 +148,66 @@
     pointer-events: none;
   }
 
-  .controls {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.875rem 1.5rem;
+  .controls-row {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 0.875rem;
+  }
+
+  .lens-params {
+    flex: 1;
     background: #f9fafb;
     border: 1px solid #e5e7eb;
     border-radius: 10px;
     padding: 1.125rem;
-    margin-bottom: 0.875rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.875rem;
+  }
+
+  .source-col {
+    width: 155px;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .source-col-label {
+    font-size: 0.72rem;
+    color: #9ca3af;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-bottom: 0.625rem;
+  }
+
+  .source-col button {
+    background: #ffffff;
+    border: 1px solid #d1d5db;
+    color: #6b7280;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 0.78rem;
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+    margin-bottom: 0.4rem;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+  }
+
+  .source-col button:last-child { margin-bottom: 0; }
+
+  .source-col button:hover {
+    border-color: #3b82f6;
+    color: #3b82f6;
+    background: #eff6ff;
   }
 
   @media (max-width: 480px) {
-    .controls { grid-template-columns: 1fr; }
+    .controls-row { flex-direction: column; }
+    .source-col { width: 100%; }
   }
 
   .ctrl-group label {
@@ -212,20 +259,6 @@
     font-variant-numeric: tabular-nums;
   }
 
-  select {
-    width: 100%;
-    background: #ffffff;
-    color: #374151;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    padding: 5px 8px;
-    font-size: 0.8rem;
-    outline: none;
-    cursor: pointer;
-  }
-
-  select:focus { border-color: #3b82f6; }
-
   .scenarios {
     display: flex;
     gap: 8px;
@@ -257,35 +290,6 @@
     color: #fff;
   }
 
-  .demos {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    align-items: center;
-    margin-bottom: 0.875rem;
-  }
-
-  .demos-label {
-    font-size: 0.78rem;
-    color: #9ca3af;
-  }
-
-  .demos button {
-    background: #ffffff;
-    border: 1px solid #d1d5db;
-    color: #6b7280;
-    border-radius: 6px;
-    padding: 5px 12px;
-    font-size: 0.78rem;
-    cursor: pointer;
-    transition: border-color 0.15s, color 0.15s, background 0.15s;
-  }
-
-  .demos button:hover {
-    border-color: #3b82f6;
-    color: #3b82f6;
-    background: #eff6ff;
-  }
 
   .physics-note {
     font-size: 0.75rem;
@@ -307,6 +311,12 @@
 <div class="container">
   <!-- <h1>Fun Gravitational Lensing Demo</h1> -->
   <p class="subtitle">Click a preset configuration or load your own image by pasting (Ctrl+V or Cmd+V), clicking the left panel to upload an image, or dragging an image onto the left panel.</p>
+
+  <div class="scenarios">
+    <span class="scenarios-label">Preset configurations:</span>
+    <button onclick="applyScenario(0)">Einstein ring</button>
+    <button onclick="applyScenario(1)">Giant arc</button>
+  </div>
 
   <div class="canvases">
     <div class="canvas-wrap">
@@ -338,46 +348,37 @@
     </div>
   </div>
 
-  <div class="controls">
-
-    <div class="ctrl-group">
-      <label>Lens strength</label>
-      <div class="slider-row">
-        <input type="range" id="einstein-r" min="0.05" max="0.55" step="0.01" value="0.20">
-        <span class="slider-val" id="einstein-r-out">0.20</span>
+  <div class="controls-row">
+    <div class="lens-params">
+      <div class="ctrl-group">
+        <label>Lens strength</label>
+        <div class="slider-row">
+          <input type="range" id="einstein-r" min="0.05" max="0.55" step="0.01" value="0.20">
+          <span class="slider-val" id="einstein-r-out">0.20</span>
+        </div>
+      </div>
+      <div class="ctrl-group">
+        <label>Lens position X</label>
+        <div class="slider-row">
+          <input type="range" id="lens-x" min="-0.45" max="0.45" step="0.01" value="0.00">
+          <span class="slider-val" id="lens-x-out">0.00</span>
+        </div>
+      </div>
+      <div class="ctrl-group">
+        <label>Lens position Y</label>
+        <div class="slider-row">
+          <input type="range" id="lens-y" min="-0.45" max="0.45" step="0.01" value="0.00">
+          <span class="slider-val" id="lens-y-out">0.00</span>
+        </div>
       </div>
     </div>
-
-    <div class="ctrl-group">
-      <label>Lens position X</label>
-      <div class="slider-row">
-        <input type="range" id="lens-x" min="-0.45" max="0.45" step="0.01" value="0.00">
-        <span class="slider-val" id="lens-x-out">0.00</span>
-      </div>
+    <div class="source-col">
+      <div class="source-col-label">Source image</div>
+      <button onclick="loadDemo('galaxy')">galaxy field</button>
+      <button onclick="loadDemo('grid')">coordinate grid</button>
+      <button onclick="loadDemo('text')">text</button>
+      <button onclick="loadDemo('astrowiki')">astrowiki graph</button>
     </div>
-
-    <div class="ctrl-group">
-      <label>Lens position Y</label>
-      <div class="slider-row">
-        <input type="range" id="lens-y" min="-0.45" max="0.45" step="0.01" value="0.00">
-        <span class="slider-val" id="lens-y-out">0.00</span>
-      </div>
-    </div>
-
-  </div>
-
-  <div class="scenarios">
-    <span class="scenarios-label">Preset configurations:</span>
-    <button onclick="applyScenario(0)">Einstein ring</button>
-    <button onclick="applyScenario(1)">Giant arc</button>
-  </div>
-
-  <div class="demos">
-    <span class="demos-label">Change source image:</span>
-    <button onclick="loadDemo('galaxy')">galaxy field</button>
-    <button onclick="loadDemo('grid')">coordinate grid</button>
-    <button onclick="loadDemo('text')">text</button>
-    <button onclick="loadDemo('astrowiki')">astrowiki graph</button>
   </div>
 
   <div class="physics-note">
@@ -606,8 +607,8 @@ sliderDefs.forEach(({ id, fmt }) => {
 /* ── Scenarios ─────────────────────────────────────────────────── */
 
 const SCENARIOS = [
-  { re: 0.45, lx: 0.00, ly: 0.00, image: 'grid' },
-  { re: 0.45, lx: 0.08, ly: 0.00, image: 'grid' },
+  { re: 0.40, lx: 0.09, ly: 0.09, image: 'grid' },
+  { re: 0.40, lx: 0.45, ly: 0.06, image: 'grid' },
 ];
 
 function applyScenario(idx) {
