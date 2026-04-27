@@ -95,9 +95,9 @@ I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work o
     <div class="nav-card-title">CV</div>
     <div class="nav-card-sub">Full academic CV (PDF)</div>
   </a>
-  <a href="https://publish.obsidian.md/astrowiki/" target="_blank" class="nav-card nav-card-astrowiki">
-    <div class="nav-card-title">AstroWiki</div>
-    <div class="nav-card-sub">Online astro notes</div>
+  <a href="https://github.com/CianMRoche" target="_blank" class="nav-card nav-card-astrowiki">
+    <div class="nav-card-title">GitHub</div>
+    <div class="nav-card-sub">CianMRoche</div>
   </a>
 </div>
 
@@ -214,9 +214,19 @@ A large part of my research involves gravitational lensing, where massive object
   <text text-anchor="middle" x="620" y="172" fill="#888" font-family="system-ui, sans-serif" font-size="11">observer</text>
 </svg>
 
+<p style="font-size:0.875rem; color:#6b7280; line-height:1.65; margin: 1rem 0 1.25rem;">
+Gravitational lensing occurs when a <span style="color:#BA7517">massive object</span> — a galaxy or cluster of galaxies — sits between us and a more distant <span style="color:#378ADD">source</span>. Its gravity bends the <span style="color:#378ADD">light</span> from the source into <span style="color:#378ADD">arcs, rings, or multiple images</span>. Because the bending depends only on the <span style="color:#BA7517">total mass</span> (not whether it glows), lensing is one of the cleanest ways to map <span style="color:#BA7517">dark matter</span>: by modelling the <span style="color:#378ADD">distorted images</span> we can reconstruct the invisible <span style="color:#BA7517">mass distribution</span> that produced them.
+</p>
+
 <div class="demo-wrap">
-  <iframe src="/assets/lensing_demo/index.html" 
-          width="100%" height="960" 
+  <iframe id="lensing-iframe" src="/assets/lensing_demo/index.html" 
+          width="100%" height="800" 
           frameborder="0" style="border:none; display:block;">
   </iframe>
 </div>
+<script>
+  var lf = document.getElementById('lensing-iframe');
+  lf.addEventListener('load', function() {
+    lf.style.height = lf.contentDocument.body.scrollHeight + 'px';
+  });
+</script>
