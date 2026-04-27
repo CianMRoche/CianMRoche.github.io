@@ -741,29 +741,24 @@ function loadDemo(type) {
     }
 
   } else if (type === 'grid') {
-    ctx.fillStyle = '#f8f9fa';
+    ctx.fillStyle = '#0a0a0a';
     ctx.fillRect(0, 0, SIZE, SIZE);
     const N = 12;
     const step = SIZE / N;
-    ctx.strokeStyle = '#dde1e9'; ctx.lineWidth = 0.8;
+    ctx.strokeStyle = '#2a2a2a'; ctx.lineWidth = 0.8;
     for (let i = 0; i <= N; i++) {
       const v = i * step;
       ctx.beginPath(); ctx.moveTo(v, 0); ctx.lineTo(v, SIZE); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0, v); ctx.lineTo(SIZE, v); ctx.stroke();
     }
-    ctx.strokeStyle = '#adb5c2'; ctx.lineWidth = 1.2;
+    ctx.strokeStyle = '#555'; ctx.lineWidth = 1.2;
     for (let i = 0; i <= N; i += 3) {
       const v = i * step;
       ctx.beginPath(); ctx.moveTo(v, 0); ctx.lineTo(v, SIZE); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0, v); ctx.lineTo(SIZE, v); ctx.stroke();
     }
-    ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 1.5;
-    for (let r = 1; r <= 5; r++) {
-      ctx.beginPath(); ctx.arc(SIZE/2, SIZE/2, r * step * 1.4, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-    ctx.fillStyle = '#ef4444';
-    ctx.beginPath(); ctx.arc(SIZE/2, SIZE/2, 4, 0, Math.PI * 2);
+    ctx.fillStyle = '#f59e0b';
+    ctx.beginPath(); ctx.arc(SIZE/2, SIZE/2, 5, 0, Math.PI * 2);
     ctx.fill();
 
   } else { /* text */
