@@ -10,7 +10,7 @@ redirect_from:
 
 I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work on understanding the particle nature of dark matter using gravitational lensing and stellar kinematics, and bridging the gap between cosmological simulations and real observations.
 
-You can find me in the MIT Kavli Institute for Astrophysics and Space Research, room 37-624.
+<!-- You can find me in the MIT Kavli Institute for Astrophysics and Space Research, room 37-624. -->
 
 <style>
 .nav-cards { display: flex; gap: 0.75rem; flex-wrap: wrap; margin: 1.5rem 0; }
@@ -55,7 +55,7 @@ You can find me in the MIT Kavli Institute for Astrophysics and Space Research, 
 }
 </style>
 
-<div class="nav-cards">
+<!-- <div class="nav-cards">
   <a href="/research/" class="nav-card nav-card-research">
     <div class="nav-card-title">Research</div>
     <div class="nav-card-sub">Dark matter, lensing, kinematics</div>
@@ -70,7 +70,7 @@ You can find me in the MIT Kavli Institute for Astrophysics and Space Research, 
   </a>
 </div>
 
-Take a look at the research I'm involved in, my academic CV, or AstroWiki, which is a set of living notes I started and now co-maintain with Alex Yelland to help students study for astrophysics qualifying exams at MIT. <br><br>
+Take a look at the research I'm involved in, my academic CV, or AstroWiki, which is a set of living notes I started and now co-maintain with Alex Yelland to help students study for astrophysics qualifying exams at MIT. <br><br> -->
 
 <div class="demo-wrap">
   <iframe src="/assets/lensing_demo/index.html" 
