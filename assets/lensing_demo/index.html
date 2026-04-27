@@ -305,8 +305,8 @@
 <body>
 
 <div class="container">
-  <h1>Fun Gravitational Lensing Demo</h1>
-  <p class="subtitle">The crosshair marks the lens position. Click a scenario to jump to an interesting configuration, then drag the sliders to explore — or load your own image.</p>
+  <!-- <h1>Fun Gravitational Lensing Demo</h1> -->
+  <p class="subtitle">The crosshair marks the lens position. Click a scenario to jump to an interesting configuration, then drag the sliders to explore — or load your own image by pasting (Ctrl+V or Cmd+V), clicking the left panel to upload an image, or dragging an image onto the left panel.</p>
 
   <div class="canvases">
     <div class="canvas-wrap">
@@ -394,8 +394,7 @@
   <div class="scenarios">
     <span class="scenarios-label">Try:</span>
     <button onclick="applyScenario(0)">Einstein ring</button>
-    <button onclick="applyScenario(1)">Strong arcs</button>
-    <button onclick="applyScenario(2)">Elliptical lens</button>
+    <button onclick="applyScenario(1)">Giant arc</button>
     <button onclick="applyScenario(3)">NFW cluster</button>
   </div>
 
@@ -679,8 +678,7 @@ document.getElementById('profile').addEventListener('change', render);
 
 const SCENARIOS = [
   { profile: 'sis', re: 0.35, lx:  0.00, ly:  0.00, ellip: 0.30, angle:  45, image: 'grid' },
-  { profile: 'sis', re: 0.23, lx:  0.20, ly:  0.06, ellip: 0.30, angle:  45, image: 'grid' },
-  { profile: 'epl', re: 0.30, lx:  0.03, ly:  0.03, ellip: 0.55, angle:  45, image: 'grid' },
+  { profile: 'epl', re: 0.53, lx:  0.04, ly:  0.00, ellip: 0.25, angle: 135, image: 'grid' },
   { profile: 'nfw', re: 0.45, lx:  0.05, ly:  0.05, ellip: 0.30, angle:  45, image: 'galaxy' },
 ];
 
@@ -701,7 +699,7 @@ function applyScenario(idx) {
 /* ── Demo scenes ───────────────────────────────────────────────── */
 
 function loadDemo(type) {
-  if (type === 'astrowiki') { loadImageDemo('/images/astrowiki_graph.png'); return; }
+  if (type === 'astrowiki') { loadImageDemo('/images/astrowiki_graph_inverted.png'); return; }
   const c   = document.createElement('canvas');
   c.width   = SIZE; c.height = SIZE;
   const ctx = c.getContext('2d');
