@@ -191,9 +191,9 @@ A large part of my research involves gravitational lensing, where massive object
   <line x1="324" y1="148" x2="330" y2="148" stroke="#999" stroke-width="0.6" opacity="0.5"/>
   <line x1="350" y1="148" x2="356" y2="148" stroke="#999" stroke-width="0.6" opacity="0.5"/>
 
-  Einstein ring
-  <ellipse cx="340" cy="148" rx="42" ry="42" fill="none" stroke="#85B7EB" stroke-width="2.2" opacity="0.65"/>
-  <ellipse cx="340" cy="148" rx="42" ry="30" fill="none" stroke="#85B7EB" stroke-width="0.8" opacity="0.2"/>
+  <!-- Einstein ring -->
+  <!-- <ellipse cx="340" cy="148" rx="42" ry="42" fill="none" stroke="#85B7EB" stroke-width="2.2" opacity="0.65"/>
+  <ellipse cx="340" cy="148" rx="42" ry="30" fill="none" stroke="#85B7EB" stroke-width="0.8" opacity="0.2"/> -->
 
   <!-- Observer eye -->
   <g transform="translate(590, 148)">
