@@ -9,9 +9,40 @@ redirect_from:
 
 {% include base_path %}
 
+<style>
+.sp-img-wrap {
+  float: right;
+  margin-left: 1.5rem;
+  background: #f9fafb;
+  border-radius: 8px;
+  padding: 6px;
+}
+html[data-theme="dark"] .sp-img-wrap {
+  background: #161b22;
+}
+</style>
+
+<script>
+(function() {
+  function applySpTheme(theme) {
+    document.querySelectorAll('img[data-src-dark]').forEach(function(img) {
+      img.src = theme === 'dark' ? img.dataset.srcDark : img.dataset.srcLight;
+    });
+  }
+  applySpTheme(document.documentElement.getAttribute('data-theme') || 'light');
+  new MutationObserver(function(mutations) {
+    mutations.forEach(function(m) {
+      if (m.attributeName === 'data-theme') {
+        applySpTheme(document.documentElement.getAttribute('data-theme') || 'light');
+      }
+    });
+  }).observe(document.documentElement, { attributes: true });
+})();
+</script>
+
 <div style="clear: both;">
-  <div style="float: right; margin-right 5em;">
-    <img src="/images/astrowiki.png" alt="astrowiki connected graph" width="250" height="250">
+  <div class="sp-img-wrap">
+    <img src="/images/astrowiki.png" data-src-light="/images/astrowiki.png" data-src-dark="/images/astrowiki_inverted.png" alt="astrowiki connected graph" width="250" height="250">
   </div>
   <div>
   <h2>AstroWiki</h2>
@@ -23,8 +54,8 @@ redirect_from:
 
 
 <div style="clear: both;">
-  <div style="float: right; margin-right 5em;">
-    <img src="/images/corner.png" alt="corner plot" width="250" height="250">
+  <div class="sp-img-wrap">
+    <img src="/images/corner.png" data-src-light="/images/corner.png" data-src-dark="/images/corner_inverted.png" alt="corner plot" width="250" height="250">
   </div>
   <div>
   <h2>Practical Bayesian Sampling in Python and Julia</h2>
