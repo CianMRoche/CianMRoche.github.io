@@ -1,6 +1,6 @@
 ﻿---
 permalink: /
-title: ""
+title: "About me"
 excerpt: "Personal webpage for Cian Roche"
 author_profile: true
 redirect_from: 
@@ -98,6 +98,8 @@ I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work o
     <div class="nav-card-sub">CianMRoche</div>
   </a>
 </div>
+
+## Gravitational lensing
 
 <!-- <div class="slip-banner">
   <img src="/images/slip.jpg" alt="Strong gravitational lensing observation">

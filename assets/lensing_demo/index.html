@@ -62,14 +62,12 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    cursor: pointer;
     background: #f9fafb;
     position: relative;
     overflow: hidden;
     transition: border-color 0.2s, background 0.2s;
   }
 
-  #drop-zone:hover { border-color: #3b82f6; background: #eff6ff; }
   #drop-zone.drag-over { border-color: #3b82f6; background: #eff6ff; }
 
   #source-canvas {
@@ -105,13 +103,6 @@
     font-size: 0.8rem;
     color: #9ca3af;
     line-height: 1.55;
-  }
-
-  #file-input {
-    position: absolute;
-    inset: 0;
-    opacity: 0;
-    cursor: pointer;
   }
 
   .lens-wrap {
@@ -330,10 +321,9 @@
               <polyline points="21 15 16 10 5 21"/>
             </svg>
           </div>
-          <p class="drop-hint-main">Paste, drag, or click to load any image</p>
+          <p class="drop-hint-main">Paste or drag an image here</p>
           <p class="drop-hint-sub">A photo, screenshot, anything works —<br>try Ctrl+V / Cmd+V right now</p>
         </div>
-        <input type="file" id="file-input" accept="image/*">
       </div>
       <p class="canvas-label">source plane</p>
     </div>
@@ -576,9 +566,6 @@ document.addEventListener('paste', e => {
   }
 });
 
-document.getElementById('file-input').addEventListener('change', e => {
-  handleFile(e.target.files[0]);
-});
 
 const dz = document.getElementById('drop-zone');
 dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
