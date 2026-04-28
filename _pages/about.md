@@ -85,7 +85,7 @@ I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work o
 </style>
 
 <div class="nav-cards">
-  <a href="https://ui.adsabs.harvard.edu/search/q=author%3A%22Roche%2C+Cian%22+year%3A2020-2050&sort=date%20desc" target="_blank" class="nav-card nav-card-research">
+  <a href="https://ui.adsabs.harvard.edu/search/q=docs(library%2FIfl1bToeQtOwhIzPv6OuIw)&sort=date%20desc%2C%20bibcode%20desc&p_=0" target="_blank" class="nav-card nav-card-research">
     <div class="nav-card-title">Papers</div>
     <div class="nav-card-sub">ADS library</div>
   </a>

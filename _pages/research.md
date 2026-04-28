@@ -9,7 +9,7 @@ redirect_from:
 
 {% include base_path %}
 
-A collection of projects across observational astrophysics, theoretical physics, and instrumentation. My current focus is on constraining dark matter properties using gravitational lensing and stellar kinematics.
+A collection of projects across observational astrophysics, cosmological simulations, and mathematical relativity. My current focus is on constraining dark matter properties using gravitational lensing and stellar kinematics.
 
 <style>
 .research-grid {
