@@ -47,6 +47,8 @@ I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work o
 }
 .nav-card-title { font-weight: 600; margin-bottom: 3px; }
 .nav-card-sub { font-size: 0.8rem; color: #6b7280; }
+.page__content .nav-card,
+.page__content .nav-card:hover { text-decoration: none; }
 .slip-banner {
   width: 100%;
   height: 220px;
