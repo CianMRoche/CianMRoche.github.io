@@ -216,6 +216,13 @@ html[data-theme="dark"] {
     &:hover { background: $dm-bg-2; }
   }
 
+  // Research cards
+  .research-card {
+    border-color: $dm-border;
+    background: $dm-bg-2;
+  }
+  .research-card img { background: $dm-bg-2; }
+
   // About page nav cards
   .nav-card {
     background: $dm-bg-2;

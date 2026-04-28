@@ -37,8 +37,6 @@ A collection of projects across observational astrophysics, cosmological simulat
 .research-card img.img-dark { display: none; }
 html[data-theme="dark"] .research-card img.img-light { display: none; }
 html[data-theme="dark"] .research-card img.img-dark  { display: block; }
-html[data-theme="dark"] .research-card img { background: #161b22; }
-html[data-theme="dark"] .research-card { border-color: #30363d; }
 .research-card-body {
   padding: 1rem 1.125rem 1.25rem;
   flex: 1;
