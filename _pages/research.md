@@ -34,6 +34,11 @@ A collection of projects across observational astrophysics, cosmological simulat
   background: #f9fafb;
   padding: 0.5rem;
 }
+.research-card img.img-dark { display: none; }
+html[data-theme="dark"] .research-card img.img-light { display: none; }
+html[data-theme="dark"] .research-card img.img-dark  { display: block; }
+html[data-theme="dark"] .research-card img { background: #161b22; }
+html[data-theme="dark"] .research-card { border-color: #30363d; }
 .research-card-body {
   padding: 1rem 1.125rem 1.25rem;
   flex: 1;
@@ -99,7 +104,8 @@ A collection of projects across observational astrophysics, cosmological simulat
 <div class="research-grid">
 
   <div class="research-card">
-    <img src="/images/ggsl.png" data-src-light="/images/ggsl.png" data-src-dark="/images/ggsl_inverted.png" alt="Galaxy-galaxy strong lensing cross section">
+    <img class="img-light" src="/images/ggsl.png" alt="Galaxy-galaxy strong lensing cross section">
+    <img class="img-dark" src="/images/ggsl_inverted.png" alt="Galaxy-galaxy strong lensing cross section">
     <div class="research-card-body">
       <h3>The Galaxy-Galaxy Strong Lensing Cross Section Tension</h3>
       <p>The Galaxy--Galaxy Strong Lensing (GGSL) Cross Section is a measure of how efficiently galaxies in galaxy clusters can lens background sources, and is related to the underlying feedback and dark matter physics of thsoe galaxies. For several years now a tension between the observed GGSL properties of cluster strong lens members and their counterparts in cosmological simulations has been observed. We study this tension again in the context of full light cone information in the simualtions, performing strong lens modelling on the observed and simulated images, and quantifying the effect of correlated structure close to the cluster redshift.</p>
@@ -110,7 +116,8 @@ A collection of projects across observational astrophysics, cosmological simulat
   </div>
 
   <div class="research-card">
-    <img src="/images/lightcone_mag.png" data-src-light="/images/lightcone_mag.png" data-src-dark="/images/lightcone_mag_inverted.png" alt="Light cone strong lensing magnifications">
+    <img class="img-light" src="/images/lightcone_mag.png" alt="Light cone strong lensing magnifications">
+    <img class="img-dark" src="/images/lightcone_mag_inverted.png" alt="Light cone strong lensing magnifications">
     <div class="research-card-body">
       <h3>Light Cone Strong Gravitational Lensing in Cosmological Simulations</h3>
       <p>Generating strong gravitational lensing images directly from cosmological simulation data is incredibly difficult due to the mismatched geometry of the lensing problem (a long, thin cone) and simulaiton boxes (cubes). We establish a methodology for generating images of strong lenses from full light cones in cosmological simualtions, for which the lens, sources and all intervening matter are drawn consistently from the parent simulation. Supervised by Prof. Michael McDonald and Prof. Mark Vogelsberger.</p>
@@ -121,7 +128,8 @@ A collection of projects across observational astrophysics, cosmological simulat
   </div>
 
   <div class="research-card">
-    <img src="/images/BCG_offsets.png" data-src-light="/images/BCG_offsets.png" data-src-dark="/images/BCG_offsets_inverted.png" alt="BCG offsets in galaxy clusters">
+    <img class="img-light" src="/images/BCG_offsets.png" alt="BCG offsets in galaxy clusters">
+    <img class="img-dark" src="/images/BCG_offsets_inverted.png" alt="BCG offsets in galaxy clusters">
     <div class="research-card-body">
       <h3>Dark Matter Self-Interaction via Galaxy Wobbling</h3>
       <p>The brightest cluster galaxy (BCG) can wobble over time in the potential well of its host cluster, which is dominated by dark matter. Distributions of BCG–potential-minimum offsets, obtained via strong lensing, constrain the self-interaction cross section of dark matter. Supervised by Prof. Michael McDonald and Prof. Mark Vogelsberger.</p>
@@ -133,7 +141,8 @@ A collection of projects across observational astrophysics, cosmological simulat
   </div>
 
   <div class="research-card">
-    <img src="/images/vesc3.png" data-src-light="/images/vesc3.png" data-src-dark="/images/vesc3_inverted.png" alt="Escape velocity profiles of the Milky Way">
+    <img class="img-light" src="/images/vesc3.png" alt="Escape velocity profiles of the Milky Way">
+    <img class="img-dark" src="/images/vesc3_inverted.png" alt="Escape velocity profiles of the Milky Way">
     <div class="research-card-body">
       <h3>Measuring the Milky Way Mass Profile via Stellar Kinematics</h3>
       <p>By modelling the tail of the stellar speed distribution of halo stars in Gaia DR3, we obtain an escape velocity profile of the Milky Way from 4–11 kpc. This constrains dark matter halo parameters (NFW, generalized NFW, Burkert), finding a light but consistent Milky Way mass. Supervised by Prof. Lina Necib. and Prof. Tongyan Lin.</p>
@@ -145,7 +154,8 @@ A collection of projects across observational astrophysics, cosmological simulat
   </div>
 
   <div class="research-card">
-    <img src="/images/penrose.png" data-src-light="/images/penrose.png" data-src-dark="/images/penrose_inverted.png" alt="Penrose diagram for pp-wave spacetimes">
+    <img class="img-light" src="/images/penrose.png" alt="Penrose diagram for pp-wave spacetimes">
+    <img class="img-dark" src="/images/penrose_inverted.png" alt="Penrose diagram for pp-wave spacetimes">
     <div class="research-card-body">
       <h3>Exact Wavelike Solutions in General Relativity</h3>
       <p>Master's thesis investigating the mathematical structure of pp-wave spacetimes, covering Penrose limits, the causal ladder, and the Ehlers-Kundt conjecture. Supervised by Prof. Carla Cederbaum. and Prof. Amir Babak Aazami.</p>
@@ -207,22 +217,6 @@ A collection of projects across observational astrophysics, cosmological simulat
 </div>
 
 <script>
-(function() {
-  function applyResearchTheme(theme) {
-    document.querySelectorAll('img[data-src-dark]').forEach(function(img) {
-      img.src = theme === 'dark' ? img.dataset.srcDark : img.dataset.srcLight;
-    });
-  }
-  applyResearchTheme(document.documentElement.getAttribute('data-theme') || 'light');
-  new MutationObserver(function(mutations) {
-    mutations.forEach(function(m) {
-      if (m.attributeName === 'data-theme') {
-        applyResearchTheme(document.documentElement.getAttribute('data-theme') || 'light');
-      }
-    });
-  }).observe(document.documentElement, { attributes: true });
-})();
-
 document.addEventListener('DOMContentLoaded', function() {
   document.querySelectorAll('.research-card p').forEach(function(p) {
     if (p.scrollHeight <= p.clientHeight + 1) return;

@@ -20,29 +20,15 @@ redirect_from:
 html[data-theme="dark"] .sp-img-wrap {
   background: #161b22;
 }
+.sp-img-wrap img.img-dark { display: none; }
+html[data-theme="dark"] .sp-img-wrap img.img-light { display: none; }
+html[data-theme="dark"] .sp-img-wrap img.img-dark  { display: block; }
 </style>
-
-<script>
-(function() {
-  function applySpTheme(theme) {
-    document.querySelectorAll('img[data-src-dark]').forEach(function(img) {
-      img.src = theme === 'dark' ? img.dataset.srcDark : img.dataset.srcLight;
-    });
-  }
-  applySpTheme(document.documentElement.getAttribute('data-theme') || 'light');
-  new MutationObserver(function(mutations) {
-    mutations.forEach(function(m) {
-      if (m.attributeName === 'data-theme') {
-        applySpTheme(document.documentElement.getAttribute('data-theme') || 'light');
-      }
-    });
-  }).observe(document.documentElement, { attributes: true });
-})();
-</script>
 
 <div style="clear: both;">
   <div class="sp-img-wrap">
-    <img src="/images/astrowiki.png" data-src-light="/images/astrowiki.png" data-src-dark="/images/astrowiki_inverted.png" alt="astrowiki connected graph" width="250" height="250">
+    <img class="img-light" src="/images/astrowiki.png" alt="astrowiki connected graph" width="250" height="250">
+    <img class="img-dark" src="/images/astrowiki_inverted.png" alt="astrowiki connected graph" width="250" height="250">
   </div>
   <div>
   <h2>AstroWiki</h2>
@@ -55,7 +41,8 @@ html[data-theme="dark"] .sp-img-wrap {
 
 <div style="clear: both;">
   <div class="sp-img-wrap">
-    <img src="/images/corner.png" data-src-light="/images/corner.png" data-src-dark="/images/corner_inverted.png" alt="corner plot" width="250" height="250">
+    <img class="img-light" src="/images/corner.png" alt="corner plot" width="250" height="250">
+    <img class="img-dark" src="/images/corner_inverted.png" alt="corner plot" width="250" height="250">
   </div>
   <div>
   <h2>Practical Bayesian Sampling in Python and Julia</h2>
@@ -85,7 +72,7 @@ html[data-theme="dark"] .sp-img-wrap {
   </div>
   <div>
   <h2>The Combinatorics of Physical Security </h2>
-    <p>This is a presentation I made for fun in a day or two over Winter break. Very casual in tone, but in my opinion it’s an interesting connection between the world of locking mechanisms and that of introductory combinatorics. Beamer talk <a href="/files/young.pdf">here</a> </p>
+    <p>This is a presentation I made for fun in a day or two over Winter break. Very casual in tone, but in my opinion it's an interesting connection between the world of locking mechanisms and that of introductory combinatorics. Beamer talk <a href="/files/young.pdf">here</a> </p>
   </div>
 </div>
 
