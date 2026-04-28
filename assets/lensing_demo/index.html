@@ -350,14 +350,14 @@
       <div class="ctrl-group">
         <label>Lens position X</label>
         <div class="slider-row">
-          <input type="range" id="lens-x" min="-0.45" max="0.45" step="0.01" value="0.00">
+          <input type="range" id="lens-x" min="-0.75" max="0.75" step="0.01" value="0.00">
           <span class="slider-val" id="lens-x-out">0.00</span>
         </div>
       </div>
       <div class="ctrl-group">
         <label>Lens position Y</label>
         <div class="slider-row">
-          <input type="range" id="lens-y" min="-0.45" max="0.45" step="0.01" value="0.00">
+          <input type="range" id="lens-y" min="-0.75" max="0.75" step="0.01" value="0.00">
           <span class="slider-val" id="lens-y-out">0.00</span>
         </div>
       </div>
@@ -529,8 +529,8 @@ overlayCanvas.addEventListener('click', e => {
   const px = (e.clientX - rect.left) / rect.width  * SIZE;
   const py = (e.clientY - rect.top)  / rect.height * SIZE;
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-  const newLx = clamp((px / SIZE - 0.5) * 2.0, -0.45, 0.45);
-  const newLy = clamp((py / SIZE - 0.5) * 2.0, -0.45, 0.45);
+  const newLx = clamp((px / SIZE - 0.5) * 2.0, -0.75, 0.75);
+  const newLy = clamp((py / SIZE - 0.5) * 2.0, -0.75, 0.75);
   const xEl = document.getElementById('lens-x');
   const yEl = document.getElementById('lens-y');
   xEl.value = newLx.toFixed(2);
