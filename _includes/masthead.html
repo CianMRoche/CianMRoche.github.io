@@ -47,6 +47,9 @@
       var next = current === 'dark' ? 'light' : 'dark';
       localStorage.setItem('theme', next);
       applyTheme(next);
+      document.querySelectorAll('iframe').forEach(function(f) {
+        try { f.contentWindow.postMessage({ theme: next }, '*'); } catch(e) {}
+      });
     });
   }
 

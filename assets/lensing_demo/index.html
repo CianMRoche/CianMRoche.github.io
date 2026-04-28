@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gravitational Lensing Demo</title>
+<script>
+  (function() {
+    var t = localStorage.getItem('theme');
+    if (t) document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -13,6 +19,41 @@
     color: #374151;
     padding: 0.75rem 4px 0.75rem 0;
   }
+
+  html[data-theme="dark"] body            { background: #0d1117; color: #e6edf3; }
+  html[data-theme="dark"] .scenarios-label { color: #8b949e; }
+  html[data-theme="dark"] .scenarios button {
+    background: #0d1117; border-color: #7bbfcc; color: #7bbfcc;
+  }
+  html[data-theme="dark"] .scenarios button:hover {
+    background: #7bbfcc; color: #0d1117;
+  }
+  html[data-theme="dark"] .canvas-label   { color: #8b949e; }
+  html[data-theme="dark"] #drop-zone {
+    background: #161b22; border-color: #30363d;
+  }
+  html[data-theme="dark"] #drop-zone.drag-over { border-color: #7bbfcc; background: #161b22; }
+  html[data-theme="dark"] .drop-icon      { color: #30363d; }
+  html[data-theme="dark"] .drop-hint-main { color: #e6edf3; }
+  html[data-theme="dark"] .drop-hint-sub  { color: #8b949e; }
+  html[data-theme="dark"] .lens-wrap      { background: #161b22; border-color: #30363d; }
+  html[data-theme="dark"] #no-image-msg   { color: #30363d; }
+  html[data-theme="dark"] .lens-params {
+    background: #161b22; border-color: #30363d;
+  }
+  html[data-theme="dark"] .source-col     { background: #161b22; border-color: #30363d; }
+  html[data-theme="dark"] .source-col-label { color: #8b949e; }
+  html[data-theme="dark"] .source-col button {
+    background: #0d1117; border-color: #30363d; color: #8b949e;
+  }
+  html[data-theme="dark"] .source-col button:hover {
+    border-color: #7bbfcc; color: #7bbfcc; background: #0d1117;
+  }
+  html[data-theme="dark"] .ctrl-group label { color: #8b949e; }
+  html[data-theme="dark"] .slider-row input[type="range"] { background: #30363d; }
+  html[data-theme="dark"] .slider-val     { color: #8b949e; }
+  html[data-theme="dark"] .physics-note   { color: #8b949e; border-top-color: #30363d; }
+  html[data-theme="dark"] .physics-note code { color: #8b949e; }
 
   h1 {
     font-size: 1.2rem;
@@ -719,6 +760,12 @@ function loadImageDemo(src) {
 }
 
 applyScenario(1);
+
+window.addEventListener('message', function(e) {
+  if (e.data && e.data.theme) {
+    document.documentElement.setAttribute('data-theme', e.data.theme);
+  }
+});
 </script>
 
 </body>

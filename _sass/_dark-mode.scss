@@ -6,6 +6,7 @@ $dm-bg:     #0d1117;
 $dm-bg-2:   #161b22;
 $dm-text:   #e6edf3;
 $dm-muted:  #8b949e;
+$dm-nav:    #7bbfcc;   // muted cyan for masthead links
 $dm-border: #30363d;
 $dm-link:   #58a6ff;
 
@@ -52,8 +53,8 @@ html[data-theme="dark"] {
     background: $dm-bg;
 
     a {
-      color: $dm-muted;
-      &:hover { color: $dm-text; }
+      color: $dm-nav;
+      &:hover { color: lighten($dm-nav, 12%); }
     }
 
     button {
@@ -115,6 +116,11 @@ html[data-theme="dark"] {
     .author__urls {
       background: $dm-bg-2;
       border-color: $dm-border;
+
+      @include breakpoint($large) {
+        background: transparent;
+        border: 0;
+      }
 
       a {
         color: $dm-muted;
