@@ -1,0 +1,216 @@
+/* ==========================================================================
+   DARK MODE
+   ========================================================================== */
+
+$dm-bg:     #0d1117;
+$dm-bg-2:   #161b22;
+$dm-text:   #e6edf3;
+$dm-muted:  #8b949e;
+$dm-border: #30363d;
+$dm-link:   #58a6ff;
+
+/* ── Toggle button (light + dark mode shared) ─────────────────────── */
+
+.dark-toggle {
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  padding: 5px;
+  cursor: pointer;
+  color: $primary-color;
+  border-radius: 4px;
+  line-height: 0;
+  z-index: 25;
+
+  svg { display: block; }
+
+  &:hover {
+    color: $darker-gray;
+    background: rgba(0, 0, 0, 0.06);
+  }
+}
+
+/* ── Dark mode overrides ──────────────────────────────────────────── */
+
+html[data-theme="dark"] {
+
+  body {
+    background: $dm-bg;
+    color: $dm-text;
+  }
+
+  // Masthead
+  .masthead {
+    background: $dm-bg;
+    border-bottom-color: $dm-border;
+  }
+
+  .greedy-nav {
+    background: $dm-bg;
+
+    a {
+      color: $dm-muted;
+      &:hover { color: $dm-text; }
+    }
+
+    button {
+      background-color: #21262d;
+
+      .navicon,
+      .navicon::before,
+      .navicon::after { background: $dm-text; }
+    }
+
+    .hidden-links {
+      background: $dm-bg-2;
+      border-color: $dm-border;
+
+      &::before { border-color: $dm-border transparent; }
+      &::after  { border-color: $dm-bg-2 transparent; }
+
+      a {
+        color: $dm-text;
+        &:hover { background: lighten($dm-bg-2, 5%); color: $dm-text; }
+      }
+    }
+  }
+
+  // Dark mode toggle in dark mode
+  .dark-toggle {
+    color: $dm-muted;
+    &:hover {
+      color: $dm-text;
+      background: rgba(255, 255, 255, 0.06);
+    }
+  }
+
+  // Links
+  a {
+    color: $dm-link;
+    &:visited { color: mix(#b794f4, $dm-link, 35%); }
+    &:hover   { color: lighten($dm-link, 12%); }
+  }
+
+  // Headings
+  h1, h2, h3, h4, h5, h6 { color: $dm-text; }
+
+  // Horizontal rule
+  hr { border-color: $dm-border; }
+
+  // Sidebar / author profile
+  .author__name  { color: $dm-text; }
+  .author__bio   { color: $dm-muted; }
+
+  .author__urls-wrapper {
+    > button {
+      background: $dm-bg-2;
+      border-color: $dm-border;
+      color: $dm-text;
+      &::before { border-color: $dm-text transparent; }
+    }
+
+    .author__urls {
+      background: $dm-bg-2;
+      border-color: $dm-border;
+
+      a {
+        color: $dm-muted;
+        border-bottom-color: $dm-border;
+        &:hover { color: $dm-link; }
+      }
+    }
+  }
+
+  // Page content
+  .page__title { color: $dm-text; }
+
+  .page__content {
+    h2 { border-bottom-color: $dm-border; }
+
+    blockquote {
+      border-left-color: $dm-border;
+      color: $dm-muted;
+    }
+
+    dt { color: $dm-text; }
+
+    code, tt {
+      background: $dm-bg-2;
+      border-color: $dm-border;
+      color: $dm-text;
+    }
+
+    pre {
+      background: $dm-bg-2;
+      border-color: $dm-border;
+    }
+  }
+
+  // Code everywhere
+  code, tt {
+    background: $dm-bg-2;
+    border-color: $dm-border;
+    color: $dm-text;
+  }
+
+  pre { background: $dm-bg-2; color: $dm-text; }
+
+  // Tables
+  th {
+    background: $dm-bg-2;
+    border-bottom-color: $dm-border;
+  }
+
+  td { border-bottom-color: $dm-border; }
+
+  tr:nth-child(even) td { background: $dm-bg-2; }
+
+  // Footer
+  .page__footer {
+    background: $dm-bg;
+    color: $dm-muted;
+    border-top-color: $dm-border;
+
+    a { color: $dm-muted; &:hover { color: $dm-text; } }
+    footer { color: $dm-muted; }
+  }
+
+  // Archive pages
+  .archive__item-title a { color: $dm-text; }
+  .archive__item-excerpt { color: $dm-muted; }
+
+  // Sidebar nav list (archive/taxonomy pages)
+  .nav__list .nav__items {
+    a {
+      color: $dm-muted;
+      border-bottom-color: $dm-border;
+      &:hover { color: $dm-link; }
+    }
+
+    .active {
+      color: $dm-text;
+      background: lighten($dm-bg, 4%);
+    }
+  }
+
+  // Pagination
+  .pagination--pager {
+    color: $dm-text;
+    border-color: $dm-border;
+    &:hover { background: $dm-bg-2; }
+  }
+
+  // About page nav cards
+  .nav-card {
+    background: $dm-bg-2;
+    border-color: $dm-border;
+    color: $dm-text;
+    &:hover { color: $dm-text; box-shadow: 0 4px 14px rgba(0,0,0,0.35); }
+  }
+
+  .nav-card-title { color: $dm-text; }
+  .nav-card-sub   { color: $dm-muted; }
+}
