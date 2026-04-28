@@ -219,7 +219,7 @@ When a <span style="color:#BA7517">massive object</span> sits between us and a d
 </svg>
 
 <p style="font-size:0.875rem; color:#6b7280; line-height:1.65; margin: 1rem 0 1.25rem;">
-Below is a simulator to help gain some intuition about gravitational lensing. Click a preset configuration or load your own image by pasting (Ctrl+V or Cmd+V), clicking the left panel to upload an image, or dragging an image onto the left panel.</p>
+Below is a simulator to help gain some intuition about gravitational lensing. Click a preset configuration or load your own source image by clicking the source panel and pasting (Ctrl+V or Cmd+V), or drag and drop an image. Change the lens position by clicking on the right panel.</p>
 
 <div class="demo-wrap">
   <iframe id="lensing-iframe" src="/assets/lensing_demo/index.html" 

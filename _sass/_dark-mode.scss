@@ -224,6 +224,10 @@ html[data-theme="dark"] {
     &:hover { color: $dm-text; box-shadow: 0 4px 14px rgba(0,0,0,0.35); }
   }
 
+  .nav-card-research::before { background: #4aaee9; }
+  .nav-card-cv::before       { background: #059669; }
+  .nav-card-astrowiki::before { background: #e0af44; }
+
   .nav-card-title { color: $dm-text; }
   .nav-card-sub   { color: $dm-muted; }
 }
