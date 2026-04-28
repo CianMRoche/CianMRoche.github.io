@@ -133,7 +133,7 @@ A collection of projects across observational astrophysics, cosmological simulat
   </div>
 
   <div class="research-card">
-    <img src="/images/vesc3.png" alt="Escape velocity profiles of the Milky Way">
+    <img src="/images/vesc3.png" data-src-light="/images/vesc3.png" data-src-dark="/images/vesc3_inverted.png" alt="Escape velocity profiles of the Milky Way">
     <div class="research-card-body">
       <h3>Measuring the Milky Way Mass Profile via Stellar Kinematics</h3>
       <p>By modelling the tail of the stellar speed distribution of halo stars in Gaia DR3, we obtain an escape velocity profile of the Milky Way from 4–11 kpc. This constrains dark matter halo parameters (NFW, generalized NFW, Burkert), finding a light but consistent Milky Way mass. Supervised by Prof. Lina Necib. and Prof. Tongyan Lin.</p>
