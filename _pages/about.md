@@ -113,6 +113,10 @@ A large part of my research involves gravitational lensing, where massive object
   </svg>
 </div> -->
 
+<p style="font-size:0.875rem; color:#6b7280; line-height:1.65; margin: 0.25rem 0 1.25rem;">
+When a <span style="color:#BA7517">massive object</span> sits between us and a distant <span style="color:#378ADD">source</span>, its gravity bends the light into arcs and rings. Because the bending depends only on the mass of the lens and geometry, it is one of the cleanest ways to map <strong>dark matter</strong>.
+</p>
+
 <svg width="100%" viewBox="0 0 680 250" role="img" xmlns="http://www.w3.org/2000/svg">
   <title>Gravitational lensing divider illustration</title>
   <desc>Gravitational lensing with source and image plane shaded bands.</desc>
@@ -211,10 +215,6 @@ A large part of my research involves gravitational lensing, where massive object
   <text text-anchor="middle" x="340" y="222" fill="#aaa" font-family="system-ui, sans-serif" font-size="10">(dark matter halo)</text>
   <text text-anchor="middle" x="620" y="172" fill="#888" font-family="system-ui, sans-serif" font-size="11">observer</text>
 </svg>
-
-<p style="font-size:0.875rem; color:#6b7280; line-height:1.65; margin: 0.25rem 0 1.25rem;">
-When a <span style="color:#BA7517">massive object</span> sits between us and a distant <span style="color:#378ADD">source</span>, its gravity bends the light into arcs and rings. Because the bending depends only on the mass of the lens and geometry, it is one of the cleanest ways to map <strong>dark matter</strong>.
-</p>
 
 <p style="font-size:0.875rem; color:#6b7280; line-height:1.65; margin: 1rem 0 1.25rem;">
 Below is a simulator to help gain some intuition about gravitational lensing. Click a preset configuration or load your own image by pasting (Ctrl+V or Cmd+V), clicking the left panel to upload an image, or dragging an image onto the left panel.</p>
