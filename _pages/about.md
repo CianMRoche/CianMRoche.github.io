@@ -240,8 +240,8 @@ In cold dark matter (CDM), the central potential of a galaxy cluster is steep an
 
 <div class="demo-wrap">
   <iframe id="dm-iframe" src=""
-          width="100%" height="560"
-          frameborder="0" style="border:none; display:block;">
+          width="100%" height="600"
+          frameborder="0" style="border:none; display:block; background:#0d1117;">
   </iframe>
 </div>
 

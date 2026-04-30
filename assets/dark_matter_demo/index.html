@@ -14,11 +14,11 @@
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    background: #fff;
-    color: #374151;
-    padding: 0.75rem 4px 0.75rem 0;
+    background: #0d1117;
+    color: #c9d1d9;
+    padding: 0.5rem 8px;
+    overflow: hidden;
   }
-  html[data-theme="dark"] body { background: #0d1117; color: #e6edf3; }
 
   .container { max-width: 900px; margin: 0 auto; }
 
@@ -40,14 +40,13 @@
   .panel-label {
     font-size: 0.82rem;
     font-weight: 500;
-    color: #6b7280;
+    color: #8b949e;
     text-align: center;
     letter-spacing: 0.05em;
     text-transform: uppercase;
   }
-  html[data-theme="dark"] .panel-label { color: #8b949e; }
 
-  canvas { width: 100%; aspect-ratio: 1; border-radius: 8px; display: block; }
+  canvas { width: 100%; max-width: 350px; aspect-ratio: 1; border-radius: 8px; display: block; }
 
   /* Model dropdown */
   .model-select-wrap {
@@ -61,25 +60,19 @@
     white-space: nowrap;
     flex-shrink: 0;
   }
-  html[data-theme="dark"] .select-label { color: #8b949e; }
   .model-select {
     flex: 1;
     padding: 7px 10px;
-    border: 1.5px solid #d1d5db;
+    border: 1.5px solid #30363d;
     border-radius: 6px;
     font-size: 0.82rem;
     cursor: pointer;
-    background: #fff;
-    color: #374151;
+    background: #161b22;
+    color: #e6edf3;
     transition: border-color 0.15s;
     outline: none;
   }
   .model-select:focus { border-color: #6b7280; }
-  html[data-theme="dark"] .model-select {
-    background: #161b22;
-    border-color: #30363d;
-    color: #e6edf3;
-  }
 
   /* Observation controls */
   .obs-controls { 
@@ -93,7 +86,7 @@
   .obs-btn {
     border: 1.5px solid #3b82f6;
     color: #3b82f6;
-    background: #fff;
+    background: transparent;
     border-radius: 6px;
     padding: 7px 14px;
     font-size: 0.82rem;
@@ -101,14 +94,11 @@
     cursor: pointer;
     transition: background 0.15s, color 0.15s;
   }
-  .obs-btn:hover { background: #3b82f6; color: #fff; }
-  .obs-btn.secondary { border-color: #d1d5db; color: #9ca3af; }
-  .obs-btn.secondary:hover { background: #9ca3af; color: #fff; border-color: #9ca3af; }
-  html[data-theme="dark"] .obs-btn { background: #0d1117; }
-  html[data-theme="dark"] .obs-btn.secondary { border-color: #30363d; color: #8b949e; }
+  .obs-btn:hover { background: #3b82f6; color: #e6edf3; }
+  .obs-btn.secondary { border-color: #30363d; color: #8b949e; }
+  .obs-btn.secondary:hover { background: #30363d; color: #e6edf3; border-color: #30363d; }
 
-  .obs-count { font-size: 0.8rem; color: #9ca3af; }
-  html[data-theme="dark"] .obs-count { color: #8b949e; }
+  .obs-count { font-size: 0.8rem; color: #8b949e; }
 
   .freq-controls {
     display: flex;
@@ -137,17 +127,13 @@
   }
   .freq-btn:hover { border-color: #6b7280; color: #9ca3af; }
   .freq-btn.active { background: #4a5568; color: #e6edf3; border-color: #4a5568; }
-  html[data-theme="dark"] .freq-btn { color: #8b949e; border-color: #30363d; background: transparent; }
-  html[data-theme="dark"] .freq-btn.active { background: #30363d; color: #e6edf3; }
-
   .physics-note {
     font-size: 0.78rem;
-    color: #9ca3af;
+    color: #8b949e;
     line-height: 1.65;
-    border-top: 1px solid #f3f4f6;
+    border-top: 1px solid #30363d;
     padding-top: 0.75rem;
   }
-  html[data-theme="dark"] .physics-note { border-top-color: #30363d; color: #8b949e; }
   .physics-note code { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.85em; }
 </style>
 </head>
@@ -565,10 +551,6 @@ function drawHistogramInset(ctx, W, H) {
   const graphLeft = insetX + marginL;
   const graphTop = insetY + marginT;
   const graphBottom = insetY + insetH - marginB;
-
-  // Background
-  ctx.fillStyle = 'rgba(2, 6, 14, 0.38)';
-  ctx.fillRect(insetX, insetY, insetW, insetH);
 
   // Draw y-axis
   ctx.strokeStyle = 'rgba(180, 200, 230, 0.85)';
