@@ -338,19 +338,25 @@ function drawPotential() {
   const model = MODELS[currentModel];
   const k = kInterp;
 
+  // Clip to plot area so steep curves (e.g. CDM) don't overflow the top
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(ml, mt, plotW, plotH);
+  ctx.clip();
+
   // Gradient fill under curve
   const grad = ctx.createLinearGradient(0, mt, 0, mt+plotH);
-  grad.addColorStop(0, model.color + '18'); 
+  grad.addColorStop(0, model.color + '18');
   grad.addColorStop(1, model.color + '06');
-  ctx.beginPath(); 
+  ctx.beginPath();
   ctx.moveTo(toX(-X_RANGE), mt+plotH);
   for (let i = 0; i <= plotW; i++) {
     const xx = (i/plotW * 2 - 1) * X_RANGE;
     ctx.lineTo(ml+i, toY(k*xx*xx/2));
   }
-  ctx.lineTo(toX(X_RANGE), mt+plotH); 
+  ctx.lineTo(toX(X_RANGE), mt+plotH);
   ctx.closePath();
-  ctx.fillStyle = grad; 
+  ctx.fillStyle = grad;
   ctx.fill();
 
   // Potential curve
@@ -358,12 +364,14 @@ function drawPotential() {
   for (let i = 0; i <= plotW; i++) {
     const xx = (i/plotW * 2 - 1) * X_RANGE;
     const py = toY(k*xx*xx/2);
-    if (i === 0) ctx.moveTo(ml+i, py); 
+    if (i === 0) ctx.moveTo(ml+i, py);
     else ctx.lineTo(ml+i, py);
   }
-  ctx.strokeStyle = model.color; 
-  ctx.lineWidth = 2.2; 
+  ctx.strokeStyle = model.color;
+  ctx.lineWidth = 2.2;
   ctx.stroke();
+
+  ctx.restore();
 
   // Centre dashed line
   ctx.setLineDash([3,4]);
