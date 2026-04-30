@@ -15,15 +15,15 @@ I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work o
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&display=swap" rel="stylesheet">
 <style>
 :root {
-  --dm-color: #b45309;
-  --lens-color: #1d4ed8;
-  --nav-accent: #4f46e5;
+  --dm-color: #c07a15;
+  --lens-color: #4a7ec5;
+  --nav-accent: #7c6bcf;
 }
 html[data-theme="dark"] {
   background-color: #0d1117 !important;
-  --dm-color: #f59e0b;
-  --lens-color: #60a5fa;
-  --nav-accent: #818cf8;
+  --dm-color: #fbbf77;
+  --lens-color: #93c5fd;
+  --nav-accent: #c4b5fd;
 }
 .dm-highlight { color: var(--dm-color); }
 .lens-highlight { color: var(--lens-color); }
