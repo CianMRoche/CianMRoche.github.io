@@ -8,13 +8,27 @@ redirect_from:
   - /about.html
 ---
 
-I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work on understanding the particle nature of dark matter using gravitational lensing and stellar kinematics, and bridging the gap between cosmological simulations and real observations.
+I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work on understanding the <span class="dm-highlight">particle nature of dark matter</span> using <span class="lens-highlight">strong lensing</span> and stellar kinematics, and bridging the gap between cosmological simulations and real observations.
 
 <!-- You can find me in the MIT Kavli Institute for Astrophysics and Space Research, room 37-624. -->
 
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&display=swap" rel="stylesheet">
 <style>
-html[data-theme="dark"] { background-color: #0d1117 !important; }
+:root {
+  --dm-color: #b45309;
+  --lens-color: #1d4ed8;
+  --nav-accent: #4f46e5;
+}
+html[data-theme="dark"] {
+  background-color: #0d1117 !important;
+  --dm-color: #f59e0b;
+  --lens-color: #60a5fa;
+  --nav-accent: #818cf8;
+}
+.dm-highlight { color: var(--dm-color); }
+.lens-highlight { color: var(--lens-color); }
+#lens-section .lens-heading { color: var(--lens-color); }
+#dm-section .lens-heading { color: var(--dm-color); }
 .nav-cards { display: flex; gap: 0.75rem; flex-wrap: wrap; margin: 1.5rem 0; }
 .nav-card {
   flex: 1;
@@ -35,7 +49,8 @@ html[data-theme="dark"] { background-color: #0d1117 !important; }
   text-decoration: none;
   color: #374151;
 }
-.nav-card-title { font-weight: 600; margin-bottom: 3px; }
+.nav-card-title { font-weight: 600; margin-bottom: 3px; transition: color 0.18s; }
+.nav-card:hover .nav-card-title { color: var(--nav-accent); }
 .nav-card-sub { font-size: 0.8rem; color: #6b7280; }
 .page__content .nav-card,
 .page__content .nav-card:hover { text-decoration: none; }
@@ -76,7 +91,7 @@ details.lens-section > summary {
 }
 details.lens-section > summary::-webkit-details-marker { display: none; }
 .lens-heading {
-  font-size: 1.5em;
+  font-size: 1.3em;
   font-weight: bold;
   line-height: 1.3;
   transition: color 0.15s;
@@ -118,7 +133,7 @@ html[data-theme="dark"] details.lens-section > summary:hover .lens-heading { col
 
 <details id="lens-section" class="lens-section">
   <summary>
-    <span class="lens-heading">Learn About: Gravitational Lensing</span>
+    <span class="lens-heading">Strong Lensing Demo</span>
     <svg class="lens-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
       <polyline points="9 18 15 12 9 6"/>
     </svg>
@@ -229,7 +244,7 @@ Click a preset or load your own source image by pasting (Ctrl+V / Cmd+V) or drag
 
 <details id="dm-section" class="lens-section">
   <summary>
-    <span class="lens-heading">Learn About: Dark Matter</span>
+    <span class="lens-heading">Dark Matter Self-Interaction Demo</span>
     <svg class="lens-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
       <polyline points="9 18 15 12 9 6"/>
     </svg>
