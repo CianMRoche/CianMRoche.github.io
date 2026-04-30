@@ -14,7 +14,7 @@ I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work o
 
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&display=swap" rel="stylesheet">
 <style>
-body { background-color: #0d1117 !important; }
+html[data-theme="dark"] { background-color: #0d1117 !important; }
 .nav-cards { display: flex; gap: 0.75rem; flex-wrap: wrap; margin: 1.5rem 0; }
 .nav-card {
   flex: 1;
