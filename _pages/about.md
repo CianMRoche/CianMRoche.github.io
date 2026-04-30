@@ -9,40 +9,7 @@ redirect_from:
 ---
 
 <div class="hero-wrap">
-  <svg class="hero-bg" viewBox="0 0 800 100" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <circle class="hero-star" cx="28"  cy="14"  r="1.1"/>
-    <circle class="hero-star" cx="72"  cy="52"  r="0.7"/>
-    <circle class="hero-star" cx="115" cy="22"  r="0.9"/>
-    <circle class="hero-star" cx="158" cy="82"  r="1.0"/>
-    <circle class="hero-star" cx="195" cy="36"  r="0.7"/>
-    <circle class="hero-star" cx="238" cy="68"  r="1.2"/>
-    <circle class="hero-star" cx="275" cy="12"  r="0.8"/>
-    <circle class="hero-star" cx="312" cy="88"  r="0.9"/>
-    <circle class="hero-star" cx="352" cy="45"  r="0.7"/>
-    <circle class="hero-star" cx="390" cy="18"  r="1.0"/>
-    <circle class="hero-star" cx="425" cy="72"  r="0.8"/>
-    <circle class="hero-star" cx="460" cy="94"  r="0.7"/>
-    <circle class="hero-star" cx="495" cy="30"  r="1.1"/>
-    <circle class="hero-star" cx="530" cy="10"  r="0.8"/>
-    <circle class="hero-star" cx="562" cy="78"  r="0.9"/>
-    <circle class="hero-star" cx="598" cy="48"  r="0.7"/>
-    <circle class="hero-star" cx="628" cy="92"  r="0.8"/>
-    <circle class="hero-star" cx="745" cy="16"  r="1.0"/>
-    <circle class="hero-star" cx="768" cy="62"  r="0.7"/>
-    <circle class="hero-star" cx="792" cy="88"  r="0.9"/>
-    <circle class="hero-star" cx="18"  cy="84"  r="0.8"/>
-    <circle class="hero-star" cx="52"  cy="98"  r="0.7"/>
-    <circle class="hero-star" cx="178" cy="96"  r="0.8"/>
-    <circle class="hero-star" cx="440" cy="100" r="0.9"/>
-    <circle class="hero-star" cx="720" cy="32"  r="0.7"/>
-    <circle cx="668" cy="50" r="14"  fill="var(--dm-color)" opacity="0.07"/>
-    <circle cx="668" cy="50" r="4"   fill="var(--dm-color)" opacity="0.22"/>
-    <circle cx="668" cy="50" r="1.8" fill="var(--dm-color)" opacity="0.55"/>
-    <path class="hero-arc" d="M 616 26 Q 668 -6 720 30" stroke="var(--lens-color)" stroke-width="1.6" opacity="0.30"/>
-    <path class="hero-arc" d="M 618 74 Q 668 108 718 72" stroke="var(--lens-color)" stroke-width="1.0" opacity="0.20"/>
-    <ellipse cx="668" cy="50" rx="54" ry="38" fill="none" stroke="var(--lens-color)" stroke-width="0.7" opacity="0.12"/>
-  </svg>
-  <p class="intro-text"><span class="lead-sentence">I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT.</span> I work on understanding the particle nature of <span class="dm-highlight">dark matter</span> using <span class="lens-highlight">strong lensing</span> and stellar kinematics, and bridging the gap between cosmological simulations and real observations.</p>
+  <p class="intro-text"><span class="lead-sentence">I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT.</span><br>I work on understanding the particle nature of <span class="dm-highlight">dark matter</span> using <span class="lens-highlight">strong lensing</span> and stellar kinematics, and bridging the gap between cosmological simulations and real observations.</p>
 </div>
 
 <!-- You can find me in the MIT Kavli Institute for Astrophysics and Space Research, room 37-624. -->
@@ -148,10 +115,10 @@ html[data-theme="dark"] details.lens-section > summary:hover .lens-heading { col
   </a>
   <a href="/files/CV.pdf" target="_blank" class="nav-card">
     <svg class="nav-card-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <rect x="2" y="5" width="16" height="11" rx="2"/>
-      <circle cx="7.5" cy="10.5" r="2"/>
-      <line x1="12" y1="9"   x2="16" y2="9"/>
-      <line x1="12" y1="12"  x2="14.5" y2="12"/>
+      <rect x="4" y="2" width="12" height="16" rx="1"/>
+      <line x1="6" y1="7" x2="14" y2="7"/>
+      <line x1="6" y1="10" x2="14" y2="10"/>
+      <line x1="6" y1="13" x2="11" y2="13"/>
     </svg>
     <div>
       <div class="nav-card-title">CV</div>
@@ -189,7 +156,7 @@ html[data-theme="dark"] details.lens-section > summary:hover .lens-heading { col
         <span class="lens-heading">Strong Lensing Demo</span>
         <span class="demo-badge">Interactive</span>
       </div>
-      <p class="demo-card-desc">Move a lens mass to warp background galaxies into Einstein rings and giant arcs — the same physics used to map dark matter.</p>
+      <p class="demo-card-desc">Move a lens mass to warp background galaxies into Einstein rings and giant arcs</p>
     </div>
     <svg class="lens-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
       <polyline points="9 18 15 12 9 6"/>
@@ -304,7 +271,7 @@ Click a preset or load your own source image by pasting (Ctrl+V / Cmd+V) or drag
     <div class="demo-preview">
       <svg viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%">
         <rect width="56" height="56" fill="rgba(192,122,21,0.08)" rx="8"/>
-        <path d="M 4 50 Q 28 8 52 50" stroke="var(--dm-color)" stroke-width="1.8" opacity="0.9"/>
+        <path d="M 4 8 Q 28 50 52 8" stroke="var(--dm-color)" stroke-width="1.8" opacity="0.9"/>
         <line x1="28" y1="48" x2="28" y2="53" stroke="var(--dm-color)" stroke-width="0.9" opacity="0.4"/>
         <circle cx="39" cy="30" r="5"   fill="var(--dm-color)" opacity="0.18"/>
         <circle cx="39" cy="30" r="2.5" fill="var(--dm-color)" opacity="0.85"/>
