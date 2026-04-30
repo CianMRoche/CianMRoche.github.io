@@ -8,7 +8,7 @@ redirect_from:
   - /about.html
 ---
 
-I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work on understanding the <span class="dm-highlight">particle nature of dark matter</span> using <span class="lens-highlight">strong lensing</span> and stellar kinematics, and bridging the gap between cosmological simulations and real observations.
+<p class="intro-text">I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work on understanding the particle nature of <span class="dm-highlight">dark matter</span> using <span class="lens-highlight">strong lensing</span> and stellar kinematics, and bridging the gap between cosmological simulations and real observations.</p>
 
 <!-- You can find me in the MIT Kavli Institute for Astrophysics and Space Research, room 37-624. -->
 
@@ -16,15 +16,17 @@ I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work o
 <style>
 :root {
   --dm-color: #c07a15;
-  --lens-color: #4a7ec5;
+  --lens-color: #0e7490;
   --nav-accent: #7c6bcf;
 }
 html[data-theme="dark"] {
   background-color: #0d1117 !important;
   --dm-color: #fbbf77;
-  --lens-color: #93c5fd;
+  --lens-color: #67e8f9;
   --nav-accent: #c4b5fd;
 }
+.intro-text { color: #6b7280; }
+html[data-theme="dark"] .intro-text { color: #adbac7; }
 .dm-highlight { color: var(--dm-color); }
 .lens-highlight { color: var(--lens-color); }
 #lens-section .lens-heading { color: var(--lens-color); }
@@ -33,7 +35,7 @@ html[data-theme="dark"] {
 .nav-card {
   flex: 1;
   min-width: 140px;
-  padding: 1rem 1.125rem;
+  padding: 0.6rem 1rem;
   border: 1.5px solid #e5e7eb;
   border-radius: 8px;
   text-decoration: none;
@@ -252,7 +254,7 @@ Click a preset or load your own source image by pasting (Ctrl+V / Cmd+V) or drag
   <div class="lens-content">
 
 <p style="font-size:0.875rem; color:#6b7280; line-height:1.65; margin: 1rem 0 0.5rem;">
-In cold dark matter (CDM), the central potential of a galaxy cluster is steep and cuspy — the brightest cluster galaxy (BCG) stays close to the cluster center. Self-interacting dark matter (SIDM) softens the core, allowing the BCG to oscillate more widely. Measuring how far off-center BCGs sit across many clusters constrains the dark matter self-interaction cross-section. Switch between models to see the effect, then press <em>Take Observation</em> to record BCG positions as a mock astronomer would.</p>
+Dark Matter (DM) is the invisible but dominant mass component in the structures of our universe, with approximately 10 times more dark matter in our galaxy than matter we could see. The interaction properties of dark matter with itself remain largely a mystery, but looking at brightest cluster galaxies (BCGs), which are large galaxies sitting in the centers of the largest gravitationally bound structures in the universe (known as galaxy clusters), we can get some insights into these mysterious properties. Below is a simplified model of a BCG oscillating in the potential of a galaxy cluster, and how the typical distance away fromt he center changing with different dark matter self-interaction properties.</p>
 
 <div class="demo-wrap">
   <iframe id="dm-iframe" src=""
