@@ -241,25 +241,19 @@ function drawPotential() {
   ctx.clearRect(0, 0, W, H);
   ctx.fillStyle = '#050a12'; ctx.fillRect(0, 0, W, H);
 
-  const X_RANGE = 15;  // kpc half-width shown
-  // V is normalised: E=1, so V(A)=1. Display clips at 1.65 for headroom.
+  // Dynamic range: always 1.5× current amplitude so BCG fills ~2/3 of the display.
+  // V_MAX=2 means turning points (V=1) sit at mid-height; arms exit the top naturally.
+  const X_RANGE = Math.sqrt(2 / kInterp) * 1.5;
   const toX = x => ml + (x / X_RANGE + 1) * plotW / 2;
-  const toY = v => mt + plotH * (1 - Math.min(v, 1.65) / 1.65);
-
-  // Faint grid
-  ctx.setLineDash([2,4]); ctx.strokeStyle = '#1c2130'; ctx.lineWidth = 0.7;
-  [-10,-5,5,10].forEach(x => {
-    ctx.beginPath(); ctx.moveTo(toX(x), mt); ctx.lineTo(toX(x), mt+plotH); ctx.stroke();
-  });
-  ctx.setLineDash([]);
+  const toY = v => mt + plotH * (1 - v / 2.0);
 
   // x-axis
   ctx.strokeStyle = '#2a3040'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(ml, mt+plotH); ctx.lineTo(ml+plotW, mt+plotH); ctx.stroke();
 
-  // Axis labels
+  // Centre label only; ±amplitude ticks added below with dashes
   ctx.fillStyle = '#4a5568'; ctx.font = '12px system-ui'; ctx.textAlign = 'center';
-  [-10, 0, 10].forEach(x => ctx.fillText(x === 0 ? '0' : `${x}`, toX(x), mt+plotH+18));
+  ctx.fillText('0', toX(0), mt+plotH+18);
   ctx.fillStyle = '#3a4555'; ctx.font = '12px system-ui';
   ctx.fillText('position (kpc)', ml + plotW/2, H - 4);
 
@@ -277,13 +271,12 @@ function drawPotential() {
   ctx.lineTo(toX(X_RANGE), mt+plotH); ctx.closePath();
   ctx.fillStyle = grad; ctx.fill();
 
-  // Potential curve
-  ctx.beginPath(); let started = false;
+  // Potential curve — no clip; canvas boundary clips the arms naturally
+  ctx.beginPath();
   for (let i = 0; i <= plotW; i++) {
     const x = (i/plotW * 2 - 1) * X_RANGE;
     const py = toY(k*x*x/2);
-    if (py < mt - 2) { started = false; continue; }
-    if (!started) { ctx.moveTo(ml+i, py); started = true; } else ctx.lineTo(ml+i, py);
+    if (i === 0) ctx.moveTo(ml+i, py); else ctx.lineTo(ml+i, py);
   }
   ctx.strokeStyle = model.color; ctx.lineWidth = 1.8; ctx.stroke();
 
@@ -292,18 +285,16 @@ function drawPotential() {
   ctx.beginPath(); ctx.moveTo(toX(0), mt); ctx.lineTo(toX(0), mt+plotH); ctx.stroke();
   ctx.setLineDash([]);
 
-  // Amplitude dashed markers
-  const A = Math.sqrt(2 / k);  // current amplitude from kInterp
+  // Amplitude dashed markers (A always within frame: X_RANGE = 1.5×A)
+  const A = Math.sqrt(2 / k);
   [A, -A].forEach(ax => {
-    if (Math.abs(ax) > X_RANGE) return;
     ctx.setLineDash([2,3]); ctx.strokeStyle = model.color + '55'; ctx.lineWidth = 0.8;
     ctx.beginPath(); ctx.moveTo(toX(ax), mt); ctx.lineTo(toX(ax), mt+plotH); ctx.stroke();
     ctx.setLineDash([]);
   });
-  if (A <= X_RANGE) {
-    ctx.fillStyle = model.color + 'cc'; ctx.font = '11px system-ui'; ctx.textAlign = 'center';
-    ctx.fillText(`±${A.toFixed(1)} kpc`, toX(A), mt + 16);
-  }
+  ctx.fillStyle = model.color + 'aa'; ctx.font = '11px system-ui'; ctx.textAlign = 'center';
+  ctx.fillText(`+${A.toFixed(1)}`, toX(A), mt+plotH+18);
+  ctx.fillText(`-${A.toFixed(1)}`, toX(-A), mt+plotH+18);
 
   // BCG glow on the curve
   const bx_kpc = bcgKpc();
