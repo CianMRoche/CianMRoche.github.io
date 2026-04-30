@@ -271,10 +271,10 @@ Click a preset or load your own source image by pasting (Ctrl+V / Cmd+V) or drag
     <div class="demo-preview">
       <svg viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%">
         <rect width="56" height="56" fill="rgba(192,122,21,0.08)" rx="8"/>
-        <path d="M 4 8 Q 28 50 52 8" stroke="var(--dm-color)" stroke-width="1.8" opacity="0.9"/>
-        <line x1="28" y1="48" x2="28" y2="53" stroke="var(--dm-color)" stroke-width="0.9" opacity="0.4"/>
-        <circle cx="39" cy="30" r="5"   fill="var(--dm-color)" opacity="0.18"/>
-        <circle cx="39" cy="30" r="2.5" fill="var(--dm-color)" opacity="0.85"/>
+        <path d="M 4 14 Q 28 52 52 14" stroke="var(--dm-color)" stroke-width="1.8" opacity="0.9"/>
+        <line x1="28" y1="50" x2="28" y2="55" stroke="var(--dm-color)" stroke-width="0.9" opacity="0.4"/>
+        <circle cx="42" cy="32" r="5"   fill="var(--dm-color)" opacity="0.18"/>
+        <circle cx="42" cy="32" r="2.5" fill="var(--dm-color)" opacity="0.85"/>
         <circle cx="6"  cy="14" r="0.7" fill="var(--dm-color)" opacity="0.35"/>
         <circle cx="48" cy="10" r="0.5" fill="var(--dm-color)" opacity="0.3"/>
         <circle cx="18" cy="8"  r="0.6" fill="var(--dm-color)" opacity="0.25"/>
