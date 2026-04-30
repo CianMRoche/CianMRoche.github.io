@@ -38,7 +38,7 @@
   }
 
   .panel-label {
-    font-size: 0.78rem;
+    font-size: 0.82rem;
     font-weight: 500;
     color: #6b7280;
     text-align: center;
@@ -47,32 +47,41 @@
   }
   html[data-theme="dark"] .panel-label { color: #8b949e; }
 
-  canvas { width: 100%; border-radius: 8px; display: block; }
+  canvas { width: 100%; aspect-ratio: 1; border-radius: 8px; display: block; }
 
-  .model-btns { display: flex; flex-direction: column; gap: 0.35rem; }
-
-  .model-btn {
-    background: #fff;
-    border: 1.5px solid #d1d5db;
-    color: #6b7280;
-    border-radius: 6px;
-    padding: 7px 12px;
-    font-size: 0.8rem;
-    cursor: pointer;
-    text-align: left;
-    transition: border-color 0.15s, color 0.15s, background 0.15s;
+  /* Model dropdown */
+  .model-select-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
   }
-  .model-btn:hover { border-color: #9ca3af; color: #374151; }
-  .model-btn[data-model="cdm"].active    { border-color: #4a9eff; color: #2563eb; background: #eff6ff; font-weight: 600; }
-  .model-btn[data-model="sidm1"].active  { border-color: #f59e0b; color: #d97706; background: #fffbeb; font-weight: 600; }
-  .model-btn[data-model="sidm10"].active { border-color: #ef4444; color: #dc2626; background: #fef2f2; font-weight: 600; }
+  .select-label {
+    font-size: 0.8rem;
+    color: #9ca3af;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  html[data-theme="dark"] .select-label { color: #8b949e; }
+  .model-select {
+    flex: 1;
+    padding: 7px 10px;
+    border: 1.5px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    cursor: pointer;
+    background: #fff;
+    color: #374151;
+    transition: border-color 0.15s;
+    outline: none;
+  }
+  .model-select:focus { border-color: #6b7280; }
+  html[data-theme="dark"] .model-select {
+    background: #161b22;
+    border-color: #30363d;
+    color: #e6edf3;
+  }
 
-  html[data-theme="dark"] .model-btn { background: #0d1117; border-color: #30363d; color: #8b949e; }
-  html[data-theme="dark"] .model-btn:hover { border-color: #8b949e; color: #e6edf3; }
-  html[data-theme="dark"] .model-btn[data-model="cdm"].active    { background: #0d1117; border-color: #4a9eff; color: #4a9eff; }
-  html[data-theme="dark"] .model-btn[data-model="sidm1"].active  { background: #0d1117; border-color: #f59e0b; color: #f59e0b; }
-  html[data-theme="dark"] .model-btn[data-model="sidm10"].active { background: #0d1117; border-color: #ef4444; color: #ef4444; }
-
+  /* Observation controls */
   .obs-controls { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
 
   .obs-btn {
@@ -81,7 +90,7 @@
     background: #fff;
     border-radius: 6px;
     padding: 7px 14px;
-    font-size: 0.8rem;
+    font-size: 0.82rem;
     font-weight: 500;
     cursor: pointer;
     transition: background 0.15s, color 0.15s;
@@ -92,11 +101,11 @@
   html[data-theme="dark"] .obs-btn { background: #0d1117; }
   html[data-theme="dark"] .obs-btn.secondary { border-color: #30363d; color: #8b949e; }
 
-  .obs-count { font-size: 0.78rem; color: #9ca3af; }
+  .obs-count { font-size: 0.8rem; color: #9ca3af; }
   html[data-theme="dark"] .obs-count { color: #8b949e; }
 
   .physics-note {
-    font-size: 0.75rem;
+    font-size: 0.78rem;
     color: #9ca3af;
     line-height: 1.65;
     border-top: 1px solid #f3f4f6;
@@ -112,17 +121,20 @@
 
     <div class="panel-wrap">
       <div class="panel-label">BCG in potential well</div>
-      <canvas id="pot-canvas" width="380" height="260"></canvas>
-      <div class="model-btns">
-        <button class="model-btn active" data-model="cdm"    onclick="setModel('cdm')">Cold Dark Matter</button>
-        <button class="model-btn"        data-model="sidm1"  onclick="setModel('sidm1')">SIDM (1 cm²/g)</button>
-        <button class="model-btn"        data-model="sidm10" onclick="setModel('sidm10')">SIDM (10 cm²/g)</button>
+      <canvas id="pot-canvas" width="400" height="400"></canvas>
+      <div class="model-select-wrap">
+        <span class="select-label">Model:</span>
+        <select id="model-select" class="model-select" onchange="setModel(this.value)">
+          <option value="cdm">Cold Dark Matter</option>
+          <option value="sidm1">SIDM (1 cm²/g)</option>
+          <option value="sidm10">SIDM (10 cm²/g)</option>
+        </select>
       </div>
     </div>
 
     <div class="panel-wrap">
       <div class="panel-label">Mock cluster image</div>
-      <canvas id="clu-canvas" width="380" height="260"></canvas>
+      <canvas id="clu-canvas" width="400" height="400"></canvas>
       <div class="obs-controls">
         <button class="obs-btn" onclick="takeObservation()">Take Observation</button>
         <button class="obs-btn secondary" onclick="clearObservations()">Clear</button>
@@ -133,58 +145,60 @@
   </div>
   <div class="physics-note">
     <strong style="color:#6b7280;">How does this constrain dark matter?</strong>
-    In cold dark matter (CDM), clusters have cuspy central potentials — the BCG is confined to a small region near the center. Self-interacting dark matter (SIDM) softens the core, allowing the BCG to wander further. Measuring BCG–center offsets across many clusters constrains the self-interaction cross-section <code>σ/m</code>. Press <em>Take Observation</em> to record the current BCG position; colored marks show accumulated measurements.
+    In cold dark matter (CDM), clusters have cuspy, steep central potentials — the BCG oscillates rapidly over a small range. Self-interacting dark matter softens the core, flattening the potential and allowing wider, slower oscillations. Measuring BCG–centre offsets across many clusters constrains the self-interaction cross-section <code>σ/m</code>. The oscillation speed and amplitude here are physically tied to the displayed potential via energy conservation.
   </div>
 </div>
 
 <script>
 /* ── Models ──────────────────────────────────────────────────────────────── */
 
+// Energy normalised to E = 1 for all models.
+// Potential: V(x) = k·x²/2,  k = 2/A²  so V(A) = 1.
+// SHO: ω = √k,  T_physics = 2π/ω = 2π·A/√2 = π·A·√2
+
 const MODELS = {
-  cdm:    { amplitude: 2,  period: 3.5, color: '#4a9eff', label: 'Cold Dark Matter' },
-  sidm1:  { amplitude: 5,  period: 6.5, color: '#f59e0b', label: 'SIDM (1 cm²/g)'  },
-  sidm10: { amplitude: 12, period: 11,  color: '#ef4444', label: 'SIDM (10 cm²/g)' }
+  cdm:    { amplitude: 2,  color: '#4a9eff', label: 'Cold Dark Matter' },
+  sidm1:  { amplitude: 5,  color: '#f59e0b', label: 'SIDM (1 cm²/g)'  },
+  sidm10: { amplitude: 12, color: '#ef4444', label: 'SIDM (10 cm²/g)' }
 };
 
-// Potential: V(x) = k*x²/2, energy normalised to 1 → k = 2/A²
-function stiffness(key) { return 2 / (MODELS[key].amplitude ** 2); }
+function stiffness(key) { return 2 / MODELS[key].amplitude ** 2; }
+
+// Scale factor: maps physics time to visual seconds.
+// Chosen so CDM (k=0.5, ω_phys=0.707) has a visual period of 3.5 s.
+const CDM_PERIOD_S = 3.5;
+const VISUAL_SPEED = (2 * Math.PI) / (Math.sqrt(stiffness('cdm')) * CDM_PERIOD_S);
+// → SIDM-1 ≈ 8.75 s,  SIDM-10 ≈ 21 s  (ratio scales as A, correct for SHO)
 
 /* ── State ───────────────────────────────────────────────────────────────── */
 
-let currentModel   = 'cdm';
-let animT          = 0;
-let phaseOffset    = 0;        // radians, preserves position on model switch
-let modelSwitchT   = 0;
-let kInterp        = stiffness('cdm');
-let observations   = [];
-let obsFlash       = 0;
-let lastTs         = null;
+let currentModel = 'cdm';
+let kInterp      = stiffness('cdm');   // smoothly interpolated potential stiffness
+let phaseAccum   = 0;                  // cumulative phase ∫ω·dt (always advancing)
+let observations = [];
+let obsFlash     = 0;
+let lastTs       = null;
 
+// BCG position derived from current kInterp and accumulated phase.
+// Energy conservation holds at every instant:
+//   KE = ½(Aω)²cos²φ = cos²φ,   PE = k·x²/2 = sin²φ,   E = 1  ✓
 function bcgKpc() {
-  const m     = MODELS[currentModel];
-  const phase = 2 * Math.PI * (animT - modelSwitchT) / m.period + phaseOffset;
-  return m.amplitude * Math.sin(phase);
+  return Math.sqrt(2 / kInterp) * Math.sin(phaseAccum);
 }
 
 function setModel(key) {
-  if (key === currentModel) return;
-  const oldX  = bcgKpc();
-  const newA  = MODELS[key].amplitude;
-  phaseOffset = Math.asin(Math.max(-1, Math.min(1, oldX / newA)));
-  modelSwitchT = animT;
   currentModel = key;
-  document.querySelectorAll('.model-btn').forEach(b =>
-    b.classList.toggle('active', b.dataset.model === key));
+  document.getElementById('model-select').value = key;
 }
 
-/* ── Galaxy field (seeded, stable across frames) ─────────────────────────── */
+/* ── Galaxy field (seeded, stable) ───────────────────────────────────────── */
 
 function seededRand(seed) {
   let s = seed >>> 0;
   return () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 0xFFFFFFFF; };
 }
 
-const CX_RANGE = 30; // kpc half-width shown in cluster panel
+const CX_RANGE = 30;  // kpc half-width in cluster panel
 const rng = seededRand(42);
 const GALS = [];
 while (GALS.length < 55) {
@@ -192,15 +206,14 @@ while (GALS.length < 55) {
   const y = (rng() - 0.5) * 2 * CX_RANGE * 1.4;
   if (Math.hypot(x, y) < 2.5) continue;
   GALS.push({ x, y, r: 1.2 + rng()*3.5, angle: rng()*Math.PI,
-               ell: 0.45+rng()*0.4, bright: 0.18+rng()*0.3 });
+               ell: 0.45 + rng()*0.4, bright: 0.18 + rng()*0.3 });
 }
 
-/* ── Shared marker (target reticle) ─────────────────────────────────────── */
+/* ── Shared reticle marker ───────────────────────────────────────────────── */
 
 function drawMarker(ctx, x, y, color, R, T) {
   const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
-  ctx.lineWidth = 2.5;
-  ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+  ctx.lineWidth = 2.5; ctx.strokeStyle = 'rgba(0,0,0,0.55)';
   ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI*2); ctx.stroke();
   dirs.forEach(([dx,dy]) => {
     ctx.beginPath();
@@ -222,22 +235,21 @@ function drawPotential() {
   const canvas = document.getElementById('pot-canvas');
   const ctx = canvas.getContext('2d');
   const W = canvas.width, H = canvas.height;
-  const ml = 36, mr = 10, mt = 22, mb = 32;
+  const ml = 42, mr = 12, mt = 26, mb = 38;
   const plotW = W - ml - mr, plotH = H - mt - mb;
 
   ctx.clearRect(0, 0, W, H);
   ctx.fillStyle = '#050a12'; ctx.fillRect(0, 0, W, H);
 
-  // coordinate helpers (x in kpc, v normalised 0–1.6)
-  const X_RANGE = 15;
-  const toX = x  => ml + (x / X_RANGE + 1) * plotW / 2;
-  const toY = v  => mt + plotH * (1 - Math.min(v, 1.6) / 1.6);
+  const X_RANGE = 15;  // kpc half-width shown
+  // V is normalised: E=1, so V(A)=1. Display clips at 1.65 for headroom.
+  const toX = x => ml + (x / X_RANGE + 1) * plotW / 2;
+  const toY = v => mt + plotH * (1 - Math.min(v, 1.65) / 1.65);
 
-  // faint grid
+  // Faint grid
   ctx.setLineDash([2,4]); ctx.strokeStyle = '#1c2130'; ctx.lineWidth = 0.7;
   [-10,-5,5,10].forEach(x => {
-    const px = toX(x);
-    ctx.beginPath(); ctx.moveTo(px, mt); ctx.lineTo(px, mt+plotH); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(toX(x), mt); ctx.lineTo(toX(x), mt+plotH); ctx.stroke();
   });
   ctx.setLineDash([]);
 
@@ -245,80 +257,83 @@ function drawPotential() {
   ctx.strokeStyle = '#2a3040'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(ml, mt+plotH); ctx.lineTo(ml+plotW, mt+plotH); ctx.stroke();
 
-  // axis labels
-  ctx.fillStyle = '#4a5568'; ctx.font = '10px system-ui'; ctx.textAlign = 'center';
-  [-10,0,10].forEach(x => ctx.fillText(x===0?'0':`${x}`, toX(x), mt+plotH+16));
-  ctx.fillStyle = '#3a4555';
-  ctx.fillText('position (kpc)', ml+plotW/2, H-3);
+  // Axis labels
+  ctx.fillStyle = '#4a5568'; ctx.font = '12px system-ui'; ctx.textAlign = 'center';
+  [-10, 0, 10].forEach(x => ctx.fillText(x === 0 ? '0' : `${x}`, toX(x), mt+plotH+18));
+  ctx.fillStyle = '#3a4555'; ctx.font = '12px system-ui';
+  ctx.fillText('position (kpc)', ml + plotW/2, H - 4);
 
   const model = MODELS[currentModel];
   const k = kInterp;
 
-  // gradient fill under curve
+  // Gradient fill under curve
   const grad = ctx.createLinearGradient(0, mt, 0, mt+plotH);
-  grad.addColorStop(0, model.color+'18'); grad.addColorStop(1, model.color+'06');
+  grad.addColorStop(0, model.color + '18'); grad.addColorStop(1, model.color + '06');
   ctx.beginPath(); ctx.moveTo(toX(-X_RANGE), mt+plotH);
   for (let i = 0; i <= plotW; i++) {
-    const x = (i/plotW*2 - 1)*X_RANGE;
+    const x = (i/plotW * 2 - 1) * X_RANGE;
     ctx.lineTo(ml+i, toY(k*x*x/2));
   }
   ctx.lineTo(toX(X_RANGE), mt+plotH); ctx.closePath();
   ctx.fillStyle = grad; ctx.fill();
 
-  // curve
+  // Potential curve
   ctx.beginPath(); let started = false;
   for (let i = 0; i <= plotW; i++) {
-    const x = (i/plotW*2 - 1)*X_RANGE;
+    const x = (i/plotW * 2 - 1) * X_RANGE;
     const py = toY(k*x*x/2);
-    if (py < mt-2) { started = false; continue; }
+    if (py < mt - 2) { started = false; continue; }
     if (!started) { ctx.moveTo(ml+i, py); started = true; } else ctx.lineTo(ml+i, py);
   }
   ctx.strokeStyle = model.color; ctx.lineWidth = 1.8; ctx.stroke();
 
-  // centre dashed line
+  // Centre dashed line
   ctx.setLineDash([3,4]); ctx.strokeStyle = '#333'; ctx.lineWidth = 0.8;
   ctx.beginPath(); ctx.moveTo(toX(0), mt); ctx.lineTo(toX(0), mt+plotH); ctx.stroke();
   ctx.setLineDash([]);
 
-  // amplitude dashed markers
-  const A = model.amplitude;
+  // Amplitude dashed markers
+  const A = Math.sqrt(2 / k);  // current amplitude from kInterp
   [A, -A].forEach(ax => {
-    ctx.setLineDash([2,3]); ctx.strokeStyle = model.color+'55'; ctx.lineWidth=0.8;
+    if (Math.abs(ax) > X_RANGE) return;
+    ctx.setLineDash([2,3]); ctx.strokeStyle = model.color + '55'; ctx.lineWidth = 0.8;
     ctx.beginPath(); ctx.moveTo(toX(ax), mt); ctx.lineTo(toX(ax), mt+plotH); ctx.stroke();
     ctx.setLineDash([]);
   });
-  ctx.fillStyle = model.color+'cc'; ctx.font = '9.5px system-ui'; ctx.textAlign='center';
-  ctx.fillText(`±${A} kpc`, toX(A), mt+13);
+  if (A <= X_RANGE) {
+    ctx.fillStyle = model.color + 'cc'; ctx.font = '11px system-ui'; ctx.textAlign = 'center';
+    ctx.fillText(`±${A.toFixed(1)} kpc`, toX(A), mt + 16);
+  }
 
-  // BCG glow
+  // BCG glow on the curve
   const bx_kpc = bcgKpc();
-  const bx = toX(bx_kpc), by = toY(k*bx_kpc*bx_kpc/2);
-  const grd = ctx.createRadialGradient(bx, by, 0, bx, by, 20);
-  grd.addColorStop(0, 'rgba(255,250,215,0.88)');
-  grd.addColorStop(0.3,'rgba(255,230,140,0.35)');
-  grd.addColorStop(1,  'rgba(0,0,0,0)');
-  ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(bx, by, 20, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#fffde4'; ctx.beginPath(); ctx.arc(bx, by, 3, 0, Math.PI*2); ctx.fill();
+  const bx = toX(bx_kpc), by = toY(k * bx_kpc * bx_kpc / 2);
+  const grd = ctx.createRadialGradient(bx, by, 0, bx, by, 22);
+  grd.addColorStop(0,    'rgba(255,250,215,0.9)');
+  grd.addColorStop(0.3,  'rgba(255,230,140,0.35)');
+  grd.addColorStop(1,    'rgba(0,0,0,0)');
+  ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(bx, by, 22, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#fffde4'; ctx.beginPath(); ctx.arc(bx, by, 3.5, 0, Math.PI*2); ctx.fill();
 
-  // centre marker at potential minimum
-  drawMarker(ctx, toX(0), mt+plotH, '#7bbfcc', 7, 5);
+  // Centre marker at potential minimum
+  drawMarker(ctx, toX(0), mt+plotH, '#7bbfcc', 8, 6);
 
-  // model label
-  ctx.fillStyle = model.color; ctx.font = '11px system-ui'; ctx.textAlign='left';
-  ctx.fillText(model.label, ml+4, mt+14);
+  // Model label (top-left)
+  ctx.fillStyle = model.color; ctx.font = 'bold 13px system-ui'; ctx.textAlign = 'left';
+  ctx.fillText(model.label, ml + 5, mt + 17);
 }
 
 /* ── Cluster panel ───────────────────────────────────────────────────────── */
 
-const COS30 = Math.cos(Math.PI/6);
-const SIN30 = Math.sin(Math.PI/6);
+const COS30 = Math.cos(Math.PI / 6);
+const SIN30 = Math.sin(Math.PI / 6);
 
 function drawCluster() {
   const canvas = document.getElementById('clu-canvas');
   const ctx = canvas.getContext('2d');
   const W = canvas.width, H = canvas.height;
   const cx = W/2, cy = H/2;
-  const KPC = W / (2*CX_RANGE); // px per kpc
+  const KPC = W / (2 * CX_RANGE);  // px per kpc
 
   ctx.clearRect(0, 0, W, H);
   ctx.fillStyle = '#010407'; ctx.fillRect(0, 0, W, H);
@@ -331,59 +346,60 @@ function drawCluster() {
   icl.addColorStop(1,    'rgba(0,0,0,0)');
   ctx.fillStyle = icl; ctx.fillRect(0, 0, W, H);
 
-  // cluster galaxies
+  // Cluster galaxies
   GALS.forEach(g => {
     const px = cx + g.x*KPC, py = cy + g.y*KPC;
-    if (px<-25||px>W+25||py<-25||py>H+25) return;
+    if (px < -30 || px > W+30 || py < -30 || py > H+30) return;
     ctx.save(); ctx.translate(px, py); ctx.rotate(g.angle); ctx.scale(1, g.ell);
-    const R = g.r*2.8;
+    const R = g.r * 2.8;
     const grd = ctx.createRadialGradient(0,0,0,0,0,R);
     grd.addColorStop(0, `rgba(255,250,230,${g.bright})`);
     grd.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle=grd; ctx.beginPath(); ctx.arc(0,0,R,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(0,0,R,0,Math.PI*2); ctx.fill();
     ctx.restore();
   });
 
-  // BCG at offset along 30° axis
+  // BCG displaced along 30° axis from cluster centre
   const off = bcgKpc();
-  const bcgX = cx + off*COS30*KPC;
-  const bcgY = cy + off*SIN30*KPC;
+  const bcgX = cx + off * COS30 * KPC;
+  const bcgY = cy + off * SIN30 * KPC;
 
-  const bgrd = ctx.createRadialGradient(bcgX, bcgY, 0, bcgX, bcgY, 42);
+  const bgrd = ctx.createRadialGradient(bcgX, bcgY, 0, bcgX, bcgY, 45);
   bgrd.addColorStop(0,    'rgba(255,255,225,0.75)');
   bgrd.addColorStop(0.15, 'rgba(255,245,190,0.32)');
   bgrd.addColorStop(0.5,  'rgba(220,210,160,0.08)');
   bgrd.addColorStop(1,    'rgba(0,0,0,0)');
-  ctx.fillStyle = bgrd; ctx.beginPath(); ctx.arc(bcgX, bcgY, 42, 0, Math.PI*2); ctx.fill();
-  const flash = Math.max(0, obsFlash)*0.45;
-  ctx.fillStyle = `rgba(255,255,235,${0.85+flash})`;
-  ctx.beginPath(); ctx.arc(bcgX, bcgY, 4, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = bgrd; ctx.beginPath(); ctx.arc(bcgX, bcgY, 45, 0, Math.PI*2); ctx.fill();
+  const flash = Math.max(0, obsFlash) * 0.45;
+  ctx.fillStyle = `rgba(255,255,235,${0.85 + flash})`;
+  ctx.beginPath(); ctx.arc(bcgX, bcgY, 4.5, 0, Math.PI*2); ctx.fill();
 
-  // observation stamps
+  // Accumulated observation stamps
   observations.forEach(obs => {
-    const ox = cx + obs.off*COS30*KPC;
-    const oy = cy + obs.off*SIN30*KPC;
+    const ox = cx + obs.off * COS30 * KPC;
+    const oy = cy + obs.off * SIN30 * KPC;
     ctx.strokeStyle = MODELS[obs.model].color;
-    ctx.lineWidth = 1.3; ctx.globalAlpha = 0.75;
+    ctx.lineWidth = 1.4; ctx.globalAlpha = 0.75;
     ctx.beginPath();
-    ctx.moveTo(ox-5,oy); ctx.lineTo(ox+5,oy);
-    ctx.moveTo(ox,oy-5); ctx.lineTo(ox,oy+5);
+    ctx.moveTo(ox-6, oy); ctx.lineTo(ox+6, oy);
+    ctx.moveTo(ox, oy-6); ctx.lineTo(ox, oy+6);
     ctx.stroke(); ctx.globalAlpha = 1;
   });
 
-  // cluster centre marker
-  drawMarker(ctx, cx, cy, '#7bbfcc', 9, 7);
+  // Cluster centre marker
+  drawMarker(ctx, cx, cy, '#7bbfcc', 10, 7);
 
-  // scale bar
-  const sbKpc=10, sbPx=sbKpc*KPC, sbX=W-15-sbPx, sbY=H-14;
-  ctx.strokeStyle='rgba(255,255,255,0.38)'; ctx.lineWidth=1.2;
+  // Scale bar (10 kpc)
+  const sbKpc = 10, sbPx = sbKpc * KPC;
+  const sbX = W - 16 - sbPx, sbY = H - 16;
+  ctx.strokeStyle = 'rgba(255,255,255,0.38)'; ctx.lineWidth = 1.3;
   ctx.beginPath();
-  ctx.moveTo(sbX,sbY); ctx.lineTo(sbX+sbPx,sbY);
-  ctx.moveTo(sbX,sbY-3); ctx.lineTo(sbX,sbY+3);
-  ctx.moveTo(sbX+sbPx,sbY-3); ctx.lineTo(sbX+sbPx,sbY+3);
+  ctx.moveTo(sbX, sbY); ctx.lineTo(sbX+sbPx, sbY);
+  ctx.moveTo(sbX, sbY-4); ctx.lineTo(sbX, sbY+4);
+  ctx.moveTo(sbX+sbPx, sbY-4); ctx.lineTo(sbX+sbPx, sbY+4);
   ctx.stroke();
-  ctx.fillStyle='rgba(255,255,255,0.38)'; ctx.font='10px system-ui'; ctx.textAlign='center';
-  ctx.fillText(`${sbKpc} kpc`, sbX+sbPx/2, sbY-5);
+  ctx.fillStyle = 'rgba(255,255,255,0.38)'; ctx.font = '12px system-ui'; ctx.textAlign = 'center';
+  ctx.fillText(`${sbKpc} kpc`, sbX + sbPx/2, sbY - 7);
 }
 
 /* ── Observations ────────────────────────────────────────────────────────── */
@@ -391,7 +407,7 @@ function drawCluster() {
 function takeObservation() {
   observations.push({ off: bcgKpc(), model: currentModel });
   const n = observations.length;
-  document.getElementById('obs-count').textContent = `${n} observation${n===1?'':'s'}`;
+  document.getElementById('obs-count').textContent = `${n} observation${n === 1 ? '' : 's'}`;
   obsFlash = 0.5;
 }
 
@@ -403,11 +419,19 @@ function clearObservations() {
 /* ── Animation loop ──────────────────────────────────────────────────────── */
 
 function animate(ts) {
-  if (lastTs===null) lastTs=ts;
-  const dt = Math.min((ts-lastTs)/1000, 0.05);
-  lastTs=ts; animT+=dt;
-  if (obsFlash>0) obsFlash-=dt*2;
-  kInterp += (stiffness(currentModel)-kInterp)*(1-Math.exp(-dt*4));
+  if (lastTs === null) lastTs = ts;
+  const dt = Math.min((ts - lastTs) / 1000, 0.05);
+  lastTs = ts;
+
+  // Advance phase using current ω = √k · VISUAL_SPEED (physically correct for SHO)
+  const ω = Math.sqrt(kInterp) * VISUAL_SPEED;
+  phaseAccum += ω * dt;
+
+  // Smoothly interpolate potential toward selected model
+  kInterp += (stiffness(currentModel) - kInterp) * (1 - Math.exp(-dt * 3));
+
+  if (obsFlash > 0) obsFlash -= dt * 2;
+
   drawPotential();
   drawCluster();
   requestAnimationFrame(animate);
