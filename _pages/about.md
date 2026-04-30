@@ -69,21 +69,46 @@ I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work o
   overflow: hidden;
   margin-top: 0.5rem;
 }
-.simulator-teaser {
+/* Collapsible lensing section */
+.lens-section {
+  margin: 1.75rem 0 0;
+}
+details.lens-section > summary {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  margin: 2.25rem 0 1.25rem;
-  gap: 0.4rem;
+  justify-content: space-between;
+  list-style: none;
+  cursor: pointer;
+  padding: 0.35rem 0 0.6rem;
+  border-bottom: 1px solid #e5e7eb;
+  user-select: none;
+  -webkit-user-select: none;
 }
-.teaser-text {
-  font-family: 'Caveat', cursive;
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: #6b7280;
-  text-align: center;
-  line-height: 1.2;
+details.lens-section > summary::-webkit-details-marker { display: none; }
+.lens-heading {
+  font-size: 1.5em;
+  font-weight: bold;
+  line-height: 1.3;
+  transition: color 0.15s;
 }
+.lens-chevron {
+  width: 18px;
+  height: 18px;
+  color: #9ca3af;
+  transition: transform 0.38s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+  margin-left: 0.5rem;
+}
+details.lens-section[open] > summary .lens-chevron {
+  transform: rotate(90deg);
+}
+details.lens-section > summary:hover .lens-heading { color: #3b82f6; }
+.lens-content {
+  overflow: hidden;
+  transition: height 0.42s cubic-bezier(0.4, 0, 0.2, 1);
+}
+html[data-theme="dark"] details.lens-section > summary { border-bottom-color: #30363d; }
+html[data-theme="dark"] details.lens-section > summary:hover .lens-heading { color: #58a6ff; }
 </style>
 
 <div class="nav-cards">
@@ -101,27 +126,20 @@ I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work o
   </a>
 </div>
 
-## Gravitational lensing
+<details id="lens-section" class="lens-section">
+  <summary>
+    <span class="lens-heading">Gravitational lensing</span>
+    <svg class="lens-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="9 18 15 12 9 6"/>
+    </svg>
+  </summary>
+  <div class="lens-content">
 
-<!-- <div class="slip-banner">
-  <img src="/images/slip.jpg" alt="Strong gravitational lensing observation">
-</div> -->
-<!-- 
-A large part of my research involves gravitational lensing, where massive objects bend light from things behind them, distorting their apparent shapes into arcs and rings. By modelling those distortions we can measure invisible dark matter. -->
-<!-- 
-<div class="simulator-teaser">
-  <span class="teaser-text">Get some gravitational lensing intuition</span>
-  <svg width="50" height="68" viewBox="0 0 50 68" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M 25 3 C 39 18, 13 38, 27 58" stroke="#9ca3af" stroke-width="2.5" stroke-linecap="round"/>
-    <path d="M 15 51 L 27 63 L 38 51" stroke="#9ca3af" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-  </svg>
-</div> -->
-
-<p style="font-size:0.875rem; color:#6b7280; line-height:1.65; margin: 0.25rem 0 1.25rem;">
+<p style="font-size:0.875rem; color:#6b7280; line-height:1.65; margin: 1rem 0 1.25rem;">
 When a <span style="color:#BA7517">massive object</span> sits between us and a distant <span style="color:#378ADD">source</span>, its gravity bends the light into arcs and rings. Because the bending depends only on the mass of the lens and geometry, it is one of the cleanest ways to map <strong>dark matter</strong>.
 </p>
 
-<svg width="100%" viewBox="0 0 680 250" role="img" xmlns="http://www.w3.org/2000/svg">
+<svg width="100%" viewBox="0 65 680 170" role="img" xmlns="http://www.w3.org/2000/svg">
   <title>Gravitational lensing divider illustration</title>
   <desc>Gravitational lensing with source and image plane shaded bands.</desc>
 
@@ -157,20 +175,6 @@ When a <span style="color:#BA7517">massive object</span> sits between us and a d
   <!-- Arrows -->
   <line x1="18" y1="107" x2="60" y2="103" fill="none" stroke="#85B7EB" stroke-width="1" opacity="0.65" marker-end="url(#arr)"/>
   <line x1="18" y1="189" x2="60" y2="193" fill="none" stroke="#85B7EB" stroke-width="1" opacity="0.65" marker-end="url(#arr)"/>
-
-  <!-- Handwritten-style label -->
-  <text x="340" y="26" text-anchor="middle"
-    font-family="Georgia, 'Times New Roman', serif"
-    font-size="17" font-style="italic"
-    fill="#888" letter-spacing="0.3">get some gravitational lensing intuition</text>
-
-  <!-- Bendy hand-drawn arrow -->
-  <path d="M348 38 C352 50, 368 58, 364 72 C360 86, 344 92, 342 108"
-    fill="none" stroke="#888" stroke-width="1.6"
-    stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/>
-  <path d="M342 108 L336 100 M342 108 L350 101"
-    fill="none" stroke="#888" stroke-width="1.6"
-    stroke-linecap="round" opacity="0.7"/>
 
   <!-- Apparent source dotted lines -->
   <line x1="620" y1="148" x2="105" y2="106" fill="none" stroke="#85B7EB" stroke-width="1" stroke-dasharray="4 3" opacity="0.5"/>
@@ -220,18 +224,58 @@ When a <span style="color:#BA7517">massive object</span> sits between us and a d
   <text text-anchor="middle" x="620" y="172" fill="#888" font-family="system-ui, sans-serif" font-size="11">observer</text>
 </svg>
 
-<p style="font-size:0.875rem; color:#6b7280; line-height:1.65; margin: 1rem 0 1.25rem;">
-Below is a simulator to help gain some intuition about gravitational lensing. Click a preset configuration or load your own source image by clicking the source panel and pasting (Ctrl+V or Cmd+V), or drag and drop an image. Change the lens position by clicking on the right panel.</p>
+<p style="font-size:0.875rem; color:#6b7280; line-height:1.65; margin: 1rem 0 0.5rem;">
+Click a preset or load your own source image by pasting (Ctrl+V / Cmd+V) or dragging an image onto the left panel. Click the right panel to move the lens.</p>
 
 <div class="demo-wrap">
-  <iframe id="lensing-iframe" src="/assets/lensing_demo/index.html" 
-          width="100%" height="800" 
+  <iframe id="lensing-iframe" src=""
+          width="100%" height="800"
           frameborder="0" style="border:none; display:block;">
   </iframe>
 </div>
+
+  </div><!-- .lens-content -->
+</details>
+
 <script>
-  var lf = document.getElementById('lensing-iframe');
-  lf.addEventListener('load', function() {
-    lf.style.height = lf.contentDocument.body.scrollHeight + 'px';
+(function() {
+  var details = document.getElementById('lens-section');
+  var content = details.querySelector('.lens-content');
+  var iframeLoaded = false;
+
+  function setHeight(h) { content.style.height = h; }
+
+  details.addEventListener('click', function(e) {
+    if (!e.target.closest('summary')) return;
+    e.preventDefault();
+
+    if (details.open) {
+      setHeight(content.scrollHeight + 'px');
+      requestAnimationFrame(function() {
+        requestAnimationFrame(function() { setHeight('0'); });
+      });
+      content.addEventListener('transitionend', function close() {
+        details.removeAttribute('open');
+        setHeight('');
+        content.removeEventListener('transitionend', close);
+      });
+    } else {
+      if (!iframeLoaded) {
+        var iframe = document.getElementById('lensing-iframe');
+        iframe.src = '/assets/lensing_demo/index.html';
+        iframeLoaded = true;
+      }
+      details.setAttribute('open', '');
+      var target = content.scrollHeight;
+      setHeight('0');
+      requestAnimationFrame(function() {
+        requestAnimationFrame(function() { setHeight(target + 'px'); });
+      });
+      content.addEventListener('transitionend', function open() {
+        setHeight('');
+        content.removeEventListener('transitionend', open);
+      });
+    }
   });
+})();
 </script>
