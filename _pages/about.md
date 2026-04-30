@@ -27,18 +27,7 @@ I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT. I work o
   display: block;
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
   transition: box-shadow 0.18s, transform 0.18s;
-  position: relative;
-  overflow: hidden;
 }
-.nav-card::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 3px;
-}
-.nav-card-research::before { background: #4aaee9; }
-.nav-card-cv::before { background: #dd72cf; }
-.nav-card-astrowiki::before { background: #e0af44; }
 .nav-card:hover {
   box-shadow: 0 4px 14px rgba(0,0,0,0.1);
   transform: translateY(-2px);
@@ -128,7 +117,7 @@ html[data-theme="dark"] details.lens-section > summary:hover .lens-heading { col
 
 <details id="lens-section" class="lens-section">
   <summary>
-    <span class="lens-heading">Gravitational lensing</span>
+    <span class="lens-heading">Learn About: Gravitational Lensing</span>
     <svg class="lens-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
       <polyline points="9 18 15 12 9 6"/>
     </svg>
@@ -237,45 +226,66 @@ Click a preset or load your own source image by pasting (Ctrl+V / Cmd+V) or drag
   </div><!-- .lens-content -->
 </details>
 
-<script>
-(function() {
-  var details = document.getElementById('lens-section');
-  var content = details.querySelector('.lens-content');
-  var iframeLoaded = false;
+<details id="dm-section" class="lens-section">
+  <summary>
+    <span class="lens-heading">Learn About: Dark Matter</span>
+    <svg class="lens-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="9 18 15 12 9 6"/>
+    </svg>
+  </summary>
+  <div class="lens-content">
 
-  function setHeight(h) { content.style.height = h; }
+<p style="font-size:0.875rem; color:#6b7280; line-height:1.65; margin: 1rem 0 0.5rem;">
+In cold dark matter (CDM), the central potential of a galaxy cluster is steep and cuspy — the brightest cluster galaxy (BCG) stays close to the cluster center. Self-interacting dark matter (SIDM) softens the core, allowing the BCG to oscillate more widely. Measuring how far off-center BCGs sit across many clusters constrains the dark matter self-interaction cross-section. Switch between models to see the effect, then press <em>Take Observation</em> to record BCG positions as a mock astronomer would.</p>
+
+<div class="demo-wrap">
+  <iframe id="dm-iframe" src=""
+          width="100%" height="480"
+          frameborder="0" style="border:none; display:block;">
+  </iframe>
+</div>
+
+  </div><!-- .lens-content -->
+</details>
+
+<script>
+function initCollapsible(detailsId, iframeId, iframeSrc) {
+  var details = document.getElementById(detailsId);
+  var content = details.querySelector('.lens-content');
+  var loaded  = false;
+
+  function setH(h) { content.style.height = h; }
 
   details.addEventListener('click', function(e) {
     if (!e.target.closest('summary')) return;
     e.preventDefault();
-
     if (details.open) {
-      setHeight(content.scrollHeight + 'px');
+      setH(content.scrollHeight + 'px');
       requestAnimationFrame(function() {
-        requestAnimationFrame(function() { setHeight('0'); });
+        requestAnimationFrame(function() { setH('0'); });
       });
       content.addEventListener('transitionend', function close() {
-        details.removeAttribute('open');
-        setHeight('');
+        details.removeAttribute('open'); setH('');
         content.removeEventListener('transitionend', close);
       });
     } else {
-      if (!iframeLoaded) {
-        var iframe = document.getElementById('lensing-iframe');
-        iframe.src = '/assets/lensing_demo/index.html';
-        iframeLoaded = true;
+      if (!loaded && iframeId) {
+        document.getElementById(iframeId).src = iframeSrc;
+        loaded = true;
       }
       details.setAttribute('open', '');
       var target = content.scrollHeight;
-      setHeight('0');
+      setH('0');
       requestAnimationFrame(function() {
-        requestAnimationFrame(function() { setHeight(target + 'px'); });
+        requestAnimationFrame(function() { setH(target + 'px'); });
       });
       content.addEventListener('transitionend', function open() {
-        setHeight('');
-        content.removeEventListener('transitionend', open);
+        setH(''); content.removeEventListener('transitionend', open);
       });
     }
   });
-})();
+}
+
+initCollapsible('lens-section', 'lensing-iframe', '/assets/lensing_demo/index.html');
+initCollapsible('dm-section',   'dm-iframe',      '/assets/dark_matter_demo/index.html');
 </script>
