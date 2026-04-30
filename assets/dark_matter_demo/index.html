@@ -46,13 +46,30 @@
     text-transform: uppercase;
   }
 
-  canvas { width: 100%; max-width: 350px; aspect-ratio: 1; border-radius: 8px; display: block; }
+  canvas { width: 100%; aspect-ratio: 1; border-radius: 8px; display: block; }
 
-  /* Model dropdown */
-  .model-select-wrap {
+  /* Controls row (below both panels) */
+  .controls-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    row-gap: 0.5rem;
+  }
+  .model-group {
+    flex: 1;
+    min-width: 260px;
     display: flex;
     align-items: center;
     gap: 0.6rem;
+  }
+  .cadence-clear {
+    flex: 1;
+    min-width: 260px;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
   }
   .select-label {
     font-size: 0.8rem;
@@ -61,7 +78,7 @@
     flex-shrink: 0;
   }
   .model-select {
-    flex: 1;
+    width: 160px;
     padding: 7px 10px;
     border: 1.5px solid #30363d;
     border-radius: 6px;
@@ -144,28 +161,29 @@
     <div class="panel-wrap">
       <div class="panel-label">BCG in potential well</div>
       <canvas id="pot-canvas" width="400" height="400"></canvas>
-      <div class="model-select-wrap">
-        <span class="select-label">Model:</span>
-        <select id="model-select" class="model-select" onchange="setModel(this.value)">
-          <option value="cdm">Cold Dark Matter</option>
-          <option value="sidm03" selected>SIDM (0.3 cm²/g)</option>
-          <option value="sidm1">SIDM (1 cm²/g)</option>
-        </select>
-      </div>
     </div>
 
     <div class="panel-wrap">
       <div class="panel-label">Mock cluster image</div>
       <canvas id="clu-canvas" width="400" height="400"></canvas>
-      <div class="freq-controls">
-        <span class="freq-label">Observation cadence:</span>
-        <button class="freq-btn" id="freq-slow" onclick="setFreq('slow')">Slow</button>
-        <button class="freq-btn active" id="freq-fast" onclick="setFreq('fast')">Fast</button>
-        <button class="obs-btn secondary" onclick="clearObservations()">Clear</button>
-        <span class="obs-count" id="obs-count">0 observations</span>
-      </div>
     </div>
 
+  </div>
+  <div class="controls-row">
+    <div class="model-group">
+      <span class="select-label">Model:</span>
+      <select id="model-select" class="model-select" onchange="setModel(this.value)">
+        <option value="cdm">Cold Dark Matter</option>
+        <option value="sidm03" selected>SIDM (0.3 cm²/g)</option>
+        <option value="sidm1">SIDM (1 cm²/g)</option>
+      </select>
+    </div>
+    <div class="cadence-clear">
+      <span class="freq-label">Observation cadence:</span>
+      <button class="freq-btn" id="freq-slow" onclick="setFreq('slow')">Slow</button>
+      <button class="freq-btn active" id="freq-fast" onclick="setFreq('fast')">Fast</button>
+      <button class="obs-btn secondary" style="margin-left:auto" onclick="clearObservations()">Clear</button>
+    </div>
   </div>
   <div class="physics-note">
     <strong style="color:#6b7280;">How does this constrain dark matter?</strong>
@@ -620,15 +638,22 @@ function drawHistogramInset(ctx, W, H) {
     ctx.restore();
   }
 
-  // Title and count labels
+  // Title
   ctx.fillStyle = 'rgba(225, 235, 255, 0.98)';
   ctx.font = 'bold 10px system-ui';
   ctx.textAlign = 'center';
   ctx.fillText('Offset Distribution', insetX + insetW/2, insetY + 14);
 
+  // N= counter top-left of plot area
+  ctx.fillStyle = 'rgba(210, 225, 250, 0.85)';
+  ctx.font = '10px system-ui';
+  ctx.textAlign = 'left';
+  ctx.fillText(`N = ${observations.length}`, graphLeft + 2, graphTop + 11);
+
   // X-axis label
   ctx.fillStyle = 'rgba(210, 225, 250, 0.95)';
   ctx.font = '10px system-ui';
+  ctx.textAlign = 'center';
   ctx.fillText('|Δx| (kpc)', graphLeft + graphW/2, graphBottom + 28);
 }
 
@@ -636,15 +661,12 @@ function drawHistogramInset(ctx, W, H) {
 
 function takeObservation() {
   observations.push({ off: x, model: currentModel });
-  const n = observations.length;
-  document.getElementById('obs-count').textContent = `${n} observation${n === 1 ? '' : 's'}`;
   obsFlash = 0.5;
 }
 
 function clearObservations() {
   observations = [];
   simTime = 0;
-  document.getElementById('obs-count').textContent = '0 observations';
 }
 
 /* ── Animation loop ──────────────────────────────────────────────────────── */
