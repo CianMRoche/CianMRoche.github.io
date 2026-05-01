@@ -37,6 +37,7 @@ $dm-link:   #58a6ff;
 /* ── Dark mode overrides ──────────────────────────────────────────── */
 
 html[data-theme="dark"] {
+  background: $dm-bg;
 
   body {
     background: $dm-bg;
@@ -233,4 +234,28 @@ html[data-theme="dark"] {
 
   .nav-card-title { color: $dm-text; }
   .nav-card-sub   { color: $dm-muted; }
+
+  // Community page
+  .community-card {
+    border-color: $dm-border;
+
+    img { background: $dm-bg-2; }
+  }
+
+  .community-role {
+    color: $dm-muted;
+    border-left-color: $dm-border;
+
+    strong { color: $dm-text; }
+  }
+
+  .community-card p { color: $dm-muted; }
+
+  .community-note {
+    background: $dm-bg-2;
+    border-color: $dm-border;
+    color: $dm-muted;
+
+    strong { color: $dm-text; }
+  }
 }
