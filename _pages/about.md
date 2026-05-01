@@ -65,34 +65,31 @@ html[data-theme="dark"] .intro-text { color: #adbac7; }
 /* Demo section cards */
 .lens-section { margin: 1.75rem 0 0; }
 details.lens-section > summary {
-  display: flex; align-items: center; gap: 0.875rem;
+  display: flex; align-items: stretch; gap: 0.875rem;
   list-style: none; cursor: pointer; padding: 0.7rem 0;
   border-bottom: 1px solid #e5e7eb;
   user-select: none; -webkit-user-select: none;
 }
 details.lens-section > summary::-webkit-details-marker { display: none; }
 .demo-preview {
-  width: 56px; height: 56px; flex-shrink: 0;
+  width: 56px; flex-shrink: 0;
   border-radius: 8px; overflow: hidden;
 }
-.demo-card-body { flex: 1; min-width: 0; }
-.demo-card-header { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.15rem; }
+.demo-card-body { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+.demo-card-header { margin-bottom: 0.15rem; }
 .lens-heading { font-size: 1.3em; font-weight: bold; line-height: 1.3; transition: color 0.15s; }
 #lens-section .lens-heading { color: var(--lens-color); }
 #dm-section   .lens-heading { color: var(--dm-color); }
-.demo-badge {
-  font-size: 0.62rem; font-weight: 700; letter-spacing: 0.06em;
-  text-transform: uppercase; padding: 2px 8px; border-radius: 999px;
-  background: var(--lens-color); color: #fff; align-self: center;
-}
-#dm-section .demo-badge { background: var(--dm-color); }
-html[data-theme="dark"] .demo-badge { color: #0d1117; }
 .demo-card-desc { font-size: 0.8rem; color: #6b7280; margin: 0; line-height: 1.5; }
 .lens-chevron {
-  width: 18px; height: 18px; color: #9ca3af;
+  width: 18px; height: 18px; color: #9ca3af; align-self: center;
   transition: transform 0.38s cubic-bezier(0.4, 0, 0.2, 1);
   flex-shrink: 0; margin-left: 0.25rem;
 }
+.section-divider {
+  border: none; border-top: 1px solid #e5e7eb; margin: 1.5rem 0 0;
+}
+html[data-theme="dark"] .section-divider { border-top-color: #30363d; }
 details.lens-section[open] > summary .lens-chevron { transform: rotate(90deg); }
 details.lens-section > summary:hover .lens-heading { color: #3b82f6; }
 .lens-content { overflow: hidden; transition: height 0.42s cubic-bezier(0.4, 0, 0.2, 1); }
@@ -136,6 +133,8 @@ html[data-theme="dark"] details.lens-section > summary:hover .lens-heading { col
   </a>
 </div>
 
+<hr class="section-divider">
+
 <details id="lens-section" class="lens-section">
   <summary>
     <div class="demo-preview">
@@ -154,9 +153,8 @@ html[data-theme="dark"] details.lens-section > summary:hover .lens-heading { col
     <div class="demo-card-body">
       <div class="demo-card-header">
         <span class="lens-heading">Strong Lensing Demo</span>
-        <span class="demo-badge">Interactive</span>
       </div>
-      <p class="demo-card-desc">Move a lens mass to warp background galaxies into Einstein rings and giant arcs</p>
+      <p class="demo-card-desc">Move a lens mass to warp background galaxies into Einstein rings and giant arcs, which can be used to contrain dark matter properties. </p>
     </div>
     <svg class="lens-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
       <polyline points="9 18 15 12 9 6"/>
@@ -271,10 +269,11 @@ Click a preset or load your own source image by pasting (Ctrl+V / Cmd+V) or drag
     <div class="demo-preview">
       <svg viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%">
         <rect width="56" height="56" fill="rgba(192,122,21,0.08)" rx="8"/>
-        <path d="M 4 14 Q 28 52 52 14" stroke="var(--dm-color)" stroke-width="1.8" opacity="0.9"/>
-        <line x1="28" y1="50" x2="28" y2="55" stroke="var(--dm-color)" stroke-width="0.9" opacity="0.4"/>
-        <circle cx="42" cy="32" r="5"   fill="var(--dm-color)" opacity="0.18"/>
-        <circle cx="42" cy="32" r="2.5" fill="var(--dm-color)" opacity="0.85"/>
+        <line x1="4"  y1="48" x2="52" y2="48" stroke="var(--dm-color)" stroke-width="0.8" opacity="0.40"/>
+        <line x1="28" y1="45" x2="28" y2="51" stroke="var(--dm-color)" stroke-width="0.9" opacity="0.45"/>
+        <path d="M 4 10 Q 28 70 52 10" stroke="var(--dm-color)" stroke-width="1.8" opacity="0.9"/>
+        <circle cx="40" cy="33" r="5"   fill="var(--dm-color)" opacity="0.18"/>
+        <circle cx="40" cy="33" r="2.5" fill="var(--dm-color)" opacity="0.85"/>
         <circle cx="6"  cy="14" r="0.7" fill="var(--dm-color)" opacity="0.35"/>
         <circle cx="48" cy="10" r="0.5" fill="var(--dm-color)" opacity="0.3"/>
         <circle cx="18" cy="8"  r="0.6" fill="var(--dm-color)" opacity="0.25"/>
@@ -283,7 +282,6 @@ Click a preset or load your own source image by pasting (Ctrl+V / Cmd+V) or drag
     <div class="demo-card-body">
       <div class="demo-card-header">
         <span class="lens-heading">Dark Matter Self-Interaction Demo</span>
-        <span class="demo-badge">Interactive</span>
       </div>
       <p class="demo-card-desc">Watch a brightest-cluster galaxy oscillate in a dark matter potential well and build a mock offset distribution to constrain σ/m.</p>
     </div>
