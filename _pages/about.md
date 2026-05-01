@@ -9,7 +9,8 @@ redirect_from:
 ---
 
 <div class="hero-wrap">
-  <p class="intro-text"><span class="lead-sentence">I'm Cian (pronounced "k-ian", he/they), a physics PhD candidate at MIT.</span><br>I work on understanding the particle nature of <span class="dm-highlight">dark matter</span> using <span class="lens-highlight">strong lensing</span> and stellar kinematics, and bridging the gap between cosmological simulations and real observations.</p>
+  <p class="intro-text"><span class="lead-sentence">I'm Cian (pronounced "k+ian"), an astrophysics PhD candidate at MIT.</span><br><br>
+  I work on understanding the particle nature of <span class="dm-highlight">dark matter</span> using <span class="lens-highlight">strong lensing</span> and stellar kinematics, and bridging the gap between cosmological simulations and real observations.</p>
 </div>
 
 <!-- You can find me in the MIT Kavli Institute for Astrophysics and Space Research, room 37-624. -->
