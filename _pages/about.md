@@ -56,6 +56,12 @@ html[data-theme="dark"] .intro-text { color: #adbac7; }
 .nav-card-title { font-weight: 600; margin-bottom: 2px; transition: color 0.18s; }
 .nav-card:hover .nav-card-title { color: var(--nav-accent); }
 .nav-card-sub { font-size: 0.8rem; color: #6b7280; }
+html[data-theme="dark"] .nav-card {
+  background: #161b22; border-color: #30363d;
+  border-left-color: var(--nav-accent); color: #e6edf3;
+}
+html[data-theme="dark"] .nav-card-sub { color: #8b949e; }
+html[data-theme="dark"] .nav-card:hover { color: #e6edf3; }
 .page__content .nav-card,
 .page__content .nav-card:hover { text-decoration: none; }
 /* Misc */
@@ -294,7 +300,9 @@ Click a preset or load your own source image by pasting (Ctrl+V / Cmd+V) or drag
   <div class="lens-content">
 
 <p style="font-size:0.875rem; color:#6b7280; line-height:1.65; margin: 1rem 0 0.5rem;">
-Dark Matter (DM) is the invisible but dominant mass component in the structures of our universe, with approximately 10 times more dark matter in our galaxy than matter we could see. The interaction properties of dark matter with itself remain largely a mystery, but looking at brightest cluster galaxies (BCGs), which are large galaxies sitting in the centers of the largest gravitationally bound structures in the universe (known as galaxy clusters), we can get some insights into these mysterious properties. Below is a simplified model of a BCG oscillating in the potential of a galaxy cluster, and how the typical distance away from the center changing with different dark matter self-interaction properties.</p>
+Dark Matter (DM) is the invisible but dominant mass component in the structures of our universe, with approximately 10 times more dark matter in our galaxy than matter we could see. <strong>The interaction properties of dark matter with itself remain largely a mystery</strong>, but looking at brightest cluster galaxies (BCGs), which are large galaxies sitting in the centers of the largest gravitationally bound structures in the universe (known as galaxy clusters), we can get some insights into these mysterious properties.<br>
+
+Below is a simplified model of a BCG oscillating in the potential of a galaxy cluster, and how the typical distance away from the cluster center changes with different dark matter self-interaction properties.</p>
 
 <div class="demo-wrap">
   <iframe id="dm-iframe" src=""
