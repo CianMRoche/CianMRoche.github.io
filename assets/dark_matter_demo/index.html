@@ -308,7 +308,8 @@ function drawPotential() {
   const canvas = document.getElementById('pot-canvas');
   const ctx = canvas.getContext('2d');
   const W = 400, H = 400;
-  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const scale = canvas.width > 0 ? canvas.width / (400 * DPR) : 1;
+  ctx.setTransform(DPR * scale, 0, 0, DPR * scale, 0, 0);
   const ml = 24, mr = 24, mt = 26, mb = 38;
   const plotW = W - ml - mr, plotH = H - mt - mb;
 
@@ -431,7 +432,8 @@ function drawCluster() {
   const canvas = document.getElementById('clu-canvas');
   const ctx = canvas.getContext('2d');
   const W = 400, H = 400;
-  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const scale = canvas.width > 0 ? canvas.width / (400 * DPR) : 1;
+  ctx.setTransform(DPR * scale, 0, 0, DPR * scale, 0, 0);
   const cx = W/2, cy = H/2;
   const KPC = W / (2 * CX_RANGE);
 
@@ -715,6 +717,23 @@ function animate(ts) {
   c.width  = Math.round(400 * DPR);
   c.height = Math.round(400 * DPR);
 });
+
+// Keep backing store in sync with CSS display size so it's crisp at any width
+function syncCanvasSizes() {
+  ['pot-canvas', 'clu-canvas'].forEach(id => {
+    const c = document.getElementById(id);
+    const w = c.clientWidth;
+    if (w > 10) {
+      const pw = Math.round(w * DPR);
+      if (c.width !== pw) { c.width = pw; c.height = pw; }
+    }
+  });
+}
+if (window.ResizeObserver) {
+  const ro = new ResizeObserver(syncCanvasSizes);
+  ['pot-canvas', 'clu-canvas'].forEach(id => ro.observe(document.getElementById(id)));
+}
+window.addEventListener('resize', syncCanvasSizes);
 
 requestAnimationFrame(animate);
 
