@@ -97,8 +97,6 @@ html[data-theme="dark"] details.lens-section > summary { border-bottom-color: #3
 html[data-theme="dark"] details.lens-section > summary:hover .lens-heading { color: #58a6ff; }
 </style>
 
-<br>
-
 <div class="nav-cards">
   <a href="https://ui.adsabs.harvard.edu/search/q=docs(library%2FIfl1bToeQtOwhIzPv6OuIw)&sort=date%20desc%2C%20bibcode%20desc&p_=0" target="_blank" class="nav-card">
     <svg class="nav-card-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -134,6 +132,8 @@ html[data-theme="dark"] details.lens-section > summary:hover .lens-heading { col
     </div>
   </a>
 </div>
+
+<br> 
 
 <hr class="section-divider">
 
