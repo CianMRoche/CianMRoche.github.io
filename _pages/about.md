@@ -300,7 +300,7 @@ Click a preset or load your own source image by pasting (Ctrl+V / Cmd+V) or drag
   <div class="lens-content">
 
 <p style="font-size:0.875rem; color:#6b7280; line-height:1.65; margin: 1rem 0 0.5rem;">
-Dark Matter (DM) is the invisible but dominant mass component in the structures of our universe, with approximately 10 times more dark matter in our galaxy than matter we could see. <strong>The interaction properties of dark matter with itself remain largely a mystery</strong>, but looking at brightest cluster galaxies (BCGs), which are large galaxies sitting in the centers of the largest gravitationally bound structures in the universe (known as galaxy clusters), we can get some insights into these mysterious properties.<br>
+Dark Matter (DM) is the invisible but dominant mass component in the structures of our universe, with approximately 10 times more dark matter in our galaxy than matter we could see. <strong>The interaction properties of dark matter with itself remain largely a mystery</strong>, but looking at brightest cluster galaxies (BCGs), which are large galaxies sitting in the centers of the largest gravitationally bound structures in the universe (known as galaxy clusters), we can get some insights into these mysterious properties.<br><br>
 
 Below is a simplified model of a BCG oscillating in the potential of a galaxy cluster, and how the typical distance away from the cluster center changes with different dark matter self-interaction properties.</p>
 
