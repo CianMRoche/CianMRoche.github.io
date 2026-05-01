@@ -307,7 +307,7 @@ Below is a simplified model of a BCG oscillating in the potential of a galaxy cl
 
 <div class="demo-wrap">
   <iframe id="dm-iframe" src=""
-          width="100%" height="720"
+          width="100%" height="900"
           frameborder="0" style="border:none; display:block; background:#0d1117;">
   </iframe>
 </div>
