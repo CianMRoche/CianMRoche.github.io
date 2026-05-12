@@ -23,7 +23,42 @@ html[data-theme="dark"] .sp-img-wrap {
 .sp-img-wrap img.img-dark { display: none; }
 html[data-theme="dark"] .sp-img-wrap img.img-light { display: none; }
 html[data-theme="dark"] .sp-img-wrap img.img-dark  { display: block; }
+
+.sp-launch {
+  display: inline-block;
+  margin-top: 0.5rem;
+  padding: 8px 18px;
+  border-radius: 6px;
+  background: #2563eb;
+  color: #ffffff !important;
+  font-size: 0.92rem;
+  letter-spacing: 0.03em;
+  text-decoration: none !important;
+  border: 1px solid #2563eb;
+  transition: filter 0.1s ease;
+}
+.sp-launch:hover { filter: brightness(1.08); }
+html[data-theme="dark"] .sp-launch {
+  background: transparent;
+  color: #7bbfcc !important;
+  border-color: #7bbfcc;
+}
+html[data-theme="dark"] .sp-launch:hover {
+  background: #7bbfcc;
+  color: #0d1117 !important;
+}
 </style>
+
+<div style="clear: both;">
+  <div>
+  <h2><span style="font-family:'Times New Roman',serif;font-style:italic;">χ</span> by eye</h2>
+    <p>A short browser game in the GeoGuessr mold for astronomers and physicists. Each round shows a model curve and a handful of noisy data points with error bars (or, on harder settings, rotating error bars or animated Gaussian sample clouds), and your job is to estimate the sigma-equivalent tension between the data and the model on a single slider. The chi² and reduced chi² update live alongside the slider so you can develop a feel for how the three quantities relate at a given dof. Five rounds, optionally timed, five difficulty levels from Easy to Impossible.</p>
+    <a class="sp-launch" href="/assets/chi_by_eye/">Launch χ by eye →</a>
+  </div>
+</div>
+
+<br clear="left"/>
+
 
 <div style="clear: both;">
   <div class="sp-img-wrap">
