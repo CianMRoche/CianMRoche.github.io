@@ -289,7 +289,11 @@ function finalizeRound(userSigma) {
   stopTimer();
   const r = game.rounds[game.roundIndex];
   game.guesses.push(userSigma);
-  const score = computeScore(userSigma, r.trueSigma, DIFFICULTIES[game.difficulty].scoreMultiplier);
+  // If the true sigma exceeds the slider's max, the user can't possibly reach
+  // it — clamp the effective truth to the slider max for scoring purposes so
+  // a guess at the high end still wins.
+  const effectiveTrue = Math.min(r.trueSigma, SIGMA_SLIDER_MAX);
+  const score = computeScore(userSigma, effectiveTrue, DIFFICULTIES[game.difficulty].scoreMultiplier);
   game.scores.push(score);
   game.totalScore += score;
   document.getElementById('score-val').textContent = String(Math.round(game.totalScore));
@@ -297,9 +301,12 @@ function finalizeRound(userSigma) {
   // Reveal mode on plot
   plot.setRevealed(true, userSigma);
 
-  // Banner
+  // Banner — show real trueSigma; flag it when it was off the slider.
+  const trueLabel = r.trueSigma > SIGMA_SLIDER_MAX
+    ? `${r.trueSigma.toFixed(2)}&sigma; <span style="font-size:11px;color:var(--muted);letter-spacing:0.04em;">(off-scale)</span>`
+    : `${r.trueSigma.toFixed(2)}&sigma;`;
   document.getElementById('rb-user').innerHTML  = `${userSigma.toFixed(2)}&sigma;`;
-  document.getElementById('rb-true').innerHTML  = `${r.trueSigma.toFixed(2)}&sigma;`;
+  document.getElementById('rb-true').innerHTML  = trueLabel;
   document.getElementById('rb-score').textContent = String(Math.round(score));
   revealBannerEl.classList.remove('hidden');
 
@@ -351,7 +358,7 @@ function showSummary() {
         </div>
         <canvas data-mini="${i}"></canvas>
         <div class="row"><span class="k">your guess</span><span>${game.guesses[i].toFixed(2)}&sigma;</span></div>
-        <div class="row"><span class="k">true</span><span>${r.trueSigma.toFixed(2)}&sigma;</span></div>
+        <div class="row"><span class="k">true</span><span>${r.trueSigma.toFixed(2)}&sigma;${r.trueSigma > SIGMA_SLIDER_MAX ? ' <span style="color:var(--muted);font-size:10px;">off-scale</span>' : ''}</span></div>
         <div class="row"><span class="k">&chi;&sup2;</span><span>${r.chi2.toFixed(2)}  (&chi;&sup2;/dof = ${r.redChi2.toFixed(2)})</span></div>
         <div class="mini-slider">
           <div class="track"></div>

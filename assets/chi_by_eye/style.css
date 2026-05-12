@@ -127,6 +127,7 @@ body {
   flex: 1;
   position: relative;
   min-height: 0;
+  padding: 20px 28px 4px;
 }
 .plot-wrap canvas {
   width: 100%;
@@ -135,8 +136,8 @@ body {
 }
 .live-readout {
   position: absolute;
-  left: 16px;
-  bottom: 12px;
+  left: 44px;
+  bottom: 16px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 11px;
   color: var(--muted);
@@ -308,23 +309,32 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   grid-template-columns: repeat(5, 1fr);
   gap: 10px;
   margin-bottom: 28px;
-  max-width: 680px;
+  max-width: 720px;
   width: 100%;
 }
 .diff-grid button {
+  --diff-color: var(--muted);
+  --diff-tint:  rgba(0,0,0,0.04);
   padding: 14px 8px;
   flex-direction: column;
   display: flex;
   align-items: center;
   gap: 4px;
-  border: 1px solid var(--hairline);
+  border: 1.5px solid var(--diff-color);
   background: var(--bg);
+  color: var(--diff-color);
+  transition: background 0.15s ease, color 0.15s ease, transform 0.08s ease;
+}
+.diff-grid button:hover {
+  background: var(--diff-tint);
+  transform: translateY(-1px);
 }
 .diff-grid button.selected {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--fg);
+  background: var(--diff-color);
+  color: var(--bg);
+  border-color: var(--diff-color);
 }
+.diff-grid button.selected .dmult { color: var(--bg); opacity: 0.85; }
 .diff-grid button .dname {
   font-weight: 500;
   font-size: 13px;
@@ -335,6 +345,17 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
+/* Per-difficulty color assignments */
+.diff-grid button[data-diff="easy"]         { --diff-color: #10b981; --diff-tint: rgba(16,185,129,0.10); }
+.diff-grid button[data-diff="intermediate"] { --diff-color: #0ea5e9; --diff-tint: rgba(14,165,233,0.10); }
+.diff-grid button[data-diff="challenging"]  { --diff-color: #f59e0b; --diff-tint: rgba(245,158,11,0.12); }
+.diff-grid button[data-diff="hard"]         { --diff-color: #ef4444; --diff-tint: rgba(239,68,68,0.10); }
+.diff-grid button[data-diff="impossible"]   { --diff-color: #a855f7; --diff-tint: rgba(168,85,247,0.10); }
+html[data-theme="dark"] .diff-grid button[data-diff="easy"]         { --diff-color: #34d399; }
+html[data-theme="dark"] .diff-grid button[data-diff="intermediate"] { --diff-color: #38bdf8; }
+html[data-theme="dark"] .diff-grid button[data-diff="challenging"]  { --diff-color: #fbbf24; }
+html[data-theme="dark"] .diff-grid button[data-diff="hard"]         { --diff-color: #f87171; }
+html[data-theme="dark"] .diff-grid button[data-diff="impossible"]   { --diff-color: #c084fc; }
 .menu .option-row {
   display: flex;
   align-items: center;
@@ -355,6 +376,16 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   font-family: inherit;
   font-variant-numeric: tabular-nums;
   text-align: right;
+}
+/* Hide native number-input spinner arrows */
+.menu .option-row input[type="number"]::-webkit-outer-spin-button,
+.menu .option-row input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.menu .option-row input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }
 .menu .start-btn {
   font-size: 16px;

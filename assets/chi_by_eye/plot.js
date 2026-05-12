@@ -409,12 +409,32 @@ export class Plot {
     const ctx = this.ctx;
     const dpr = this._dpr;
     const r = this.round;
-    ctx.fillStyle = this._style.info;
     ctx.font = `${12 * dpr}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    const txt = `N = ${r.N}    k = ${r.k}    dof = ${r.dof}${r.logY ? '    log y' : ''}`;
-    ctx.fillText(txt, R.x0 + 6 * dpr, R.y0 - 22 * dpr);
+    const baseTxt = `N = ${r.N}    k = ${r.k}    dof = ${r.dof}`;
+    const x = R.x0 + 6 * dpr;
+    const y = R.y0 - 22 * dpr;
+    ctx.fillStyle = this._style.info;
+    ctx.fillText(baseTxt, x, y);
+    if (r.logY) {
+      const tw = ctx.measureText(baseTxt).width;
+      const badgeX = x + tw + 14 * dpr;
+      const badgeText = 'log y';
+      const tw2 = ctx.measureText(badgeText).width;
+      const padH = 6 * dpr, padV = 3 * dpr;
+      const bx = badgeX - padH;
+      const by = y - padV;
+      const bw = tw2 + 2 * padH;
+      const bh = 12 * dpr + 2 * padV;
+      ctx.fillStyle = this._style.curve;
+      ctx.globalAlpha = 0.18;
+      roundedRect(ctx, bx, by, bw, bh, 4 * dpr);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = this._style.curve;
+      ctx.fillText(badgeText, badgeX, y);
+    }
   }
 
   // ---------- animation loop ----------
@@ -489,4 +509,15 @@ function gaussianSample() {
   const u = Math.random() || 1e-12;
   const v = Math.random();
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+function roundedRect(ctx, x, y, w, h, r) {
+  r = Math.min(r, w * 0.5, h * 0.5);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y,     x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x,     y + h, r);
+  ctx.arcTo(x,     y + h, x,     y,     r);
+  ctx.arcTo(x,     y,     x + w, y,     r);
+  ctx.closePath();
 }

@@ -39,7 +39,7 @@ export const DIFFICULTIES = {
     nMin: 8,
     nMax: 12,
     scoreMultiplier: 2.0,
-    logYProb: 0.45,
+    logYProb: 0.5,
     perPointRotation: false,
     sampledErrorbars: false,
   },
@@ -48,7 +48,7 @@ export const DIFFICULTIES = {
     nMin: 12,
     nMax: 20,
     scoreMultiplier: 3.0,
-    logYProb: 0.45,
+    logYProb: 0.5,
     perPointRotation: true,
     sampledErrorbars: false,
   },
@@ -57,7 +57,7 @@ export const DIFFICULTIES = {
     nMin: 12,
     nMax: 20,
     scoreMultiplier: 5.0,
-    logYProb: 0.45,
+    logYProb: 0.5,
     perPointRotation: false,
     sampledErrorbars: true,
   },
@@ -227,8 +227,11 @@ export function makeRound(difficultyKey) {
   // True noise sigma, set as a fraction of y range so points are visible.
   // For log axes, "range" is in log space and noise is multiplicative; we
   // model that as additive in log10 then exponentiated when sampling.
+  // sigmaTrueFrac sets the overall visual scale of the noise (and therefore
+  // the error bars, since err = errFactor * sigmaTrue). It does NOT affect
+  // the chi^2 statistics — those only depend on errFactor.
   const ySpan = logY ? Math.log10(yMax / yMin) : (yMax - yMin);
-  const sigmaTrueFrac = rand(0.05, 0.18);
+  const sigmaTrueFrac = rand(0.035, 0.13);
   const sigmaTrue = sigmaTrueFrac * ySpan;
 
   // Error bar relative to true sigma. Log-uniform in [0.45, 2.4] so we
@@ -281,6 +284,32 @@ export function makeRound(difficultyKey) {
 
   const labels = makeLabels();
 
+  // Expand the displayed y-range so the curve, all data points, and their
+  // ±3σ error bars / cloud samples all fit, with a 10% margin on each side
+  // so nothing presses against the axis lines.
+  let dispYMin, dispYMax;
+  const ERR_VIS = 3; // headroom in units of stated errorbar
+  if (logY) {
+    let lo = Math.log10(yMin), hi = Math.log10(yMax);
+    for (const p of points) {
+      const ly = Math.log10(p.yObs);
+      lo = Math.min(lo, ly - ERR_VIS * p.err);
+      hi = Math.max(hi, ly + ERR_VIS * p.err);
+    }
+    const pad = 0.1 * (hi - lo);
+    dispYMin = Math.pow(10, lo - pad);
+    dispYMax = Math.pow(10, hi + pad);
+  } else {
+    let lo = yMin, hi = yMax;
+    for (const p of points) {
+      lo = Math.min(lo, p.yObs - ERR_VIS * p.err);
+      hi = Math.max(hi, p.yObs + ERR_VIS * p.err);
+    }
+    const pad = 0.1 * (hi - lo);
+    dispYMin = lo - pad;
+    dispYMax = hi + pad;
+  }
+
   return {
     f,
     points,
@@ -288,7 +317,12 @@ export function makeRound(difficultyKey) {
     k,
     dof,
     logY,
-    yMin, yMax,
+    // Keep curveYMin/curveYMax for any analytics; expose dispYMin/dispYMax
+    // as yMin/yMax for plot rendering.
+    curveYMin: yMin,
+    curveYMax: yMax,
+    yMin: dispYMin,
+    yMax: dispYMax,
     sigmaTrue,
     sigmaStated,
     chi2,
