@@ -21,6 +21,21 @@ const BASE_SCORE_PER_ROUND = 1000;
 const FULL_TOL = 0.08;
 const MAX_ERR = 2.0;
 
+// Persisted preference: show per-point χ² contribution labels on the
+// in-round reveal plot. Default off; the toggle lives on the reveal banner.
+// This preference does NOT propagate to the end-of-game summary mini-plots.
+const CHI2_LABELS_PREF_KEY = 'chiByEye.showChi2Labels';
+function getChi2LabelsPref() {
+  try { return localStorage.getItem(CHI2_LABELS_PREF_KEY) === 'true'; }
+  catch { return false; }
+}
+function setChi2LabelsPref(val) {
+  try {
+    if (val) localStorage.setItem(CHI2_LABELS_PREF_KEY, 'true');
+    else     localStorage.removeItem(CHI2_LABELS_PREF_KEY);
+  } catch { /* ignore */ }
+}
+
 // ---------- game state ----------
 const State = {
   MENU: 'menu',
@@ -119,6 +134,10 @@ function buildShell() {
             <span class="k">Score</span>
             <span class="v" id="rb-score">—</span>
           </div>
+          <label class="rb-toggle" title="Annotate each data point with its (residual/σ)² → contribution">
+            <input type="checkbox" id="rb-labels-toggle">
+            <span>show &chi;&sup2; contributions</span>
+          </label>
           <button class="primary next-btn" id="rb-next">Next</button>
         </div>
       </div>
@@ -170,6 +189,12 @@ function buildShell() {
   submitBtn.addEventListener('click', onSubmit);
   document.getElementById('rb-next').addEventListener('click', onNext);
   exitLinkEl.addEventListener('click', e => { e.preventDefault(); confirmQuit(); });
+  // Per-point χ² contribution toggle on the reveal banner
+  document.getElementById('rb-labels-toggle').addEventListener('change', e => {
+    const v = !!e.target.checked;
+    setChi2LabelsPref(v);
+    plot.setChi2LabelsVisible(v);
+  });
 
   // Info popover toggle
   const infoBtn = document.getElementById('hud-info-btn');
@@ -343,6 +368,9 @@ function beginRound() {
     rotate: D.perPointRotation,
     sampledErrorbars: D.sampledErrorbars,
   });
+  // Hide χ² contribution labels during play — they only appear on reveal,
+  // and only if the user has the preference turned on.
+  plot.setChi2LabelsVisible(false);
 
   // Timer
   if (game.timed) {
@@ -391,8 +419,11 @@ function finalizeRound(userSigma) {
   document.getElementById('score-val').innerHTML =
     `${Math.round(game.totalScore).toLocaleString()} <span class="score-denom">/ ${totalMax.toLocaleString()}</span>`;
 
-  // Reveal mode on plot
+  // Reveal mode on plot — apply the user's "show χ² contributions" preference
   plot.setRevealed(true, userSigma);
+  const showLabels = getChi2LabelsPref();
+  plot.setChi2LabelsVisible(showLabels);
+  document.getElementById('rb-labels-toggle').checked = showLabels;
 
   // Banner — show real trueSigma, true χ²/χ²/dof, and round score out of max.
   const trueLabel = r.trueSigma > SIGMA_SLIDER_MAX
@@ -968,6 +999,9 @@ function endTutorial() {
   // Restore submit visibility and tear down demo state
   submitBtn.style.visibility = '';
   plot.stopAnimation();
+  // The tutorial may have turned on χ² contribution labels; reset to the
+  // user's saved preference (default off) so subsequent real games are clean.
+  plot.setChi2LabelsVisible(getChi2LabelsPref());
   game.rounds = [];
   game.roundIndex = 0;
   showMenu();

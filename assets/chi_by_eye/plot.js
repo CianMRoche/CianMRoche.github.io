@@ -329,13 +329,14 @@ export class Plot {
       const px = this._xToPx(p.x, R);
       const py = this._yToPx(p.yObs, R);
 
-      // Compute chi² contribution if revealed
+      // Compute χ² contribution if revealed.
+      // Both linear-y and log-y rounds now use linear residuals (matching the
+      // chi² computation in round.js); the only difference is how the point is
+      // *displayed*, not how its contribution is measured.
       let contrib = null;
       let pointColor = S.point;
       if (this.revealed) {
-        let resid;
-        if (r.logY) resid = Math.log10(p.yObs) - Math.log10(p.yTrue);
-        else        resid = p.yObs - p.yTrue;
+        const resid = p.yObs - p.yTrue;
         contrib = (resid / p.err) ** 2;
         pointColor = this._chi2ContribColor(contrib);
       }

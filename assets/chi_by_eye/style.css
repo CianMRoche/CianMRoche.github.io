@@ -595,6 +595,24 @@ html[data-theme="dark"] .reveal-banner { box-shadow: 0 4px 16px rgba(0,0,0,0.4);
   font-size: 14px;
   padding: 10px 22px;
 }
+.reveal-banner .rb-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  border-left: 1px solid var(--hairline);
+  padding-left: 14px;
+}
+.reveal-banner .rb-toggle input[type="checkbox"] {
+  width: 14px; height: 14px;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+.reveal-banner .rb-toggle:hover { color: var(--fg); }
 
 /* ---------- summary screen ---------- */
 .summary {
