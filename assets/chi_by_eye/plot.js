@@ -60,9 +60,15 @@ export class Plot {
     this.revealed = false;
     this._userSigma = null;
     // Rotation rates per point — random for Hard, zero otherwise.
-    this._rotRates = round.points.map(() =>
-      opts.rotate ? (Math.random() * 2 - 1) * 1.6 : 0
-    );
+    // |rate| is uniform between a min and max floor, so no bar appears
+    // stationary while none spins distractingly fast.
+    const ROT_MIN = 0.7;   // rad/s — lower bound on |rate|
+    const ROT_MAX = 1.7;   // rad/s — upper bound on |rate|
+    this._rotRates = round.points.map(() => {
+      if (!opts.rotate) return 0;
+      const mag = ROT_MIN + Math.random() * (ROT_MAX - ROT_MIN);
+      return Math.random() < 0.5 ? -mag : mag;
+    });
     this._rotations = round.points.map(() => Math.random() * Math.PI * 2);
     // Initialize cloud samples for Impossible mode.
     this._cloud = round.points.map(() => []);
@@ -133,23 +139,34 @@ export class Plot {
     const t = (y - r.yMin) / (r.yMax - r.yMin);
     return R.y1 - t * R.h;
   }
-  // Pixels-per-unit y at given y position (for converting errorbar size).
+  // Returns the pixel y positions of the upper and lower edges of an error
+  // bar centered at yWorld with linear half-width errWorld. The error is
+  // always in linear y units (a stated measurement uncertainty). On a log
+  // axis, the upper and lower pixel offsets are naturally asymmetric, with
+  // the lower bar appearing longer in pixel space (since log10(y+e) - log10(y)
+  // < log10(y) - log10(y-e) for the same linear e).
+  //
+  // For log axes, clamp the lower edge at the bottom of the displayed range
+  // (and flag it) when y - e would be ≤ 0 or below the axis floor.
   _dyToPxAt(yWorld, errWorld, R) {
     const r = this.round;
+    const upY = yWorld + errWorld;
+    const dnY = yWorld - errWorld;
     if (r.logY) {
-      // err is in log10 space (stats sampled in log space for log-y rounds)
-      const a = Math.log10(r.yMin), b = Math.log10(r.yMax);
-      // upper & lower edges in linear y
-      const yUp = Math.pow(10, Math.log10(yWorld) + errWorld);
-      const yDn = Math.pow(10, Math.log10(yWorld) - errWorld);
-      return {
-        upPx: this._yToPx(yUp, R),
-        dnPx: this._yToPx(yDn, R),
-      };
+      const upPx = this._yToPx(Math.max(r.yMin * 0.99, upY), R);
+      let dnPx, dnClipped = false;
+      if (dnY <= 0 || dnY < r.yMin) {
+        dnPx = R.y1; // bottom of axis
+        dnClipped = true;
+      } else {
+        dnPx = this._yToPx(dnY, R);
+      }
+      return { upPx, dnPx, dnClipped };
     }
     return {
-      upPx: this._yToPx(yWorld + errWorld, R),
-      dnPx: this._yToPx(yWorld - errWorld, R),
+      upPx: this._yToPx(upY, R),
+      dnPx: this._yToPx(dnY, R),
+      dnClipped: false,
     };
   }
 
@@ -166,15 +183,15 @@ export class Plot {
     this._drawAxes(R);
     this._drawCurve(R);
     this._drawData(R);
-    this._drawInfoText(R);
   }
 
   _drawAxes(R) {
     const ctx = this.ctx;
     const dpr = this._dpr;
     const S = this._style;
-    ctx.strokeStyle = S.axis;
-    ctx.lineWidth = 1 * dpr;
+    ctx.strokeStyle = S.fg;
+    ctx.lineWidth = 1.5 * dpr;
+    ctx.lineCap = 'square';
     ctx.beginPath();
     // X axis
     ctx.moveTo(R.x0, R.y1);
@@ -184,8 +201,10 @@ export class Plot {
     ctx.lineTo(R.x0, R.y1);
     ctx.stroke();
 
-    // Ticks
-    const tickLen = 5 * dpr;
+    // Ticks — darker, slightly thicker, a hair longer
+    ctx.strokeStyle = S.fg;
+    ctx.lineWidth = 1.2 * dpr;
+    const tickLen = 7 * dpr;
     ctx.beginPath();
     // x ticks (8 minor ticks evenly spaced)
     const xTicks = 8;
@@ -226,14 +245,14 @@ export class Plot {
 
     // Axis labels (variable names) — skipped in compact mode
     if (!this.compact) {
-      const fontPx = 13 * dpr;
-      ctx.fillStyle = S.muted;
-      ctx.font = `${fontPx}px -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif`;
+      const fontPx = 14 * dpr;
+      ctx.fillStyle = S.fg;
+      ctx.font = `500 ${fontPx}px -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      ctx.fillText(this.round.labels.x, (R.x0 + R.x1) / 2, R.y1 + 24 * dpr);
+      ctx.fillText(this.round.labels.x, (R.x0 + R.x1) / 2, R.y1 + 26 * dpr);
       ctx.save();
-      ctx.translate(R.x0 - 44 * dpr, (R.y0 + R.y1) / 2);
+      ctx.translate(R.x0 - 46 * dpr, (R.y0 + R.y1) / 2);
       ctx.rotate(-Math.PI / 2);
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -323,16 +342,24 @@ export class Plot {
   _drawVerticalErrorbar(px, py, p, R, color) {
     const ctx = this.ctx;
     const dpr = this._dpr;
-    const { upPx, dnPx } = this._dyToPxAt(p.yObs, p.err, R);
+    const { upPx, dnPx, dnClipped } = this._dyToPxAt(p.yObs, p.err, R);
     ctx.strokeStyle = color;
     ctx.lineWidth = 1.2 * dpr;
+    const cap = 5 * dpr;
     ctx.beginPath();
     ctx.moveTo(px, upPx);
     ctx.lineTo(px, dnPx);
-    // caps
-    const cap = 5 * dpr;
+    // upper cap
     ctx.moveTo(px - cap, upPx); ctx.lineTo(px + cap, upPx);
-    ctx.moveTo(px - cap, dnPx); ctx.lineTo(px + cap, dnPx);
+    // lower cap or downward arrow if clipped (extends below visible range)
+    if (dnClipped) {
+      // Downward open arrowhead
+      ctx.moveTo(px - cap, dnPx - cap);
+      ctx.lineTo(px,       dnPx);
+      ctx.lineTo(px + cap, dnPx - cap);
+    } else {
+      ctx.moveTo(px - cap, dnPx); ctx.lineTo(px + cap, dnPx);
+    }
     ctx.stroke();
   }
 
@@ -388,12 +415,11 @@ export class Plot {
         if (age < 0 || age > 1) continue;
         // Fade in then out: alpha curve peaks at age=0.5
         const alpha = Math.sin(age * Math.PI) * 0.55;
-        let yy;
-        if (r.logY) {
-          yy = Math.pow(10, Math.log10(p.yObs) + s.dy);
-        } else {
-          yy = p.yObs + s.dy;
-        }
+        // s.dy is in linear y units (drawn from N(0, p.err) at sample time).
+        const yy = p.yObs + s.dy;
+        // For log y axes, skip samples that fell on or below 0 since they
+        // can't be mapped to a log y position.
+        if (r.logY && yy <= 0) continue;
         const py = this._yToPx(yy, R);
         ctx.globalAlpha = alpha;
         ctx.beginPath();
@@ -404,38 +430,7 @@ export class Plot {
     ctx.globalAlpha = 1;
   }
 
-  _drawInfoText(R) {
-    if (this.compact) return; // mini-plots: skip header info
-    const ctx = this.ctx;
-    const dpr = this._dpr;
-    const r = this.round;
-    ctx.font = `${12 * dpr}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    const baseTxt = `N = ${r.N}    k = ${r.k}    dof = ${r.dof}`;
-    const x = R.x0 + 6 * dpr;
-    const y = R.y0 - 22 * dpr;
-    ctx.fillStyle = this._style.info;
-    ctx.fillText(baseTxt, x, y);
-    if (r.logY) {
-      const tw = ctx.measureText(baseTxt).width;
-      const badgeX = x + tw + 14 * dpr;
-      const badgeText = 'log y';
-      const tw2 = ctx.measureText(badgeText).width;
-      const padH = 6 * dpr, padV = 3 * dpr;
-      const bx = badgeX - padH;
-      const by = y - padV;
-      const bw = tw2 + 2 * padH;
-      const bh = 12 * dpr + 2 * padV;
-      ctx.fillStyle = this._style.curve;
-      ctx.globalAlpha = 0.18;
-      roundedRect(ctx, bx, by, bw, bh, 4 * dpr);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = this._style.curve;
-      ctx.fillText(badgeText, badgeX, y);
-    }
-  }
+  // (info text now lives in DOM HUD overlays managed by main.js)
 
   // ---------- animation loop ----------
   startAnimation() {

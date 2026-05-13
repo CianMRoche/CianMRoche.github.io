@@ -17,9 +17,9 @@ const SIGMA_SLIDER_STEP = 0.01;
 const SIGMA_TICK_MARKS = [0, 1, 2, 3, 4, 5, 6, 7];
 const BASE_SCORE_PER_ROUND = 1000;
 // Scoring: full points if guess is within FULL_TOL sigma of truth; falls
-// linearly to zero at MAX_ERR sigma.
-const FULL_TOL = 0.15;
-const MAX_ERR = 3.0;
+// to zero at MAX_ERR sigma with a quadratic curve.
+const FULL_TOL = 0.08;
+const MAX_ERR = 2.0;
 
 // ---------- game state ----------
 const State = {
@@ -44,7 +44,7 @@ const game = {
 };
 
 // ---------- DOM refs (assigned in init) ----------
-let app, menuEl, topbarEl, stageEl, plotWrapEl, canvasEl, readoutEl,
+let app, menuEl, topbarEl, stageEl, plotWrapEl, canvasEl, hudTlEl, hudTrEl,
     controlsEl, sliderEl, sliderValEl, submitBtn, revealBannerEl,
     summaryEl, exitLinkEl, plot;
 
@@ -77,18 +77,43 @@ function buildShell() {
     <div class="stage" id="stage">
       <div class="plot-wrap" id="plot-wrap">
         <canvas id="plot-canvas"></canvas>
-        <div class="live-readout hidden" id="readout">
-          <div class="lr-row"><span class="lr-key">&chi;&sup2;</span><span class="lr-val" id="readout-chi">—</span></div>
-          <div class="lr-row"><span class="lr-key">&chi;&sup2;/dof</span><span class="lr-val" id="readout-red">—</span></div>
+        <div class="plot-hud plot-hud-tl hidden" id="hud-tl">
+          <span class="hud-item"><span class="hud-k">N</span><span class="hud-v" id="hud-N">—</span></span>
+          <span class="hud-item"><span class="hud-k">k</span><span class="hud-v" id="hud-k">—</span></span>
+          <span class="hud-item"><span class="hud-k">dof</span><span class="hud-v" id="hud-dof">—</span></span>
+          <span class="hud-badge hidden" id="hud-logy">log y</span>
+          <button class="hud-info" id="hud-info-btn" aria-label="Symbol legend">i</button>
+        </div>
+        <div class="plot-hud plot-hud-tr hidden" id="hud-tr">
+          <span class="hud-sigma" id="readout-sigma">1.00&sigma;</span>
+          <span class="hud-arrow-double">&hArr;</span>
+          <span class="hud-item"><span class="hud-k">&chi;&sup2;</span><span class="hud-v" id="readout-chi">—</span></span>
+          <span class="hud-item"><span class="hud-k">&chi;&sup2;/dof</span><span class="hud-v" id="readout-red">—</span></span>
+        </div>
+        <div class="hud-popover hidden" id="hud-popover">
+          <div class="popover-row"><span class="popover-k">N</span><span class="popover-v">number of data points</span></div>
+          <div class="popover-row"><span class="popover-k">k</span><span class="popover-v">free model parameters</span></div>
+          <div class="popover-row"><span class="popover-k">dof</span><span class="popover-v">degrees of freedom (N &minus; k)</span></div>
+          <div class="popover-row"><span class="popover-k">&chi;&sup2;</span><span class="popover-v">sum<sub>i</sub> (r<sub>i</sub> / &sigma;<sub>i</sub>)&sup2;, given your slider &sigma;</span></div>
+          <div class="popover-row"><span class="popover-k">&chi;&sup2;/dof</span><span class="popover-v">reduced &chi;&sup2;; &asymp; 1 for a good fit</span></div>
+          <div class="popover-row"><span class="popover-k">&sigma;</span><span class="popover-v">two-sided tension equivalent of the &chi;&sup2; p-value</span></div>
         </div>
         <div class="reveal-banner hidden" id="reveal-banner">
-          <div class="pair">
+          <div class="pair primary">
             <span class="k">Your guess</span>
             <span class="v" id="rb-user">—</span>
           </div>
-          <div class="pair">
-            <span class="k">True</span>
+          <div class="pair primary">
+            <span class="k">Truth</span>
             <span class="v" id="rb-true">—</span>
+          </div>
+          <div class="pair secondary">
+            <span class="k">True &chi;&sup2;</span>
+            <span class="v" id="rb-chi2">—</span>
+          </div>
+          <div class="pair secondary">
+            <span class="k">True &chi;&sup2;/dof</span>
+            <span class="v" id="rb-red">—</span>
           </div>
           <div class="pair score">
             <span class="k">Score</span>
@@ -99,7 +124,7 @@ function buildShell() {
       </div>
 
       <div class="controls hidden" id="controls">
-        <div class="label">&sigma; tension</div>
+        <div class="label">tension</div>
         <div class="slider-with-ticks">
           <input type="range" class="sigma" id="sigma-slider"
                  min="0" max="${SIGMA_SLIDER_MAX}" step="${SIGMA_SLIDER_STEP}" value="1">
@@ -123,7 +148,8 @@ function buildShell() {
   stageEl = document.getElementById('stage');
   plotWrapEl = document.getElementById('plot-wrap');
   canvasEl = document.getElementById('plot-canvas');
-  readoutEl = document.getElementById('readout');
+  hudTlEl = document.getElementById('hud-tl');
+  hudTrEl = document.getElementById('hud-tr');
   controlsEl = document.getElementById('controls');
   sliderEl = document.getElementById('sigma-slider');
   sliderValEl = document.getElementById('sigma-val');
@@ -145,6 +171,19 @@ function buildShell() {
   document.getElementById('rb-next').addEventListener('click', onNext);
   exitLinkEl.addEventListener('click', e => { e.preventDefault(); confirmQuit(); });
 
+  // Info popover toggle
+  const infoBtn = document.getElementById('hud-info-btn');
+  const popoverEl = document.getElementById('hud-popover');
+  infoBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    popoverEl.classList.toggle('hidden');
+  });
+  document.addEventListener('click', (e) => {
+    if (!popoverEl.contains(e.target) && e.target !== infoBtn) {
+      popoverEl.classList.add('hidden');
+    }
+  });
+
   // Keyboard: Enter to submit / advance
   document.addEventListener('keydown', onKeyDown);
 
@@ -152,13 +191,50 @@ function buildShell() {
   attachMenuHandlers();
 }
 
+// Per-difficulty feature list rendered on the difficulty cards.
+// First line is the score multiplier; subsequent lines describe what changes
+// from the previous tier (using "all from X" inheritance language to keep
+// the cards compact).
+const DIFFICULTY_FEATURES = {
+  easy: [
+    '5–8 data points',
+    'linear y axis',
+    'uniform error bars',
+  ],
+  intermediate: [
+    'all from Easy',
+    '7–12 data points',
+  ],
+  challenging: [
+    'all from Intermediate',
+    'log y axis sometimes',
+    'variable bar sizes',
+  ],
+  hard: [
+    'all from Challenging',
+    '12–20 data points',
+    'error bars rotated',
+  ],
+  impossible: [
+    'all from Challenging',
+    '12–20 data points',
+    'no bars — sample clouds',
+  ],
+};
+
 function menuMarkup() {
   const diffEntries = Object.entries(DIFFICULTIES);
-  const diffBtns = diffEntries.map(([key, d]) =>
-    `<button data-diff="${key}" class="${key === 'intermediate' ? 'selected' : ''}">
-       <span class="dname">${d.name}</span>
-       <span class="dmult">×${d.scoreMultiplier.toFixed(1)}</span>
-     </button>`).join('');
+  const diffBtns = diffEntries.map(([key, d]) => {
+    const features = DIFFICULTY_FEATURES[key] || [];
+    const bullets = features.map(f => `<li>${f}</li>`).join('');
+    return `<div class="diff-cell" data-diff="${key}">
+       <button data-diff="${key}" class="${key === 'intermediate' ? 'selected' : ''}">
+         <span class="dname">${d.name}</span>
+         <span class="dmult">&times;${d.scoreMultiplier.toFixed(1)} score</span>
+       </button>
+       <ul class="dfeatures">${bullets}</ul>
+     </div>`;
+  }).join('');
   return `
     <h1><span class="chi">&chi;</span> by eye</h1>
     <p class="tagline">
@@ -214,7 +290,8 @@ function showMenu() {
   game.state = State.MENU;
   topbarEl.classList.add('hidden');
   controlsEl.classList.add('hidden');
-  readoutEl.classList.add('hidden');
+  hudTlEl.classList.add('hidden');
+  hudTrEl.classList.add('hidden');
   revealBannerEl.classList.add('hidden');
   summaryEl.classList.add('hidden');
   menuEl.classList.remove('hidden');
@@ -227,7 +304,8 @@ function startGame() {
   game.scores = [];
   game.totalScore = 0;
   document.getElementById('diff-name').textContent = DIFFICULTIES[game.difficulty].name;
-  document.getElementById('score-val').textContent = '0';
+  // running score shown as X / Y; Y grows after each round
+  document.getElementById('score-val').innerHTML = '0 <span class="score-denom">/ 0</span>';
   document.getElementById('timer').classList.toggle('hidden', !game.timed);
   menuEl.classList.add('hidden');
   summaryEl.classList.add('hidden');
@@ -239,11 +317,18 @@ function beginRound() {
   game.state = State.ROUND;
   document.getElementById('round-num').textContent = String(game.roundIndex + 1);
   controlsEl.classList.remove('hidden');
-  readoutEl.classList.remove('hidden');
+  hudTlEl.classList.remove('hidden');
+  hudTrEl.classList.remove('hidden');
   revealBannerEl.classList.add('hidden');
 
   const r = makeRound(game.difficulty);
   game.rounds.push(r);
+
+  // Populate top-left HUD
+  document.getElementById('hud-N').textContent = String(r.N);
+  document.getElementById('hud-k').textContent = String(r.k);
+  document.getElementById('hud-dof').textContent = String(r.dof);
+  document.getElementById('hud-logy').classList.toggle('hidden', !r.logY);
 
   // Reset slider to a centered value (1.0σ feels neutral)
   sliderEl.value = '1.0';
@@ -271,8 +356,10 @@ function updateSliderDisplay() {
   if (!r) return;
   const chi2 = sigmaToChi2(sigma, r.dof);
   const red = chi2 / r.dof;
+  // top-right HUD: σ value matches slider so connection is obvious
+  document.getElementById('readout-sigma').innerHTML = `${sigma.toFixed(2)}&sigma;`;
   document.getElementById('readout-chi').textContent = chi2.toFixed(2);
-  document.getElementById('readout-red').textContent = red.toFixed(3);
+  document.getElementById('readout-red').textContent = red.toFixed(2);
 }
 
 function onSliderInput() {
@@ -293,21 +380,28 @@ function finalizeRound(userSigma) {
   // it — clamp the effective truth to the slider max for scoring purposes so
   // a guess at the high end still wins.
   const effectiveTrue = Math.min(r.trueSigma, SIGMA_SLIDER_MAX);
-  const score = computeScore(userSigma, effectiveTrue, DIFFICULTIES[game.difficulty].scoreMultiplier);
+  const mult = DIFFICULTIES[game.difficulty].scoreMultiplier;
+  const score = computeScore(userSigma, effectiveTrue, mult);
+  const roundMax = BASE_SCORE_PER_ROUND * mult;
   game.scores.push(score);
   game.totalScore += score;
-  document.getElementById('score-val').textContent = String(Math.round(game.totalScore));
+  const totalMax = roundMax * (game.roundIndex + 1);
+  document.getElementById('score-val').innerHTML =
+    `${Math.round(game.totalScore).toLocaleString()} <span class="score-denom">/ ${totalMax.toLocaleString()}</span>`;
 
   // Reveal mode on plot
   plot.setRevealed(true, userSigma);
 
-  // Banner — show real trueSigma; flag it when it was off the slider.
+  // Banner — show real trueSigma, true χ²/χ²/dof, and round score out of max.
   const trueLabel = r.trueSigma > SIGMA_SLIDER_MAX
-    ? `${r.trueSigma.toFixed(2)}&sigma; <span style="font-size:11px;color:var(--muted);letter-spacing:0.04em;">(off-scale)</span>`
+    ? `${r.trueSigma.toFixed(2)}&sigma; <span class="off-scale">(off-scale)</span>`
     : `${r.trueSigma.toFixed(2)}&sigma;`;
   document.getElementById('rb-user').innerHTML  = `${userSigma.toFixed(2)}&sigma;`;
   document.getElementById('rb-true').innerHTML  = trueLabel;
-  document.getElementById('rb-score').textContent = String(Math.round(score));
+  document.getElementById('rb-chi2').textContent = r.chi2.toFixed(2);
+  document.getElementById('rb-red').textContent  = r.redChi2.toFixed(2);
+  document.getElementById('rb-score').innerHTML  =
+    `${Math.round(score).toLocaleString()} <span class="score-denom">/ ${Math.round(roundMax).toLocaleString()}</span>`;
   revealBannerEl.classList.remove('hidden');
 
   sliderEl.disabled = true;
@@ -339,13 +433,24 @@ function showSummary() {
   stopTimer();
   game.state = State.SUMMARY;
   controlsEl.classList.add('hidden');
-  readoutEl.classList.add('hidden');
+  hudTlEl.classList.add('hidden');
+  hudTrEl.classList.add('hidden');
   revealBannerEl.classList.add('hidden');
   plot.stopAnimation();
 
   const maxPerRound = BASE_SCORE_PER_ROUND * DIFFICULTIES[game.difficulty].scoreMultiplier;
   const maxTotal = maxPerRound * ROUNDS_PER_GAME;
   const total = Math.round(game.totalScore);
+  // Award a crown for >90% of the maximum possible.
+  const earnedCrown = total >= 0.9 * maxTotal;
+  const crownSvg = earnedCrown ? `
+    <svg class="crown" viewBox="0 0 24 24" width="28" height="28" aria-label="High score" role="img">
+      <path d="M3 18 L3 8.5 L7.5 13 L12 5 L16.5 13 L21 8.5 L21 18 Z" fill="currentColor"/>
+      <rect x="3" y="18" width="18" height="2.4" fill="currentColor"/>
+      <circle cx="3"  cy="7"   r="1.2" fill="currentColor"/>
+      <circle cx="12" cy="3.7" r="1.3" fill="currentColor"/>
+      <circle cx="21" cy="7"   r="1.2" fill="currentColor"/>
+    </svg>` : '';
 
   let panels = '';
   for (let i = 0; i < game.rounds.length; i++) {
@@ -373,7 +478,7 @@ function showSummary() {
   summaryEl.innerHTML = `
     <div class="top">
       <h2>Game complete · ${DIFFICULTIES[game.difficulty].name}</h2>
-      <div class="total">${total.toLocaleString()}<span class="denom"> / ${maxTotal.toLocaleString()}</span></div>
+      <div class="total">${crownSvg}<span class="total-num">${total.toLocaleString()}</span><span class="denom"> / ${maxTotal.toLocaleString()}</span></div>
     </div>
     <div class="grid">${panels}</div>
     <div class="actions">

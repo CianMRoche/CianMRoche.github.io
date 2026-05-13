@@ -24,6 +24,8 @@ export const DIFFICULTIES = {
     logYProb: 0.0,
     perPointRotation: false,
     sampledErrorbars: false,
+    // log-normal spread of per-point error bar size (0 = uniform per round).
+    errSizeSpread: 0,
   },
   intermediate: {
     name: 'Intermediate',
@@ -33,6 +35,7 @@ export const DIFFICULTIES = {
     logYProb: 0.0,
     perPointRotation: false,
     sampledErrorbars: false,
+    errSizeSpread: 0,
   },
   challenging: {
     name: 'Challenging',
@@ -42,6 +45,7 @@ export const DIFFICULTIES = {
     logYProb: 0.5,
     perPointRotation: false,
     sampledErrorbars: false,
+    errSizeSpread: 0.35,
   },
   hard: {
     name: 'Hard',
@@ -51,6 +55,7 @@ export const DIFFICULTIES = {
     logYProb: 0.5,
     perPointRotation: true,
     sampledErrorbars: false,
+    errSizeSpread: 0.45,
   },
   impossible: {
     name: 'Impossible',
@@ -60,6 +65,7 @@ export const DIFFICULTIES = {
     logYProb: 0.5,
     perPointRotation: false,
     sampledErrorbars: true,
+    errSizeSpread: 0.45,
   },
 };
 
@@ -224,60 +230,59 @@ export function makeRound(difficultyKey) {
   const k = randInt(1, kMax);
   const dof = N - k;
 
-  // True noise sigma, set as a fraction of y range so points are visible.
-  // For log axes, "range" is in log space and noise is multiplicative; we
-  // model that as additive in log10 then exponentiated when sampling.
-  // sigmaTrueFrac sets the overall visual scale of the noise (and therefore
-  // the error bars, since err = errFactor * sigmaTrue). It does NOT affect
-  // the chi^2 statistics — those only depend on errFactor.
+  // Noise and error bars are ALWAYS in linear y units. For log-y rounds we
+  // scale each point's σ as a fraction of y_true so the bars stay sensibly
+  // sized across orders of magnitude. Because both σ_true and σ_stated scale
+  // together, the chi² distribution depends only on errFactor — independent
+  // of the per-point variation introduced by errSizeSpread.
+  //
+  //   linear y:  σ_true_i = sigmaTrueFrac * ySpan        * sizeFactor_i
+  //   log    y:  σ_true_i = sigmaTrueFrac * y_true_i     * sizeFactor_i
+  //              (i.e. for log y, sigmaTrueFrac is a fractional uncertainty)
+  let sigmaTrueFrac;
+  if (logY) {
+    // For log y this is a fractional uncertainty (per point: σ_i = frac * y_i).
+    // We want it large enough that the asymmetric appearance on the log axis
+    // is visible (a 20–40% fractional error gives ~25–70% asymmetry between
+    // the upper and lower bar lengths in log space).
+    sigmaTrueFrac = rand(0.05, 0.18);
+  } else {
+    sigmaTrueFrac = rand(0.035, 0.13);
+  }
   const ySpan = logY ? Math.log10(yMax / yMin) : (yMax - yMin);
-  const sigmaTrueFrac = rand(0.035, 0.13);
-  const sigmaTrue = sigmaTrueFrac * ySpan;
 
-  // Error bar relative to true sigma. Log-uniform in [0.45, 2.4] so we
-  // get a mix of "fits too well" and "obviously bad fit" rounds.
+  // errFactor: log-uniform in [0.45, 2.4] for a mix of tight and tense fits.
   const errFactor = Math.exp(rand(Math.log(0.45), Math.log(2.4)));
-  const sigmaStated = errFactor * sigmaTrue;
 
-  // Sample points along x.
   const points = [];
-  // Slightly inset x so points don't sit on the axis edges.
   const xPad = 0.04;
+  const spread = D.errSizeSpread || 0;
   for (let i = 0; i < N; i++) {
-    // Quasi-uniform with small jitter
     const x = xPad + (1 - 2 * xPad) * ((i + 0.5 + 0.4 * (Math.random() - 0.5)) / N);
-    let yTrue, yObs;
+    const sizeFactor = spread > 0 ? Math.exp(spread * gaussian()) : 1;
+    const yTrue = f(x);
+    const sigmaScale = logY ? yTrue : ySpan;
+    const sigmaTrue_i = sigmaTrueFrac * sigmaScale * sizeFactor;
+    const err = errFactor * sigmaTrue_i;
+    let yObs = yTrue + sigmaTrue_i * gaussian();
+    // For log y, if the realized noise puts yObs <= 0 (rare), regenerate.
     if (logY) {
-      const yt = f(x);
-      yTrue = yt;
-      // additive log-space noise
-      const logY0 = Math.log10(yt);
-      const logYObs = logY0 + sigmaTrue * gaussian();
-      yObs = Math.pow(10, logYObs);
-    } else {
-      yTrue = f(x);
-      yObs = yTrue + sigmaTrue * gaussian();
+      let attempts = 0;
+      while (yObs <= 0 && attempts < 8) {
+        yObs = yTrue + sigmaTrue_i * gaussian();
+        attempts++;
+      }
+      if (yObs <= 0) yObs = yTrue * 0.05; // hard fallback
     }
-    // Per-point error bar size (same across points for now — plan says
-    // "easy: all error bars same size", and we don't deviate from that
-    // at higher difficulties because rotation / sampling is what makes
-    // them harder).
-    const err = sigmaStated;
-    // Hard mode: random rotation rate (radians/sec); 0 for other modes.
-    const rotRate = 0; // assigned by the renderer per difficulty in main
-    points.push({ x, yTrue, yObs, err, rotRate });
+    points.push({ x, yTrue, yObs, err, rotRate: 0 });
   }
 
-  // Compute true chi^2 (in linear space for linear y, in log10 space for
-  // log y — same space the noise was generated in).
+  // chi² is always in linear residual / linear err — same convention regardless
+  // of whether the axis is linear or log. (Linear-space residuals are what a
+  // detector reports; the axis is just a display choice.)
   let chi2 = 0;
   for (const p of points) {
-    let residual;
-    if (logY) {
-      residual = Math.log10(p.yObs) - Math.log10(p.yTrue);
-    } else {
-      residual = p.yObs - p.yTrue;
-    }
+    const residual = p.yObs - p.yTrue;
     chi2 += (residual / p.err) ** 2;
   }
   const trueSigma = chi2ToSigma(chi2, dof);
@@ -285,20 +290,28 @@ export function makeRound(difficultyKey) {
   const labels = makeLabels();
 
   // Expand the displayed y-range so the curve, all data points, and their
-  // ±3σ error bars / cloud samples all fit, with a 10% margin on each side
-  // so nothing presses against the axis lines.
+  // ±3σ error bars / cloud samples all fit, with a 10% margin on each side.
+  // err is always in linear units; the displayed range is computed in linear
+  // and then (for log y) converted to log when rendering.
   let dispYMin, dispYMax;
-  const ERR_VIS = 3; // headroom in units of stated errorbar
+  const ERR_VIS = 3;
   if (logY) {
-    let lo = Math.log10(yMin), hi = Math.log10(yMax);
+    // Work in log space so the margin is symmetric on the axis.
+    let logLo = Math.log10(yMin);
+    let logHi = Math.log10(yMax);
     for (const p of points) {
-      const ly = Math.log10(p.yObs);
-      lo = Math.min(lo, ly - ERR_VIS * p.err);
-      hi = Math.max(hi, ly + ERR_VIS * p.err);
+      const up = p.yObs + ERR_VIS * p.err;
+      const dn = p.yObs - ERR_VIS * p.err;
+      logHi = Math.max(logHi, Math.log10(Math.max(1e-12, up)));
+      // If dn <= 0 the error bar extends below 0; allow the axis to go a bit
+      // below the smallest positive y we'd otherwise need.
+      const dnFloor = dn > 0 ? Math.log10(dn)
+                              : Math.log10(p.yObs) - 0.6; // ~0.4× yObs floor
+      logLo = Math.min(logLo, dnFloor);
     }
-    const pad = 0.1 * (hi - lo);
-    dispYMin = Math.pow(10, lo - pad);
-    dispYMax = Math.pow(10, hi + pad);
+    const pad = 0.1 * (logHi - logLo);
+    dispYMin = Math.pow(10, logLo - pad);
+    dispYMax = Math.pow(10, logHi + pad);
   } else {
     let lo = yMin, hi = yMax;
     for (const p of points) {
@@ -323,8 +336,9 @@ export function makeRound(difficultyKey) {
     curveYMax: yMax,
     yMin: dispYMin,
     yMax: dispYMax,
-    sigmaTrue,
-    sigmaStated,
+    // Bookkeeping (per-round scalar) — useful for debug / future analytics.
+    sigmaTrueFrac,
+    errFactor,
     chi2,
     redChi2: chi2 / dof,
     trueSigma,
