@@ -138,8 +138,13 @@ function buildShell() {
             <input type="checkbox" id="rb-labels-toggle">
             <span>show &chi;&sup2; contributions</span>
           </label>
+          <button class="rb-hide" id="rb-hide" type="button" title="Hide to see the plot">Hide</button>
           <button class="primary next-btn" id="rb-next">Next</button>
         </div>
+        <button class="reveal-restore hidden" id="reveal-restore" type="button" title="Show round details">
+          <span>Round details</span>
+          <span class="restore-caret">&#x25B2;</span>
+        </button>
       </div>
 
       <div class="controls hidden" id="controls">
@@ -195,6 +200,9 @@ function buildShell() {
     setChi2LabelsPref(v);
     plot.setChi2LabelsVisible(v);
   });
+  // Hide / restore the reveal banner so the player can inspect the plot
+  document.getElementById('rb-hide').addEventListener('click', hideReveal);
+  document.getElementById('reveal-restore').addEventListener('click', showReveal);
 
   // Info popover toggle
   const infoBtn = document.getElementById('hud-info-btn');
@@ -320,6 +328,7 @@ function showMenu() {
   hudTlEl.classList.add('hidden');
   hudTrEl.classList.add('hidden');
   revealBannerEl.classList.add('hidden');
+  document.getElementById('reveal-restore').classList.add('hidden');
   summaryEl.classList.add('hidden');
   menuEl.classList.remove('hidden');
 }
@@ -444,12 +453,27 @@ function finalizeRound(userSigma) {
 
 function onNext() {
   if (game.state !== State.REVEAL) return;
+  // Make sure both reveal banner and the restore-button are tidied up before
+  // the next round renders.
+  revealBannerEl.classList.add('hidden');
+  document.getElementById('reveal-restore').classList.add('hidden');
   game.roundIndex++;
   if (game.roundIndex >= ROUNDS_PER_GAME) {
     showSummary();
   } else {
     beginRound();
   }
+}
+
+function hideReveal() {
+  if (game.state !== State.REVEAL) return;
+  revealBannerEl.classList.add('hidden');
+  document.getElementById('reveal-restore').classList.remove('hidden');
+}
+function showReveal() {
+  if (game.state !== State.REVEAL) return;
+  revealBannerEl.classList.remove('hidden');
+  document.getElementById('reveal-restore').classList.add('hidden');
 }
 
 function computeScore(userSigma, trueSigma, mult) {
@@ -469,6 +493,7 @@ function showSummary() {
   hudTlEl.classList.add('hidden');
   hudTrEl.classList.add('hidden');
   revealBannerEl.classList.add('hidden');
+  document.getElementById('reveal-restore').classList.add('hidden');
   plot.stopAnimation();
 
   const maxPerRound = BASE_SCORE_PER_ROUND * DIFFICULTIES[game.difficulty].scoreMultiplier;

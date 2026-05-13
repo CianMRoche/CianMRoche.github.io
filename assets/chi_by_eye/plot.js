@@ -47,12 +47,24 @@ export class Plot {
 
     this._onResize = () => this._resize();
     window.addEventListener('resize', this._onResize);
+    // Also observe the canvas itself for size changes that DON'T involve a
+    // window resize — e.g. state transitions that hide/show the controls bar
+    // or topbar, the reveal banner toggling, etc. Without this, the canvas
+    // drawing buffer stays at the size from the last window resize while CSS
+    // stretches it to fit the new layout, distorting text that's been drawn
+    // into it (the bug where in-plot labels look horizontally elongated at
+    // certain aspect ratios).
+    if (typeof ResizeObserver !== 'undefined') {
+      this._resizeObserver = new ResizeObserver(() => this._resize());
+      this._resizeObserver.observe(this.canvas);
+    }
     this._resize();
   }
 
   destroy() {
     this.stopAnimation();
     window.removeEventListener('resize', this._onResize);
+    if (this._resizeObserver) this._resizeObserver.disconnect();
   }
 
   setRound(round, opts = {}) {
