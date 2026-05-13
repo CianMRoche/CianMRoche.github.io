@@ -886,3 +886,151 @@ html[data-theme="dark"] .tutorial-tooltip {
 
 /* ---------- small util ---------- */
 .hidden { display: none !important; }
+
+/* ============================================================ */
+/*  Responsive: portrait / narrow viewports (phones)             */
+/* ============================================================ */
+@media (max-aspect-ratio: 1/1), (max-width: 720px) {
+
+  /* ---- topbar: shrink + allow wrapping ---- */
+  .topbar {
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    padding: 10px 14px;
+  }
+  .topbar .left, .topbar .right {
+    gap: 10px 14px;
+    flex-wrap: wrap;
+  }
+  .topbar .meta { font-size: 11px; letter-spacing: 0.03em; }
+  .topbar .title { font-size: 14px; }
+  .topbar a.exit { padding: 4px 10px; font-size: 10.5px; }
+
+  /* ---- plot wrap padding tighter so plot uses more room ---- */
+  .plot-wrap { padding: 12px 12px 4px; }
+
+  /* ---- HUD overlays: smaller, tighter, allow wrap ---- */
+  .plot-hud {
+    font-size: 11px;
+    gap: 8px;
+    top: 18px;
+    flex-wrap: wrap;
+  }
+  .plot-hud-tl { left: 22px; }
+  .plot-hud-tr { right: 18px; }
+  .plot-hud .hud-k { font-size: 9.5px; }
+  .plot-hud .hud-sigma { font-size: 12.5px; }
+  .plot-hud .hud-info { width: 16px; height: 16px; font-size: 10.5px; }
+  .hud-popover {
+    left: 22px;
+    right: 22px;
+    min-width: 0;
+    max-width: none;
+  }
+
+  /* ---- live-readout reveal banner: stack everything vertically ---- */
+  .reveal-banner {
+    left: 8px;
+    right: 8px;
+    transform: none;
+    bottom: auto;
+    top: 50%;
+    margin-top: -1px;
+    transform: translateY(-50%);
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 14px 16px;
+    max-width: none;
+  }
+  .reveal-banner .pair { flex-direction: row; justify-content: space-between; }
+  .reveal-banner .pair .v { font-size: 17px; }
+  .reveal-banner .pair.secondary .v { font-size: 14px; }
+  .reveal-banner .rb-toggle {
+    border-left: none;
+    border-top: 1px solid var(--hairline);
+    padding-left: 0;
+    padding-top: 10px;
+    margin-top: 4px;
+    justify-content: center;
+  }
+  .reveal-banner .next-btn { width: 100%; padding: 12px; }
+
+  /* ---- controls: stack the σ value, slider, and submit button ---- */
+  .controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 12px 16px 20px;
+  }
+  /* Top row: TENSION label inline with σ value */
+  .controls .label {
+    min-width: 0;
+    flex: 0 0 auto;
+    align-self: center;
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+  }
+  .controls .label::after { content: ":"; opacity: 0.6; margin-left: 2px; }
+  .controls .value {
+    text-align: center;
+    font-size: 26px;
+    min-width: 0;
+    order: -1;          /* show σ value above the slider */
+    align-self: center;
+  }
+  /* Hide the bare "tension" label on portrait — the big σ value carries it. */
+  .controls .label { display: none; }
+  .controls .slider-with-ticks { width: 100%; }
+  .controls input[type="range"].sigma { height: 8px; }
+  .controls input[type="range"].sigma::-webkit-slider-thumb { width: 26px; height: 26px; }
+  .controls input[type="range"].sigma::-moz-range-thumb     { width: 26px; height: 26px; }
+  .slider-ticks { top: 30px; font-size: 9px; }
+  .controls .submit-btn,
+  .controls > button.primary {
+    width: 100%;
+    padding: 12px;
+    margin-top: 14px;
+  }
+
+  /* ---- menu: tighter, difficulty grid stacks ---- */
+  .menu { padding: 18px 16px; overflow-y: auto; }
+  .menu h1 { font-size: 32px; }
+  .menu .tagline { font-size: 13px; margin-bottom: 22px; }
+  .diff-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  .diff-grid .dfeatures li { font-size: 10.5px; }
+  .menu .option-row {
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 22px;
+  }
+  .menu .start-btn { width: 100%; padding: 14px; }
+  .menu .footer-note { font-size: 10.5px; padding: 0 8px; text-align: center; }
+
+  /* ---- summary: 1 column of mini panels at narrow widths ---- */
+  .summary { padding: 18px 14px; }
+  .summary .top { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .summary .total { font-size: 26px; }
+  .summary .grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  /* ---- tutorial tooltip: keep within viewport ---- */
+  .tutorial-tooltip {
+    max-width: calc(100vw - 32px);
+    min-width: 0;
+    padding: 14px 16px 12px;
+  }
+  .tutorial-tooltip .tt-body { font-size: 13px; }
+  .tutorial-quit { top: 10px; font-size: 10.5px; padding: 4px 10px; }
+}
+
+/* Extra narrow (≈ < 380 px wide): make the difficulty grid a single column */
+@media (max-width: 420px) {
+  .diff-grid { grid-template-columns: 1fr; }
+  .menu h1 { font-size: 28px; }
+}

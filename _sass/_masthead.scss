@@ -31,6 +31,17 @@
   }
 }
 
+/* On narrow viewports the greedy-nav collapses to a hamburger button at the
+   nav's right edge. That edge sits at the right of .masthead__inner-wrap,
+   which on small screens coincides with the right edge of the masthead —
+   exactly where the .dark-toggle button lives. Reserve extra right padding
+   on the inner-wrap so the hamburger ends up to the left of the toggle. */
+@media (max-width: 900px) {
+  .masthead__inner-wrap {
+    padding-right: 3.5em;
+  }
+}
+
 .masthead__menu {
 
   ul {
