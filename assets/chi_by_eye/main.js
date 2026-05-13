@@ -94,7 +94,7 @@ function buildShell() {
           <div class="popover-row"><span class="popover-k">N</span><span class="popover-v">number of data points</span></div>
           <div class="popover-row"><span class="popover-k">k</span><span class="popover-v">free model parameters</span></div>
           <div class="popover-row"><span class="popover-k">dof</span><span class="popover-v">degrees of freedom (N &minus; k)</span></div>
-          <div class="popover-row"><span class="popover-k">&chi;&sup2;</span><span class="popover-v">sum<sub>i</sub> (r<sub>i</sub> / &sigma;<sub>i</sub>)&sup2;, given your slider &sigma;</span></div>
+          <div class="popover-row"><span class="popover-k">&chi;&sup2;</span><span class="popover-v">&Sigma;<sub>i</sub> (residual<sub>i</sub> / &sigma;<sub>i</sub>)&sup2;, given your slider &sigma;</span></div>
           <div class="popover-row"><span class="popover-k">&chi;&sup2;/dof</span><span class="popover-v">reduced &chi;&sup2;; &asymp; 1 for a good fit</span></div>
           <div class="popover-row"><span class="popover-k">&sigma;</span><span class="popover-v">two-sided tension equivalent of the &chi;&sup2; p-value</span></div>
         </div>
@@ -238,9 +238,8 @@ function menuMarkup() {
   return `
     <h1><span class="chi">&chi;</span> by eye</h1>
     <p class="tagline">
-      Estimate how many &sigma; the data is in tension with the model. Five rounds,
-      one slider, no second guesses. The live &chi;&sup2; and &chi;&sup2;/dof readout
-      shows what your slider value corresponds to for that round's dof.
+      Estimate how many &sigma; the data is in tension with the model. Five rounds per game. New to &chi;&sup2;?
+      <button type="button" class="tutorial-link" id="tutorial-link">walk through the tutorial &rarr;</button>
     </p>
     <div class="diff-grid">${diffBtns}</div>
     <div class="option-row">
@@ -255,8 +254,8 @@ function menuMarkup() {
     </div>
     <button class="primary start-btn" id="start-btn">Start game</button>
     <div class="footer-note">
-      Audience: astro / particle physics — uses two-sided &sigma; equivalent of the
-      &chi;&sup2; upper-tail probability.
+      Convention: two-sided &sigma; equivalent of the
+      &chi;&sup2; upper-tail probability, common in astrophysics.
     </div>
   `;
 }
@@ -283,6 +282,9 @@ function attachMenuHandlers() {
     game.timerSeconds = Math.max(5, Math.min(600, parseInt(timerLen.value) || 60));
     startGame();
   });
+  // Tutorial link
+  const tutLink = document.getElementById('tutorial-link');
+  if (tutLink) tutLink.addEventListener('click', startTutorial);
 }
 
 // ---------- state transitions ----------
@@ -542,6 +544,13 @@ function stopTimer() {
 // ---------- keyboard ----------
 function onKeyDown(e) {
   if (e.target.tagName === 'INPUT' && e.target.type === 'number') return;
+  // During the tutorial, hijack the keys: Enter advances the walkthrough,
+  // Escape quits it, and game shortcuts are suppressed.
+  if (tutorial.active) {
+    if (e.key === 'Enter') { e.preventDefault(); tutorialNext(); }
+    else if (e.key === 'Escape') { e.preventDefault(); endTutorial(); }
+    return;
+  }
   if (e.key === 'Enter') {
     if (game.state === State.ROUND) onSubmit();
     else if (game.state === State.REVEAL) onNext();
@@ -562,4 +571,406 @@ function confirmQuit() {
     menuEl.innerHTML = menuMarkup();
     attachMenuHandlers();
   }
+}
+
+// ============================================================================
+//  Tutorial
+// ============================================================================
+//
+// A linear walkthrough triggered from the menu. Each step optionally targets a
+// real UI element (highlighted with a spotlight + dim) and shows a tooltip with
+// an explanation. Several steps reveal the plot incrementally — empty plot, then
+// data, then the model curve, then χ² contributions in color — to teach how the
+// χ² number gets built.
+
+function makeTutorialRound() {
+  // Linear model with k=2 free parameters (intercept + slope).
+  const f = x => 0.35 + 0.45 * x;
+  // Hand-tuned data: mostly clean, one clear outlier so the χ²-contribution
+  // coloring has interesting variation. Errors all equal so easy mode feel.
+  const raw = [
+    { x: 0.10, yObs: 0.41 },
+    { x: 0.25, yObs: 0.45 },
+    { x: 0.40, yObs: 0.53 },
+    { x: 0.55, yObs: 0.72 }, // outlier
+    { x: 0.70, yObs: 0.69 },
+    { x: 0.85, yObs: 0.74 },
+  ];
+  const err = 0.05;
+  const points = raw.map(p => ({
+    x: p.x, yObs: p.yObs, yTrue: f(p.x), err, rotRate: 0,
+  }));
+  const N = points.length;
+  const k = 2;
+  const dof = N - k;
+  let chi2 = 0;
+  for (const p of points) chi2 += ((p.yObs - p.yTrue) / p.err) ** 2;
+  return {
+    f, points, N, k, dof,
+    logY: false,
+    yMin: 0.20, yMax: 1.00,
+    curveYMin: f(0), curveYMax: f(1),
+    chi2,
+    redChi2: chi2 / dof,
+    trueSigma: chi2ToSigma(chi2, dof),
+    labels: { x: 'voltage on wire', y: 'oyster fluffiness' },
+    difficulty: 'tutorial',
+    sigmaTrueFrac: err / (1.0 - 0.2),
+    errFactor: 1,
+  };
+}
+
+const TUTORIAL_STEPS = [
+  {
+    label: 'Welcome',
+    text: '<strong>χ by eye</strong> is a game about estimating, by eye, how well a model ' +
+          "fits noisy data. First a quick tour of the screen, then we'll walk through a worked example.",
+    target: null,
+  },
+  {
+    label: 'The plot',
+    text: 'Each round, a model curve and some noisy data points appear here. ' +
+          "You're judging how well they agree.",
+    target: '#plot-wrap',
+    arrow: 'right',
+  },
+  {
+    label: 'Round info',
+    text: 'Top-left tells you the round setup: <span class="math">N</span> data points, ' +
+          '<span class="math">k</span> free parameters in the model, and ' +
+          '<span class="math">dof = N − k</span> degrees of freedom.',
+    target: '#hud-tl',
+    arrow: 'below',
+  },
+  {
+    label: 'Your input',
+    text: 'The slider is where you input how well you think the model describes the data. You pick how many <span class="math">σ</span> the ' +
+          'data is in tension with the model',
+    target: '.controls',
+    arrow: 'above',
+  },
+  {
+    label: 'Live readout',
+    text: 'Top-right shows your slider <span class="math">σ</span> in two equivalent forms — ' +
+          '<span class="math">χ²</span> and <span class="math">χ²/dof</span> — for this ' +
+          "round's dof. Move the slider and all three change together.",
+    target: '#hud-tr',
+    arrow: 'below',
+  },
+  {
+    label: 'Demo: empty plot',
+    text: "Now let's actually look at some data, building intuition piece by piece.",
+    target: '#plot-wrap',
+    arrow: 'right',
+    action: () => plot.setVisibility({ showData: false, showCurve: false }),
+  },
+  {
+    label: 'Demo: the data',
+    text: 'Here are six measurements of some dependent variable as a function of some independent variable. The vertical bar through each point is its (assumed Gaussian) uncertainty ' +
+          '<span class="math">σᵢ</span>.',
+    target: '#plot-wrap',
+    arrow: 'right',
+    action: () => plot.setVisibility({ showData: true, showCurve: false }),
+  },
+  {
+    label: 'Demo: a model',
+    text: 'Now suppose we have a model — here a straight line — we think describes the data. ' +
+          'Some points sit on it, some sit off. The question is: how well does it fit?',
+    target: '#plot-wrap',
+    arrow: 'right',
+    action: () => plot.setVisibility({ showData: true, showCurve: true }),
+  },
+  {
+    label: 'χ² formula',
+    text:
+      'We score the fit with <span class="math">χ² = Σᵢ (yᵢ − fᵢ)² / σᵢ²</span>, where ' +
+      '<span class="math">yᵢ</span> is the measured value at the <em>i</em>-th data point, ' +
+      '<span class="math">fᵢ</span> is the model prediction at that <span class="math">xᵢ</span>, ' +
+      'and <span class="math">σᵢ</span> is the quoted error on <span class="math">yᵢ</span>. ' +
+      'Each point contributes <span class="math">(yᵢ − fᵢ)² / σᵢ²</span> — points within ~1σ of ' +
+      'the model contribute ~1, outliers contribute much more. ' +
+      'Beside each point: the signed residual in <span class="math">σᵢ</span> units, ' +
+      'and that value squared (its actual contribution to χ²). Colors encode the same: ' +
+      'green is small, red is large.' +
+      '<span class="tt-note">For independent Gaussian errors, χ² equals &minus;2 ln <em>L</em> ' +
+      'up to an additive constant, so minimizing χ² is maximum-likelihood estimation.</span>',
+    target: '#plot-wrap',
+    arrow: 'right',
+    action: () => {
+      // Slider to true sigma so the top-right reads the data's true χ²
+      sliderEl.value = String(tutorial.round.trueSigma);
+      updateSliderDisplay();
+      plot.setRevealed(true);
+      plot.setChi2LabelsVisible(true);
+    },
+  },
+  {
+    label: 'χ²/dof',
+    text: 'Dividing by dof gives <span class="math">χ²/dof</span>, which is ≈ 1 for a fit ' +
+          'consistent with its quoted errors. Much greater than 1 → the model misses the data. ' +
+          'Much less → errors are likely overestimated.',
+    target: '#hud-tr',
+    arrow: 'below',
+  },
+  {
+    label: 'σ equivalent',
+    text: 'Finally, the χ² maps to a sigma equivalent — how unlikely is a χ² this large under ' +
+          'the null hypothesis that the model is correct? 0–1σ: consistent. 2–3σ: unclear. 4-5σ+: ' +
+          'serious tension.',
+    target: '#hud-tr',
+    arrow: 'below',
+  },
+  {
+    label: "You're ready",
+    text: 'In each round you see a plot like this. Choose a σ for the tension, submit, see how close you ' +
+          'were. Five rounds per game. Go hone your plot viewing skills!',
+    target: null,
+    final: true,
+  },
+];
+
+const tutorial = {
+  active: false,
+  step: 0,
+  round: null,
+  backdrop: null,
+  spotlight: null,
+  tooltip: null,
+};
+
+function startTutorial(e) {
+  if (e) e.preventDefault();
+  if (tutorial.active) return;
+  tutorial.active = true;
+  tutorial.step = 0;
+
+  // Hide menu, show game UI but inert (no submit/timer)
+  menuEl.classList.add('hidden');
+  topbarEl.classList.add('hidden');
+  controlsEl.classList.remove('hidden');
+  hudTlEl.classList.remove('hidden');
+  hudTrEl.classList.remove('hidden');
+  revealBannerEl.classList.add('hidden');
+  summaryEl.classList.add('hidden');
+
+  // Build the demo round
+  const r = makeTutorialRound();
+  tutorial.round = r;
+  game.rounds = [r];
+  game.roundIndex = 0;
+  game.state = State.ROUND;
+  plot.setRound(r, { rotate: false, sampledErrorbars: false });
+  plot.setVisibility({ showData: true, showCurve: true });
+
+  // Populate top-left HUD
+  document.getElementById('hud-N').textContent = String(r.N);
+  document.getElementById('hud-k').textContent = String(r.k);
+  document.getElementById('hud-dof').textContent = String(r.dof);
+  document.getElementById('hud-logy').classList.add('hidden');
+
+  // Reset slider to ~1σ, hide submit
+  sliderEl.value = '1.0';
+  sliderEl.disabled = false;
+  submitBtn.style.visibility = 'hidden';
+  updateSliderDisplay();
+
+  // Create overlay layers
+  tutorial.backdrop = document.createElement('div');
+  tutorial.backdrop.className = 'tutorial-backdrop';
+  tutorial.spotlight = document.createElement('div');
+  tutorial.spotlight.className = 'tutorial-spotlight';
+  tutorial.tooltip = document.createElement('div');
+  tutorial.tooltip.className = 'tutorial-tooltip';
+  tutorial.quitBtn = document.createElement('button');
+  tutorial.quitBtn.className = 'tutorial-quit';
+  tutorial.quitBtn.type = 'button';
+  tutorial.quitBtn.textContent = 'Quit tutorial';
+  tutorial.quitBtn.addEventListener('click', endTutorial);
+  document.body.appendChild(tutorial.backdrop);
+  document.body.appendChild(tutorial.spotlight);
+  document.body.appendChild(tutorial.tooltip);
+  document.body.appendChild(tutorial.quitBtn);
+
+  window.addEventListener('resize', repositionTutorial);
+  showTutorialStep();
+}
+
+function showTutorialStep() {
+  const s = TUTORIAL_STEPS[tutorial.step];
+  if (!s) { endTutorial(); return; }
+
+  if (s.action) s.action();
+
+  // Locate target
+  let targetRect = null;
+  if (s.target) {
+    const el = document.querySelector(s.target);
+    if (el) targetRect = el.getBoundingClientRect();
+  }
+
+  // Position spotlight
+  if (targetRect && targetRect.width > 0) {
+    tutorial.spotlight.classList.remove('no-target');
+    const pad = 6;
+    Object.assign(tutorial.spotlight.style, {
+      left:   `${targetRect.left - pad}px`,
+      top:    `${targetRect.top - pad}px`,
+      width:  `${targetRect.width + 2 * pad}px`,
+      height: `${targetRect.height + 2 * pad}px`,
+    });
+  } else {
+    tutorial.spotlight.classList.add('no-target');
+    Object.assign(tutorial.spotlight.style, {
+      left: '50%', top: '50%', width: '0', height: '0',
+    });
+  }
+
+  // Tooltip content
+  const isFinal = !!s.final;
+  tutorial.tooltip.innerHTML = `
+    <div class="tt-arrow"></div>
+    <div class="tt-step">Step ${tutorial.step + 1} / ${TUTORIAL_STEPS.length} · ${s.label || ''}</div>
+    <div class="tt-body">${s.text}</div>
+    <div class="tt-actions">
+      <button class="tt-skip" id="tt-skip">${isFinal ? 'Close' : 'Skip'}</button>
+      <button class="primary tt-next" id="tt-next">${isFinal ? 'Finish' : 'Next'}</button>
+    </div>
+  `;
+  document.getElementById('tt-next').addEventListener('click', tutorialNext);
+  document.getElementById('tt-skip').addEventListener('click', endTutorial);
+
+  positionTutorialTooltip(targetRect, s.arrow);
+}
+
+function repositionTutorial() {
+  if (!tutorial.active) return;
+  const s = TUTORIAL_STEPS[tutorial.step];
+  if (!s) return;
+  let targetRect = null;
+  if (s.target) {
+    const el = document.querySelector(s.target);
+    if (el) targetRect = el.getBoundingClientRect();
+  }
+  if (targetRect && targetRect.width > 0) {
+    const pad = 6;
+    Object.assign(tutorial.spotlight.style, {
+      left:   `${targetRect.left - pad}px`,
+      top:    `${targetRect.top - pad}px`,
+      width:  `${targetRect.width + 2 * pad}px`,
+      height: `${targetRect.height + 2 * pad}px`,
+    });
+  }
+  positionTutorialTooltip(targetRect, s.arrow);
+}
+
+function positionTutorialTooltip(targetRect, preferred) {
+  const tt = tutorial.tooltip;
+  tt.classList.remove('above', 'below', 'left', 'right');
+  // Measure tooltip
+  tt.style.visibility = 'hidden';
+  tt.style.left = '0px';
+  tt.style.top  = '0px';
+  const ttRect = tt.getBoundingClientRect();
+  const ttW = ttRect.width, ttH = ttRect.height;
+  const margin = 22;
+
+  let left, top, side = null;
+  if (!targetRect || targetRect.width === 0) {
+    left = (window.innerWidth - ttW) / 2;
+    top  = (window.innerHeight - ttH) / 2;
+  } else {
+    const cx = targetRect.left + targetRect.width / 2;
+    const cy = targetRect.top + targetRect.height / 2;
+    const space = {
+      below: window.innerHeight - targetRect.bottom,
+      above: targetRect.top,
+      right: window.innerWidth - targetRect.right,
+      left:  targetRect.left,
+    };
+    const need = { below: ttH + margin, above: ttH + margin, right: ttW + margin, left: ttW + margin };
+    const sides = ['below', 'above', 'right', 'left'];
+    // Prefer the requested side only if it fits comfortably; otherwise
+    // pick whichever side has the most space (even if that's still not enough,
+    // we'll clamp below to keep the tooltip on screen — overlap is OK).
+    let chosen = preferred && space[preferred] >= need[preferred]
+      ? preferred
+      : sides.slice().sort((a, b) => space[b] - space[a])[0];
+    side = chosen;
+    switch (chosen) {
+      case 'below':
+        top  = targetRect.bottom + margin;
+        left = cx - ttW / 2;
+        break;
+      case 'above':
+        top  = targetRect.top - ttH - margin;
+        left = cx - ttW / 2;
+        break;
+      case 'right':
+        left = targetRect.right + margin;
+        top  = cy - ttH / 2;
+        break;
+      case 'left':
+        left = targetRect.left - ttW - margin;
+        top  = cy - ttH / 2;
+        break;
+    }
+  }
+  // Final clamp: never let the tooltip leave the viewport, even if it has to
+  // overlap the target (which is fine — the spotlight outline still anchors it).
+  const VP_MARGIN = 12;
+  left = clamp(left, VP_MARGIN, window.innerWidth  - ttW - VP_MARGIN);
+  top  = clamp(top,  VP_MARGIN, window.innerHeight - ttH - VP_MARGIN);
+
+  tt.style.left = `${left}px`;
+  tt.style.top  = `${top}px`;
+  if (side) tt.classList.add(side);
+
+  // Position the arrow notch to point at target center
+  const arrow = tt.querySelector('.tt-arrow');
+  if (arrow && targetRect && side) {
+    const cx = targetRect.left + targetRect.width / 2;
+    const cy = targetRect.top + targetRect.height / 2;
+    if (side === 'below' || side === 'above') {
+      const ax = clamp(cx - left, 14, ttW - 14);
+      arrow.style.left = `${ax - 6}px`;
+      arrow.style.top  = '';
+    } else {
+      const ay = clamp(cy - top, 14, ttH - 14);
+      arrow.style.top  = `${ay - 6}px`;
+      arrow.style.left = '';
+    }
+  } else if (arrow) {
+    arrow.style.display = 'none';
+  }
+  tt.style.visibility = '';
+}
+
+function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+
+function tutorialNext() {
+  tutorial.step++;
+  if (tutorial.step >= TUTORIAL_STEPS.length) {
+    endTutorial();
+    return;
+  }
+  showTutorialStep();
+}
+
+function endTutorial() {
+  if (!tutorial.active) return;
+  tutorial.active = false;
+  window.removeEventListener('resize', repositionTutorial);
+  if (tutorial.backdrop)  tutorial.backdrop.remove();
+  if (tutorial.spotlight) tutorial.spotlight.remove();
+  if (tutorial.tooltip)   tutorial.tooltip.remove();
+  if (tutorial.quitBtn)   tutorial.quitBtn.remove();
+  tutorial.backdrop = tutorial.spotlight = tutorial.tooltip = tutorial.quitBtn = null;
+  // Restore submit visibility and tear down demo state
+  submitBtn.style.visibility = '';
+  plot.stopAnimation();
+  game.rounds = [];
+  game.roundIndex = 0;
+  showMenu();
+  menuEl.innerHTML = menuMarkup();
+  attachMenuHandlers();
 }

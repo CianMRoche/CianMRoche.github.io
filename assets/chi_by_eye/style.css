@@ -719,5 +719,152 @@ html[data-theme="dark"] .summary .total .crown {
   margin-top: 24px;
 }
 
+/* ---------- tutorial overlay ---------- */
+.tutorial-backdrop {
+  position: fixed;
+  inset: 0;
+  background: transparent;       /* dim is provided by spotlight box-shadow */
+  z-index: 200;
+  pointer-events: auto;          /* blocks clicks on underlying UI */
+}
+.tutorial-spotlight {
+  position: fixed;
+  border: 2px solid var(--accent);
+  border-radius: 6px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55), 0 0 0 5px var(--accent-soft);
+  pointer-events: none;
+  z-index: 201;
+  transition: left 0.28s ease, top 0.28s ease, width 0.28s ease, height 0.28s ease;
+}
+.tutorial-spotlight.no-target {
+  border: none;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
+  width: 0; height: 0;
+}
+.tutorial-tooltip {
+  position: fixed;
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 18px 20px 14px;
+  z-index: 202;
+  max-width: 380px;
+  min-width: 260px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+  pointer-events: auto;
+  transition: left 0.28s ease, top 0.28s ease;
+}
+html[data-theme="dark"] .tutorial-tooltip {
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+}
+.tutorial-tooltip .tt-step {
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.tutorial-tooltip .tt-body {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--fg);
+  margin-bottom: 14px;
+}
+.tutorial-tooltip .tt-body code,
+.tutorial-tooltip .tt-body .math {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  background: var(--bg-soft);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.tutorial-tooltip .tt-note {
+  display: block;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--hairline);
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.5;
+  font-style: italic;
+}
+.tutorial-tooltip .tt-note em { font-style: normal; }
+.tutorial-tooltip .tt-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.tutorial-tooltip .tt-skip {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  padding: 4px 6px;
+  cursor: pointer;
+}
+.tutorial-tooltip .tt-skip:hover { color: var(--fg); }
+.tutorial-tooltip .tt-next {
+  font-size: 13px;
+  padding: 7px 18px;
+  border-radius: 6px;
+}
+/* Arrow notch */
+.tutorial-tooltip .tt-arrow {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  transform: rotate(45deg);
+}
+.tutorial-tooltip.below  .tt-arrow { top: -7px;    border-right: none; border-bottom: none; }
+.tutorial-tooltip.above  .tt-arrow { bottom: -7px; border-left: none;  border-top: none; }
+.tutorial-tooltip.right  .tt-arrow { left: -7px;   border-right: none; border-top: none; }
+.tutorial-tooltip.left   .tt-arrow { right: -7px;  border-left: none;  border-bottom: none; }
+
+/* Floating "Quit tutorial" button — sits above all tutorial layers
+   so it's always reachable. Same look as the in-game Quit. */
+.tutorial-quit {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 203;
+  color: var(--muted);
+  background: var(--bg);
+  font-family: inherit;
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 5px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: color 0.1s ease, border-color 0.1s ease, background 0.1s ease;
+}
+.tutorial-quit:hover {
+  color: var(--fg);
+  border-color: var(--fg);
+  background: var(--bg-soft);
+}
+
+/* Tutorial menu link */
+.tutorial-link {
+  display: inline;
+  color: var(--accent);
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.tutorial-link:hover { filter: brightness(1.15); }
+
 /* ---------- small util ---------- */
 .hidden { display: none !important; }

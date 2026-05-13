@@ -59,6 +59,10 @@ export class Plot {
     this.round = round;
     this.revealed = false;
     this._userSigma = null;
+    // Visibility flags — primarily for the tutorial, which reveals data
+    // and then the model curve incrementally. Default: both visible.
+    this._showCurve = opts.showCurve !== false;
+    this._showData  = opts.showData  !== false;
     // Rotation rates per point — random for Hard, zero otherwise.
     // |rate| is uniform between a min and max floor, so no bar appears
     // stationary while none spins distractingly fast.
@@ -82,6 +86,19 @@ export class Plot {
   setRevealed(revealed, userSigma = null) {
     this.revealed = revealed;
     this._userSigma = userSigma;
+    this.render();
+  }
+
+  setVisibility({ showCurve, showData } = {}) {
+    if (showCurve !== undefined) this._showCurve = showCurve;
+    if (showData  !== undefined) this._showData  = showData;
+    this.render();
+  }
+
+  // Show or hide per-point χ² contribution labels (only meaningful when
+  // revealed). Used by the tutorial.
+  setChi2LabelsVisible(show) {
+    this._showChi2Labels = !!show;
     this.render();
   }
 
@@ -181,8 +198,8 @@ export class Plot {
     ctx.fillRect(0, 0, this._w, this._h);
 
     this._drawAxes(R);
-    this._drawCurve(R);
-    this._drawData(R);
+    if (this._showCurve) this._drawCurve(R);
+    if (this._showData)  this._drawData(R);
   }
 
   _drawAxes(R) {
@@ -333,6 +350,33 @@ export class Plot {
         // Standard vertical errorbars + central point.
         this._drawVerticalErrorbar(px, py, p, R, this.revealed ? pointColor : S.err);
         this._drawPoint(px, py, pointColor);
+      }
+
+      // Optional per-point χ² contribution label (tutorial).
+      // Format: "(±X.X σᵢ)² = Y.Y" — shows the signed residual in units of the
+      // point's own error (σᵢ, distinct from the round's overall tension σ)
+      // and the squared contribution to χ². Lets readers see both the visual
+      // residual-in-sigmas and the contribution at once.
+      if (this.revealed && this._showChi2Labels && contrib != null) {
+        const ctx = this.ctx;
+        const dpr = this._dpr;
+        const ratio = (p.yObs - p.yTrue) / p.err;
+        const ratioStr = (ratio >= 0 ? '+' : '−') + Math.abs(ratio).toFixed(1);
+        const contribStr = contrib < 1 ? contrib.toFixed(2) : contrib.toFixed(1);
+        const txt = `(${ratioStr}σᵢ)² → ${contribStr}`;
+        ctx.font = `600 ${10.5 * dpr}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+        ctx.fillStyle = pointColor;
+        ctx.textBaseline = 'middle';
+        // Right-align labels for points in the rightmost ~22% of the plot,
+        // so the label sits to the LEFT of the point and doesn't run off.
+        const farRight = (px - R.x0) / R.w > 0.78;
+        if (farRight) {
+          ctx.textAlign = 'right';
+          ctx.fillText(txt, px - 11 * dpr, py - 11 * dpr);
+        } else {
+          ctx.textAlign = 'left';
+          ctx.fillText(txt, px + 11 * dpr, py - 11 * dpr);
+        }
       }
     }
 
