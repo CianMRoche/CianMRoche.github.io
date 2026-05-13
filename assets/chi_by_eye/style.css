@@ -547,12 +547,29 @@ html[data-theme="dark"] .diff-grid button[data-diff="impossible"]   { --diff-col
   padding: 14px 22px;
   border-radius: 8px;
   display: flex;
-  align-items: center;
-  gap: 22px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
   z-index: 5;
   box-shadow: 0 4px 12px rgba(0,0,0,0.06);
   max-width: calc(100vw - 40px);
+}
+.reveal-banner .rb-pairs {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 22px;
   flex-wrap: wrap;
+  justify-content: center;
+}
+.reveal-banner .rb-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  border-top: 1px solid var(--hairline);
+  padding-top: 11px;
+  justify-content: space-between;
 }
 html[data-theme="dark"] .reveal-banner { box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
 .reveal-banner .pair {
@@ -595,22 +612,29 @@ html[data-theme="dark"] .reveal-banner { box-shadow: 0 4px 16px rgba(0,0,0,0.4);
   font-size: 14px;
   padding: 10px 22px;
 }
+/* "Hide" button: small caret icon, mirrors the Round-details ▲ restore pill */
 .reveal-banner .rb-hide {
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
   color: var(--muted);
   background: transparent;
   border: 1px solid var(--hairline);
-  border-radius: 5px;
-  padding: 6px 12px;
+  border-radius: 999px;
+  padding: 0;
   cursor: pointer;
   transition: color 0.1s ease, border-color 0.1s ease, background 0.1s ease;
 }
 .reveal-banner .rb-hide:hover {
-  color: var(--fg);
-  border-color: var(--fg);
-  background: var(--bg-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.reveal-banner .rb-hide-caret {
+  font-size: 11px;
+  line-height: 1;
 }
 
 /* Restore pill: appears when the reveal banner is hidden, sits where the
@@ -655,8 +679,7 @@ html[data-theme="dark"] .reveal-restore { box-shadow: 0 3px 12px rgba(0,0,0,0.4)
   color: var(--muted);
   cursor: pointer;
   user-select: none;
-  border-left: 1px solid var(--hairline);
-  padding-left: 14px;
+  flex: 1 1 auto;
 }
 .reveal-banner .rb-toggle input[type="checkbox"] {
   width: 14px; height: 14px;
@@ -983,30 +1006,31 @@ html[data-theme="dark"] .tutorial-tooltip {
   .reveal-banner {
     left: 8px;
     right: 8px;
-    transform: none;
     bottom: auto;
     top: 50%;
-    margin-top: -1px;
     transform: translateY(-50%);
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
     padding: 14px 16px;
     max-width: none;
+  }
+  .reveal-banner .rb-pairs {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
   }
   .reveal-banner .pair { flex-direction: row; justify-content: space-between; }
   .reveal-banner .pair .v { font-size: 17px; }
   .reveal-banner .pair.secondary .v { font-size: 14px; }
+  .reveal-banner .rb-actions {
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: flex-start;
+  }
   .reveal-banner .rb-toggle {
-    border-left: none;
-    border-top: 1px solid var(--hairline);
-    padding-left: 0;
-    padding-top: 10px;
-    margin-top: 4px;
+    flex: 1 1 100%;
     justify-content: center;
   }
-  .reveal-banner .next-btn { width: 100%; padding: 12px; }
-  .reveal-banner .rb-hide { width: 100%; padding: 10px; }
+  .reveal-banner .rb-hide { flex: 0 0 auto; }
+  .reveal-banner .next-btn { flex: 1 1 auto; padding: 12px; }
   .reveal-restore { bottom: 18px; }
 
   /* ---- controls: stack the σ value, slider, and submit button ---- */

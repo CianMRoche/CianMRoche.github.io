@@ -114,32 +114,38 @@ function buildShell() {
           <div class="popover-row"><span class="popover-k">&sigma;</span><span class="popover-v">two-sided tension equivalent of the &chi;&sup2; p-value</span></div>
         </div>
         <div class="reveal-banner hidden" id="reveal-banner">
-          <div class="pair primary">
-            <span class="k">Your guess</span>
-            <span class="v" id="rb-user">—</span>
+          <div class="rb-pairs">
+            <div class="pair primary">
+              <span class="k">Your guess</span>
+              <span class="v" id="rb-user">—</span>
+            </div>
+            <div class="pair primary">
+              <span class="k">Truth</span>
+              <span class="v" id="rb-true">—</span>
+            </div>
+            <div class="pair secondary">
+              <span class="k">True &chi;&sup2;</span>
+              <span class="v" id="rb-chi2">—</span>
+            </div>
+            <div class="pair secondary">
+              <span class="k">True &chi;&sup2;/dof</span>
+              <span class="v" id="rb-red">—</span>
+            </div>
+            <div class="pair score">
+              <span class="k">Score</span>
+              <span class="v" id="rb-score">—</span>
+            </div>
           </div>
-          <div class="pair primary">
-            <span class="k">Truth</span>
-            <span class="v" id="rb-true">—</span>
+          <div class="rb-actions">
+            <label class="rb-toggle" title="Annotate each data point with its (residual/σ)² → contribution">
+              <input type="checkbox" id="rb-labels-toggle">
+              <span>show &chi;&sup2; contributions</span>
+            </label>
+            <button class="rb-hide" id="rb-hide" type="button" title="Hide details to see the plot" aria-label="Hide details">
+              <span class="rb-hide-caret">&#x25BC;</span>
+            </button>
+            <button class="primary next-btn" id="rb-next">Next</button>
           </div>
-          <div class="pair secondary">
-            <span class="k">True &chi;&sup2;</span>
-            <span class="v" id="rb-chi2">—</span>
-          </div>
-          <div class="pair secondary">
-            <span class="k">True &chi;&sup2;/dof</span>
-            <span class="v" id="rb-red">—</span>
-          </div>
-          <div class="pair score">
-            <span class="k">Score</span>
-            <span class="v" id="rb-score">—</span>
-          </div>
-          <label class="rb-toggle" title="Annotate each data point with its (residual/σ)² → contribution">
-            <input type="checkbox" id="rb-labels-toggle">
-            <span>show &chi;&sup2; contributions</span>
-          </label>
-          <button class="rb-hide" id="rb-hide" type="button" title="Hide to see the plot">Hide</button>
-          <button class="primary next-btn" id="rb-next">Next</button>
         </div>
         <button class="reveal-restore hidden" id="reveal-restore" type="button" title="Show round details">
           <span>Round details</span>
