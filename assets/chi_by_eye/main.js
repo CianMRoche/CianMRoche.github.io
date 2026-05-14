@@ -322,7 +322,12 @@ const PROFANITY_B64 =
   'Y2UscHJhdCxwaWxsb2NrLHdvZyxneXBwbyxrYWZmaXIsZGFya2llLGppZ2Fib28scGlj' +
   'a2FuaW5ueSxob25reSxrcmF1dCxzcGF6LHNwYXN0aWMsbW9uZyxjcmlwcGxlLG1pZGdl' +
   'dCxwb29mLHBvb2Z0ZXIscGFuc3ksc2lzc3ksZmFpcnksdGl0dHksdGl0dGllcyxiZWxs' +
-  'ZW5kLGZhbm55';
+  'ZW5kLGZhbm55LHZhZyxtb2ZvLGZhcCxzZW1lbixzbWVnbWEsc3B1bmssZWphY3VsYXQs' +
+  'cHJlY3VtLGNsaXQsbmlwcGxlLG5pcHBsZXMsYmFsbHNhY2ssbnV0c2FjayxqZXJrb2Zm' +
+  'LGJ1a2tha2UsY3JlYW1waWUscmFwZSxyYXBpbixtb2xlc3QsaW5jZXN0LGdhbmdyYXBl' +
+  'LHNudWZmLG5lY3JvcGhpbCx6b29waGlsLG9yZ3ksdGhyZWVzb21lLGZvdXJzb21lLGJk' +
+  'c20sYm9uZGFnZSxodW1waW5nLGRvZ2d5c3R5bGUsaGVudGFpLGZ1dGEsZnV0YW5hcmks' +
+  'YWhlZ2FvLHlpZmYsZWNjaGk=';
 // Normalize: lowercase, leetspeak swap, strip non-letters. We deliberately
 // don't collapse repeats here — the regex below allows each letter of a
 // bad word to repeat one or more times, so "shiiit", "f-u-c-k", "$h1t",
