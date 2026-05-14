@@ -843,7 +843,7 @@ function menuMarkup() {
     </div>
     <div class="menu-buttons">
       <button class="primary start-btn" id="start-btn">Start game</button>
-      <button class="leaderboard-btn" id="open-leaderboard">Leaderboards</button>
+      <button class="leaderboard-btn" id="open-leaderboard">View leaderboards</button>
     </div>
     <div class="footer-note">
       Convention: two-sided &sigma; equivalent of the

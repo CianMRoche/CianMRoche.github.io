@@ -1040,22 +1040,29 @@ html[data-theme="dark"] .tutorial-tooltip {
 }
 .menu-buttons {
   display: flex;
+  flex-direction: column;
   gap: 14px;
   align-items: center;
   margin-bottom: 8px;
 }
+/* Subtle text-link styling so it sits clearly below the primary Start
+   button without competing for attention. */
 .menu .leaderboard-btn {
-  font-size: 14px;
-  padding: 11px 22px;
-  border-radius: 6px;
-  border: 1px solid var(--hairline);
-  background: var(--bg);
-  color: var(--fg-soft);
+  font-size: 12.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 6px 4px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.12s ease;
 }
-.menu .leaderboard-btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+.menu .leaderboard-btn::after {
+  content: ' \2192';
+  opacity: 0.6;
 }
+.menu .leaderboard-btn:hover { color: var(--accent); }
 
 /* ============================================================ */
 /*  Leaderboard preview (lives inside the summary screen)        */
@@ -1365,8 +1372,8 @@ html[data-theme="dark"] .tutorial-tooltip {
   /* Hide date column on narrow screens */
   .leaderboard-view .lbf-list-head .lbf-date,
   .leaderboard-view .lbf-row .lbf-date { display: none; }
-  .menu-buttons { flex-direction: column; gap: 10px; align-items: stretch; }
-  .menu .leaderboard-btn { width: 100%; padding: 12px; }
+  .menu-buttons { gap: 10px; }
+  .menu .leaderboard-btn { font-size: 12px; }
 }
 
 /* ---------- small util ---------- */
