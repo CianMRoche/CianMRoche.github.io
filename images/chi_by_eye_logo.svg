@@ -1,8 +1,12 @@
 <svg viewBox="0 0 250 250" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="chi by eye logo">
+  <!-- Eye outline: more open almond / lens shape -->
+  <path d="M 18 125 Q 125 28, 232 125 Q 125 222, 18 125 Z"
+        fill="none" stroke="#1f2937" stroke-width="7" stroke-linejoin="round"/>
+  <!-- χ centered inside the eye, acting as the iris -->
   <text x="125" y="140"
         text-anchor="middle"
         font-family="'Times New Roman','Hoefler Text','Liberation Serif',Georgia,serif"
         font-style="italic" font-weight="400"
-        font-size="220"
+        font-size="110"
         fill="#1f2937">&#x03C7;</text>
 </svg>

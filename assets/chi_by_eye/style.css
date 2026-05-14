@@ -448,7 +448,10 @@ input[type="range"].sigma:disabled { opacity: 0.6; }
 }
 .slider-ticks {
   position: absolute;
-  left: 0; right: 0;
+  /* Inset by the slider thumb's half-width so the ticks align with the
+     thumb's center travel range (the thumb is clamped to [11px, w-11px]
+     since it's 22px wide). */
+  left: 11px; right: 11px;
   top: 26px;
   display: flex;
   justify-content: space-between;
@@ -1654,7 +1657,11 @@ html[data-theme="dark"] .tutorial-tooltip {
   .controls input[type="range"].sigma { height: 8px; }
   .controls input[type="range"].sigma::-webkit-slider-thumb { width: 26px; height: 26px; }
   .controls input[type="range"].sigma::-moz-range-thumb     { width: 26px; height: 26px; }
-  .slider-ticks { top: 30px; font-size: 9px; }
+  .slider-ticks {
+    /* Bigger thumb on phones (26 px → half-width 13 px). */
+    left: 13px; right: 13px;
+    top: 30px; font-size: 9px;
+  }
   .controls .submit-btn,
   .controls > button.primary {
     width: 100%;
