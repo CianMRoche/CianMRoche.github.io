@@ -22,6 +22,542 @@ const BASE_SCORE_PER_ROUND = 1000;
 const FULL_TOL = 0.08;
 const MAX_ERR = 2.0;
 
+// ============================================================
+//  Leaderboard backend configuration
+// ============================================================
+//
+// If REMOTE_LEADERBOARD_URL is null the game uses a purely local
+// (per-device) leaderboard.  Fill in a Firebase Realtime Database URL to
+// turn it into a SHARED leaderboard for all visitors.
+//
+// Setup (~5 minutes, free, no maintenance):
+//   1. Go to https://console.firebase.google.com and sign in with a
+//      Google account.
+//   2. Click "Add project", name it (e.g. "chi-by-eye-leaderboard"),
+//      skip Analytics.
+//   3. Inside the project, choose Build → Realtime Database → Create
+//      Database.  Pick the nearest region, then choose "Start in test
+//      mode" (rules wide open for 30 days — fine for getting started).
+//   4. Copy the Database URL from the top of the Data tab.  It looks
+//      like: https://<your-project>-default-rtdb.firebaseio.com
+//   5. Paste it into REMOTE_LEADERBOARD_URL below and refresh the game.
+//
+// To lock the rules down before the 30-day test window expires, paste
+// these rules into the Rules tab:
+//
+  // {
+  //   "rules": {
+  //     "scores": {
+  //       ".read": true,
+  //       "$diff": {
+  //         "$time": {
+  //           "$entry": {
+  //             ".write": "!data.exists() && newData.hasChildren(['id','name','animal','score'])",
+  //             ".validate":
+  //               "newData.child('score').isNumber()
+  //             && newData.child('score').val() <= 100000
+  //             && newData.child('name').isString()
+  //             && newData.child('name').val().length <= 32"
+  //           }
+  //         }
+  //       }
+  //     }
+  //   }
+  // }
+//
+// These rules: anyone can READ; anyone can WRITE a NEW entry (no edits
+// or deletes); score must be a number ≤ 100k; name capped at 32 chars.
+//
+// Why Firebase Realtime DB + REST (and not Firebase SDK / JSONBin /
+// Supabase / etc.)?
+//   - REST means no SDK to import (no extra ~100kB of JS).
+//   - Realtime DB's POST endpoint auto-generates a child key per write,
+//     so concurrent submissions can't overwrite each other.
+//   - No API key in the client — auth-free reads/writes are governed
+//     entirely by the security rules above.
+//   - Generous free tier (1 GB stored, 10 GB downloaded / month).
+const REMOTE_LEADERBOARD_URL = 'https://chibyeye-default-rtdb.firebaseio.com/'; // e.g. 'https://chi-by-eye-leaderboard-default-rtdb.firebaseio.com'
+
+// ---------- leaderboard ----------
+// localStorage-backed (always) plus optional remote shared leaderboard
+// when REMOTE_LEADERBOARD_URL is set above. Reads merge local+remote and
+// dedupe by entry.id. Writes go to localStorage immediately and POST to
+// the remote in the background (the remote returns an auto-generated
+// child key that we tag onto the local entry as _remoteKey so we can
+// later PATCH the name).
+//
+// Local key format:
+//   chiByEye.leaderboard.<difficulty>.<timeChoice>
+// where timeChoice is 'unlimited' | '5' | '10' | '30'. Each entry has
+// { id, name, animal, score, timestamp, difficulty, timeChoice,
+//   _remoteKey? }.
+const LB_PREFIX = 'chiByEye.leaderboard';
+const LB_MAX_ENTRIES = 200; // cap per board to avoid unbounded growth
+const ANIMALS = [
+  'axolotl','narwhal','octopus','tardigrade','platypus','okapi','pangolin',
+  'manatee','quokka','aardvark','wombat','dingo','gecko','capybara','meerkat',
+  'flamingo','penguin','toucan','hedgehog','salamander','cuttlefish',
+  'jellyfish','seahorse','iguana','chameleon','sloth','lemur','beaver',
+  'otter','mongoose','badger','panther','ferret','tortoise','mongoose',
+  'puffin','kiwi','wallaby','tapir','dugong','coelacanth','quoll','kakapo',
+];
+function randomAnimal() {
+  return ANIMALS[Math.floor(Math.random() * ANIMALS.length)];
+}
+function lbKey(difficulty, timeChoice) {
+  return `${LB_PREFIX}.${difficulty}.${timeChoice}`;
+}
+function getLeaderboard(difficulty, timeChoice) {
+  try {
+    const raw = localStorage.getItem(lbKey(difficulty, timeChoice));
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+function saveLeaderboard(difficulty, timeChoice, board) {
+  try {
+    localStorage.setItem(lbKey(difficulty, timeChoice), JSON.stringify(board));
+  } catch { /* quota etc. — ignore */ }
+}
+function addLeaderboardEntry(entry) {
+  const board = getLeaderboard(entry.difficulty, entry.timeChoice);
+  board.push(entry);
+  board.sort((a, b) => b.score - a.score);
+  if (board.length > LB_MAX_ENTRIES) board.length = LB_MAX_ENTRIES;
+  saveLeaderboard(entry.difficulty, entry.timeChoice, board);
+  // Fire-and-forget push to remote; the caller refreshes the UI when the
+  // remote round-trip completes.
+  pushRemoteEntry(entry);
+  return board;
+}
+function updateLeaderboardEntryName(entry, newName) {
+  const board = getLeaderboard(entry.difficulty, entry.timeChoice);
+  const found = board.find(e => e.id === entry.id);
+  if (found) {
+    found.name = newName;
+    saveLeaderboard(entry.difficulty, entry.timeChoice, board);
+    // Keep entry object (caller may hold a reference) in sync too
+    entry.name = newName;
+    if (found._remoteKey) entry._remoteKey = found._remoteKey;
+  }
+  // Push update to remote (debounced by browser network coalescing)
+  patchRemoteEntryName(entry, newName);
+}
+function leaderboardDisplayName(entry) {
+  return (entry.name && entry.name.trim()) || `Anonymous ${entry.animal}`;
+}
+
+// ---------- remote leaderboard (Firebase Realtime DB via REST) ----------
+// In-memory cache so reads are synchronous after a refresh; per (diff,time)
+// key. Re-fetched whenever the player opens the leaderboard preview / view.
+const _remoteCache = {};      // key -> Array<entry>
+const _remoteInFlight = {};   // key -> Promise (so we don't double-fetch)
+function _remoteKey(diff, timeChoice) { return `${diff}.${timeChoice}`; }
+function _remoteEndpoint(diff, timeChoice) {
+  return `${REMOTE_LEADERBOARD_URL}/scores/${encodeURIComponent(diff)}/${encodeURIComponent(timeChoice)}.json`;
+}
+function isRemoteEnabled() {
+  return typeof REMOTE_LEADERBOARD_URL === 'string' && REMOTE_LEADERBOARD_URL.length > 0;
+}
+
+async function refreshRemoteBoard(diff, timeChoice, onUpdate) {
+  if (!isRemoteEnabled()) return [];
+  const key = _remoteKey(diff, timeChoice);
+  if (_remoteInFlight[key]) return _remoteInFlight[key];
+  _remoteInFlight[key] = (async () => {
+    try {
+      const res = await fetch(_remoteEndpoint(diff, timeChoice), { cache: 'no-store' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const entries = data ? Object.values(data).filter(Boolean) : [];
+      _remoteCache[key] = entries;
+      if (typeof onUpdate === 'function') onUpdate(entries);
+      return entries;
+    } catch (e) {
+      console.warn('[leaderboard] remote fetch failed:', e);
+      return _remoteCache[key] || [];
+    } finally {
+      delete _remoteInFlight[key];
+    }
+  })();
+  return _remoteInFlight[key];
+}
+
+async function pushRemoteEntry(entry) {
+  if (!isRemoteEnabled()) return;
+  try {
+    const res = await fetch(_remoteEndpoint(entry.difficulty, entry.timeChoice), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(entry),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = await res.json();
+    const remoteKey = body && body.name;
+    if (remoteKey) {
+      // Tag both the in-memory and stored entry with the auto-generated
+      // child key so we can PATCH the name later.
+      entry._remoteKey = remoteKey;
+      const board = getLeaderboard(entry.difficulty, entry.timeChoice);
+      const stored = board.find(e => e.id === entry.id);
+      if (stored) {
+        stored._remoteKey = remoteKey;
+        saveLeaderboard(entry.difficulty, entry.timeChoice, board);
+      }
+    }
+    // Update cache so the entry shows in the preview immediately.
+    const cacheKey = _remoteKey(entry.difficulty, entry.timeChoice);
+    if (!_remoteCache[cacheKey]) _remoteCache[cacheKey] = [];
+    _remoteCache[cacheKey].push(entry);
+  } catch (e) {
+    console.warn('[leaderboard] remote push failed:', e);
+  }
+}
+
+async function patchRemoteEntryName(entry, newName) {
+  if (!isRemoteEnabled() || !entry._remoteKey) return;
+  try {
+    await fetch(`${REMOTE_LEADERBOARD_URL}/scores/${encodeURIComponent(entry.difficulty)}/${encodeURIComponent(entry.timeChoice)}/${entry._remoteKey}.json`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newName }),
+    });
+    // Update cache in place
+    const cacheKey = _remoteKey(entry.difficulty, entry.timeChoice);
+    const arr = _remoteCache[cacheKey];
+    if (arr) {
+      const cached = arr.find(e => e.id === entry.id);
+      if (cached) cached.name = newName;
+    }
+  } catch (e) {
+    console.warn('[leaderboard] remote patch failed:', e);
+  }
+}
+
+// Returns local + remote-cache merged, deduped by entry.id, sorted desc.
+// Synchronous: uses whatever's currently in the cache. Callers that want
+// fresh data should kick off refreshRemoteBoard() and re-render on its
+// callback.
+function getMergedLeaderboard(diff, timeChoice) {
+  const local = getLeaderboard(diff, timeChoice);
+  const remote = _remoteCache[_remoteKey(diff, timeChoice)] || [];
+  const byId = new Map();
+  for (const e of remote) if (e && e.id) byId.set(e.id, e);
+  for (const e of local)  if (e && e.id && !byId.has(e.id)) byId.set(e.id, e);
+  const merged = Array.from(byId.values());
+  merged.sort((a, b) => b.score - a.score);
+  return merged;
+}
+
+// ---------- profanity filter ----------
+// Base64-encoded comma-separated list, kept off the page source verbatim
+// so the file isn't full of slurs in plain text. The decoded list is just
+// what you'd expect — common English profanity and slurs. Extend the list
+// in the helper script at the bottom of this comment if you want more.
+//
+//   to regenerate, run in Node:
+//   Buffer.from(['word1','word2',...].join(',')).toString('base64')
+const PROFANITY_B64 =
+  'c2hpdCxmdWNrLGZjayxjdW50LGRpY2ssY29jayxwdXNzeSxiaXRjaCxhc3Nob2xlLGJhc3' +
+  'RhcmQsc2x1dCx3aG9yZSx0d2F0LHdhbmsscHJpY2ssbmlnZ2VyLG5pZ2dhLGZhZ2dvdCxy' +
+  'ZXRhcmQsc3BpYyxraWtlLGNoaW5rLGdvb2ssdHJhbm55LGR5a2Usd2V0YmFjayxuYXppLG' +
+  'ppaGFkLHJhcGlzdCxwZWRvLHBlZG9waGlsZQ==';
+// Normalize: lowercase, leetspeak swap, strip non-letters. We deliberately
+// don't collapse repeats here — the regex below allows each letter of a
+// bad word to repeat one or more times, so "shiiit", "f-u-c-k", "$h1t",
+// etc. all match. Trade-off: incidental substrings like "Dickens" or
+// "scunthorpe" can still flag (the classic Scunthorpe problem); accept and
+// let the user pick a different name.
+function normalizeForProfanityCheck(s) {
+  return String(s)
+    .toLowerCase()
+    .replace(/0/g, 'o')
+    .replace(/[1!|]/g, 'i')
+    .replace(/3/g, 'e')
+    .replace(/[4@]/g, 'a')
+    .replace(/[5$]/g, 's')
+    .replace(/7/g, 't')
+    .replace(/[^a-z]/g, '');
+}
+function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+let _profanityRegex = null;
+function getProfanityRegex() {
+  if (_profanityRegex) return _profanityRegex;
+  try {
+    const list = atob(PROFANITY_B64).split(',').map(s => s.trim()).filter(Boolean);
+    // For each word, allow each char to repeat (s+h+i+t+ matches both
+    // "shit" and "shiiit") so we don't have to enumerate stretched forms.
+    const patterns = list.map(w =>
+      [...w].map(c => escapeRegex(c) + '+').join('')
+    );
+    _profanityRegex = new RegExp(patterns.join('|'));
+  } catch {
+    _profanityRegex = /^$/;
+  }
+  return _profanityRegex;
+}
+function isProfaneName(name) {
+  if (!name || !name.trim()) return false;
+  const norm = normalizeForProfanityCheck(name);
+  if (!norm) return false;
+  return getProfanityRegex().test(norm);
+}
+function makeEntryId() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return 'id-' + Math.random().toString(36).slice(2) + '-' + Date.now().toString(36);
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+function timeChoiceLabel(tc) {
+  return tc === 'unlimited' ? 'Unlimited' : `${tc}s / round`;
+}
+
+// Render a 7-row leaderboard window centered on the player's entry, with
+// the player's row highlighted, name editable, and fade at top/bottom edges
+// to hint that more entries lie beyond.
+function renderLeaderboardPreview(entry) {
+  const board = getMergedLeaderboard(entry.difficulty, entry.timeChoice);
+  const userIdx = board.findIndex(e => e.id === entry.id);
+  if (userIdx === -1) return '';
+
+  const windowSize = 3;                                  // rows above/below
+  const startIdx = Math.max(0, userIdx - windowSize);
+  const endIdx   = Math.min(board.length, userIdx + windowSize + 1);
+  const slice    = board.slice(startIdx, endIdx);
+
+  const rows = slice.map((e, i) => {
+    const rank = startIdx + i + 1;
+    const isUser = (e.id === entry.id);
+    const name = leaderboardDisplayName(e);
+    const inputHtml = isUser
+      ? `<input class="lb-name-input" type="text" maxlength="32"
+                placeholder="${escapeHtml(`Anonymous ${entry.animal}`)}"
+                value="${escapeHtml(entry.name || '')}"
+                aria-label="Edit your name">`
+      : `<span class="lb-name">${escapeHtml(name)}</span>`;
+    return `
+      <div class="lb-row${isUser ? ' lb-row-user' : ''}">
+        <span class="lb-rank">#${rank}</span>
+        ${isUser ? `<span class="lb-you">You</span>` : ''}
+        ${inputHtml}
+        <span class="lb-score">${e.score.toLocaleString()}</span>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="leaderboard-preview">
+      <div class="lb-header">
+        <span class="lb-title">Leaderboard</span>
+        <span class="lb-meta">${DIFFICULTIES[entry.difficulty].name} · ${timeChoiceLabel(entry.timeChoice)}</span>
+        <a href="#" class="lb-open-full" id="lb-open-full">View all &rarr;</a>
+      </div>
+      <div class="lb-list">${rows}</div>
+      <div class="lb-name-warning hidden" role="alert"></div>
+      <div class="lb-foot">${isRemoteEnabled() ? 'shared leaderboard' : 'local to this device'} · ${board.length} score${board.length === 1 ? '' : 's'} total</div>
+    </div>
+  `;
+}
+
+// ---------- full leaderboard view ----------
+// Shown when the player clicks "Leaderboards" from the menu (or "View all"
+// from the summary preview). Lets them switch difficulty and time choice.
+const lbView = {
+  difficulty: 'intermediate',
+  timeChoice: 'unlimited',
+  highlightEntryId: null,
+};
+
+function openLeaderboardView(opts = {}) {
+  if (opts.difficulty)       lbView.difficulty       = opts.difficulty;
+  if (opts.timeChoice)       lbView.timeChoice       = opts.timeChoice;
+  lbView.highlightEntryId = opts.highlightEntryId || null;
+
+  menuEl.classList.add('hidden');
+  summaryEl.classList.add('hidden');
+  topbarEl.classList.add('hidden');
+  controlsEl.classList.add('hidden');
+  hudTlEl.classList.add('hidden');
+  hudTrEl.classList.add('hidden');
+  revealBannerEl.classList.add('hidden');
+  document.getElementById('reveal-restore').classList.add('hidden');
+  document.getElementById('slider-truth').classList.add('hidden');
+  game.state = 'leaderboard';
+
+  renderLeaderboardView();
+  leaderboardViewEl.classList.remove('hidden');
+  // If remote is enabled, fetch the current filter's board in the background
+  // and re-render when it returns.
+  if (isRemoteEnabled()) {
+    refreshRemoteBoard(lbView.difficulty, lbView.timeChoice, () => {
+      if (game.state === 'leaderboard') renderLeaderboardView();
+    });
+  }
+}
+function closeLeaderboardView() {
+  leaderboardViewEl.classList.add('hidden');
+  showMenu();
+  menuEl.innerHTML = menuMarkup();
+  attachMenuHandlers();
+}
+
+function renderLeaderboardView() {
+  const diffEntries = Object.entries(DIFFICULTIES);
+  const diffBtns = diffEntries.map(([key, d]) => {
+    const sel = key === lbView.difficulty ? ' selected' : '';
+    return `<button data-diff="${key}" class="${sel}">${d.name}</button>`;
+  }).join('');
+
+  const board = getMergedLeaderboard(lbView.difficulty, lbView.timeChoice);
+  const maxPerRound = BASE_SCORE_PER_ROUND * DIFFICULTIES[lbView.difficulty].scoreMultiplier;
+  const maxTotal = maxPerRound * ROUNDS_PER_GAME;
+
+  const rowsHtml = board.length === 0
+    ? `<div class="lb-empty">No scores yet for this difficulty / time. Play a game to be the first!</div>`
+    : board.map((e, i) => {
+        const rank = i + 1;
+        const isHighlight = e.id === lbView.highlightEntryId;
+        const name = leaderboardDisplayName(e);
+        const date = new Date(e.timestamp);
+        const dateStr = date.toLocaleDateString(undefined,
+          { year: 'numeric', month: 'short', day: 'numeric' });
+        return `
+          <div class="lbf-row${isHighlight ? ' lbf-row-highlight' : ''}">
+            <span class="lbf-rank">#${rank}</span>
+            <span class="lbf-name">${escapeHtml(name)}</span>
+            <span class="lbf-score">${e.score.toLocaleString()}<span class="lbf-denom"> / ${maxTotal.toLocaleString()}</span></span>
+            <span class="lbf-date">${dateStr}</span>
+          </div>`;
+      }).join('');
+
+  leaderboardViewEl.innerHTML = `
+    <div class="lbf-top">
+      <h2>Leaderboards</h2>
+      <button id="lbf-back" class="lbf-back">&larr; Back to menu</button>
+    </div>
+    <div class="lbf-filters">
+      <div class="lbf-diff-row">${diffBtns}</div>
+      <label class="lbf-time">
+        <span>Time</span>
+        <select id="lbf-time-choice">
+          <option value="unlimited"${lbView.timeChoice === 'unlimited' ? ' selected' : ''}>Unlimited</option>
+          <option value="30"${lbView.timeChoice === '30' ? ' selected' : ''}>30 seconds</option>
+          <option value="10"${lbView.timeChoice === '10' ? ' selected' : ''}>10 seconds</option>
+          <option value="5"${lbView.timeChoice === '5' ? ' selected' : ''}>5 seconds</option>
+        </select>
+      </label>
+    </div>
+    <div class="lbf-list-wrap">
+      <div class="lbf-list-head">
+        <span class="lbf-rank">rank</span>
+        <span class="lbf-name">name</span>
+        <span class="lbf-score">score</span>
+        <span class="lbf-date">date</span>
+      </div>
+      <div class="lbf-list">${rowsHtml}</div>
+    </div>
+    <div class="lbf-foot">${isRemoteEnabled() ? 'Shared leaderboard. Scores from all players who have visited this page.' : 'Scores are stored locally on this device.'}</div>
+  `;
+
+  // Wire events
+  leaderboardViewEl.querySelectorAll('.lbf-diff-row button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      lbView.difficulty = btn.dataset.diff;
+      renderLeaderboardView();
+      requestAnimationFrame(scrollHighlightIntoView);
+      if (isRemoteEnabled()) {
+        refreshRemoteBoard(lbView.difficulty, lbView.timeChoice, () => {
+          if (game.state === 'leaderboard') renderLeaderboardView();
+        });
+      }
+    });
+  });
+  document.getElementById('lbf-time-choice').addEventListener('change', e => {
+    lbView.timeChoice = e.target.value;
+    renderLeaderboardView();
+    requestAnimationFrame(scrollHighlightIntoView);
+    if (isRemoteEnabled()) {
+      refreshRemoteBoard(lbView.difficulty, lbView.timeChoice, () => {
+        if (game.state === 'leaderboard') renderLeaderboardView();
+      });
+    }
+  });
+  document.getElementById('lbf-back').addEventListener('click', closeLeaderboardView);
+
+  scrollHighlightIntoView();
+}
+
+function scrollHighlightIntoView() {
+  if (!leaderboardViewEl) return;
+  const el = leaderboardViewEl.querySelector('.lbf-row-highlight');
+  if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+
+function wireLeaderboardPreviewHandlers(entry) {
+  const input = summaryEl.querySelector('.lb-name-input');
+  const warnEl = summaryEl.querySelector('.lb-name-warning');
+  if (input) {
+    let lastAccepted = entry.name || '';
+    // Update the entry name live; on blur, re-validate against the profanity
+    // filter and bounce if needed.
+    input.addEventListener('input', () => {
+      // Live-update only; profanity check happens on commit (blur/Enter) so
+      // we don't fight the user mid-typing.
+      updateLeaderboardEntryName(entry, input.value);
+    });
+    const commitOrReject = () => {
+      const v = input.value;
+      if (isProfaneName(v)) {
+        if (warnEl) {
+          warnEl.textContent = 'sorry, profanity checker flagged this one, please use another name';
+          warnEl.classList.remove('hidden');
+        }
+        // Revert both the stored entry and the input back to the last
+        // accepted name, prompting the user to enter a different one.
+        updateLeaderboardEntryName(entry, lastAccepted);
+        input.value = lastAccepted;
+        input.classList.add('lb-name-input-error');
+        // Defer the focus to after the blur completes
+        setTimeout(() => { input.focus(); input.select(); }, 0);
+      } else {
+        lastAccepted = v;
+        if (warnEl) warnEl.classList.add('hidden');
+        input.classList.remove('lb-name-input-error');
+        updateLeaderboardEntryName(entry, v);
+      }
+    };
+    input.addEventListener('blur', commitOrReject);
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        commitOrReject();
+        input.blur();
+      }
+    });
+    // Clearing the input also clears the warning
+    input.addEventListener('input', () => {
+      if (warnEl && !warnEl.classList.contains('hidden')) {
+        // If they're editing after a flag, clear the warning so they get fresh
+        // feedback on the next blur/Enter.
+        warnEl.classList.add('hidden');
+        input.classList.remove('lb-name-input-error');
+      }
+    });
+  }
+  const openFull = summaryEl.querySelector('#lb-open-full');
+  if (openFull) {
+    openFull.addEventListener('click', (e) => {
+      e.preventDefault();
+      openLeaderboardView({
+        difficulty: entry.difficulty,
+        timeChoice: entry.timeChoice,
+        highlightEntryId: entry.id,
+      });
+    });
+  }
+}
+
 // Persisted preference: show per-point χ² contribution labels on the
 // in-round reveal plot. Default off; the toggle lives on the reveal banner.
 // This preference does NOT propagate to the end-of-game summary mini-plots.
@@ -49,7 +585,8 @@ const game = {
   state: State.MENU,
   difficulty: 'intermediate',
   timed: false,
-  timerSeconds: 60,
+  timeChoice: 'unlimited',   // 'unlimited' | '5' | '10' | '30'
+  timerSeconds: 0,
   roundIndex: 0,             // 0..ROUNDS_PER_GAME-1
   rounds: [],                // current game's round data
   guesses: [],               // user sigma per round
@@ -57,12 +594,13 @@ const game = {
   totalScore: 0,
   timerEndTime: 0,
   timerHandle: null,
+  lastEntryId: null,         // leaderboard entry id for the current game
 };
 
 // ---------- DOM refs (assigned in init) ----------
 let app, menuEl, topbarEl, stageEl, plotWrapEl, canvasEl, hudTlEl, hudTrEl,
     controlsEl, sliderEl, sliderValEl, submitBtn, revealBannerEl,
-    summaryEl, exitLinkEl, plot;
+    summaryEl, leaderboardViewEl, exitLinkEl, plot;
 
 // ---------- bootstrap ----------
 window.addEventListener('DOMContentLoaded', init);
@@ -174,6 +712,7 @@ function buildShell() {
       </div>
 
       <div class="summary hidden" id="summary"></div>
+      <div class="leaderboard-view hidden" id="leaderboard-view"></div>
     </div>
   `;
 
@@ -191,6 +730,7 @@ function buildShell() {
   submitBtn = document.getElementById('submit-btn');
   revealBannerEl = document.getElementById('reveal-banner');
   summaryEl = document.getElementById('summary');
+  leaderboardViewEl = document.getElementById('leaderboard-view');
   exitLinkEl = document.getElementById('exit-link');
 
   // Slider tick labels. The last tick is marked "Nσ+" because the slider's
@@ -291,16 +831,20 @@ function menuMarkup() {
     </p>
     <div class="diff-grid">${diffBtns}</div>
     <div class="option-row">
-      <label>
-        <input type="checkbox" id="timed-toggle">
-        Timed mode
-      </label>
-      <label style="opacity:0.6;" id="timer-len-label">
-        seconds per round
-        <input type="number" id="timer-len" value="60" min="5" max="600" disabled>
+      <label class="time-choice-label">
+        Time per round
+        <select id="time-choice">
+          <option value="unlimited" selected>Unlimited</option>
+          <option value="30">30 seconds</option>
+          <option value="10">10 seconds</option>
+          <option value="5">5 seconds</option>
+        </select>
       </label>
     </div>
-    <button class="primary start-btn" id="start-btn">Start game</button>
+    <div class="menu-buttons">
+      <button class="primary start-btn" id="start-btn">Start game</button>
+      <button class="leaderboard-btn" id="open-leaderboard">Leaderboards</button>
+    </div>
     <div class="footer-note">
       Convention: two-sided &sigma; equivalent of the
       &chi;&sup2; upper-tail probability, common in astrophysics.
@@ -317,22 +861,26 @@ function attachMenuHandlers() {
       game.difficulty = btn.dataset.diff;
     });
   });
-  // Timed toggle
-  const timedToggle = document.getElementById('timed-toggle');
-  const timerLen = document.getElementById('timer-len');
-  const timerLenLabel = document.getElementById('timer-len-label');
-  timedToggle.addEventListener('change', () => {
-    timerLen.disabled = !timedToggle.checked;
-    timerLenLabel.style.opacity = timedToggle.checked ? '1' : '0.6';
-  });
+  // Time-per-round dropdown
+  const timeSelect = document.getElementById('time-choice');
+  if (game.timeChoice) timeSelect.value = game.timeChoice;
   document.getElementById('start-btn').addEventListener('click', () => {
-    game.timed = timedToggle.checked;
-    game.timerSeconds = Math.max(5, Math.min(600, parseInt(timerLen.value) || 60));
+    game.timeChoice = timeSelect.value; // "unlimited" | "5" | "10" | "30"
+    if (game.timeChoice === 'unlimited') {
+      game.timed = false;
+      game.timerSeconds = 0;
+    } else {
+      game.timed = true;
+      game.timerSeconds = parseInt(game.timeChoice, 10);
+    }
     startGame();
   });
   // Tutorial link
   const tutLink = document.getElementById('tutorial-link');
   if (tutLink) tutLink.addEventListener('click', startTutorial);
+  // Leaderboard link
+  const lbBtn = document.getElementById('open-leaderboard');
+  if (lbBtn) lbBtn.addEventListener('click', openLeaderboardView);
 }
 
 // ---------- state transitions ----------
@@ -346,6 +894,7 @@ function showMenu() {
   document.getElementById('reveal-restore').classList.add('hidden');
   document.getElementById('slider-truth').classList.add('hidden');
   summaryEl.classList.add('hidden');
+  if (leaderboardViewEl) leaderboardViewEl.classList.add('hidden');
   menuEl.classList.remove('hidden');
 }
 
@@ -355,7 +904,9 @@ function startGame() {
   game.guesses = [];
   game.scores = [];
   game.totalScore = 0;
-  document.getElementById('diff-name').textContent = DIFFICULTIES[game.difficulty].name;
+  const diffNameEl = document.getElementById('diff-name');
+  diffNameEl.textContent = DIFFICULTIES[game.difficulty].name;
+  diffNameEl.setAttribute('data-diff', game.difficulty);
   // running score shown as X / Y; Y grows after each round
   document.getElementById('score-val').innerHTML = '0 <span class="score-denom">/ 0</span>';
   document.getElementById('timer').classList.toggle('hidden', !game.timed);
@@ -559,18 +1110,62 @@ function showSummary() {
     `;
   }
 
+  // Add this score to the leaderboard for the current (difficulty, timeChoice)
+  // pair. We save immediately with a freshly-generated Anonymous-<animal>
+  // name; the user can edit the name from the preview that follows.
+  const newEntry = {
+    id: makeEntryId(),
+    name: '',
+    animal: randomAnimal(),
+    score: total,
+    timestamp: Date.now(),
+    difficulty: game.difficulty,
+    timeChoice: game.timeChoice,
+  };
+  addLeaderboardEntry(newEntry);
+  game.lastEntryId = newEntry.id;
+
   summaryEl.innerHTML = `
     <div class="top">
       <h2>Game complete · ${DIFFICULTIES[game.difficulty].name}</h2>
       <div class="total">${crownSvg}<span class="total-num">${total.toLocaleString()}</span><span class="denom"> / ${maxTotal.toLocaleString()}</span></div>
     </div>
     <div class="grid">${panels}</div>
+    ${renderLeaderboardPreview(newEntry)}
     <div class="actions">
       <button class="primary" id="play-again">Play again</button>
       <button id="back-menu">Back to menu</button>
     </div>
   `;
   summaryEl.classList.remove('hidden');
+  wireLeaderboardPreviewHandlers(newEntry);
+
+  // Kick off a remote fetch in the background; when it returns, re-render
+  // the preview so the player can see how they rank against everyone else.
+  if (isRemoteEnabled()) {
+    refreshRemoteBoard(newEntry.difficulty, newEntry.timeChoice, () => {
+      // Only re-render if still on the summary screen for this entry
+      if (game.state === State.SUMMARY && game.lastEntryId === newEntry.id) {
+        const wrap = summaryEl.querySelector('.leaderboard-preview');
+        if (wrap) {
+          // Preserve the in-progress name being typed (if any) so a remote
+          // re-render doesn't clobber the user's edit.
+          const input = wrap.querySelector('.lb-name-input');
+          const draftValue = input ? input.value : null;
+          const focused = (document.activeElement === input);
+          wrap.outerHTML = renderLeaderboardPreview(newEntry);
+          wireLeaderboardPreviewHandlers(newEntry);
+          if (draftValue !== null) {
+            const newInput = summaryEl.querySelector('.lb-name-input');
+            if (newInput) {
+              newInput.value = draftValue;
+              if (focused) newInput.focus();
+            }
+          }
+        }
+      }
+    });
+  }
 
   // Render mini plots in revealed mode (compact: no axis labels, tighter pad)
   // Keep references so we can destroy them on summary teardown.
