@@ -288,11 +288,20 @@ function getMergedLeaderboard(diff, timeChoice) {
 //
 //   to regenerate, run in Node:
 //   Buffer.from(['word1','word2',...].join(',')).toString('base64')
+// Coverage: common English profanity, sexual / explicit terms (avoiding
+// substrings that trip on legitimate words — see commit-time notes), the
+// most-used slurs (racial, ethnic, homophobic, transphobic, ableist), and
+// taboo/extremist terms. ~53 entries. Substring-matched with leetspeak
+// normalization, so "Sh1t", "f-u-c-k", and "shiiiit" all flag.
 const PROFANITY_B64 =
-  'c2hpdCxmdWNrLGZjayxjdW50LGRpY2ssY29jayxwdXNzeSxiaXRjaCxhc3Nob2xlLGJhc3' +
-  'RhcmQsc2x1dCx3aG9yZSx0d2F0LHdhbmsscHJpY2ssbmlnZ2VyLG5pZ2dhLGZhZ2dvdCxy' +
-  'ZXRhcmQsc3BpYyxraWtlLGNoaW5rLGdvb2ssdHJhbm55LGR5a2Usd2V0YmFjayxuYXppLG' +
-  'ppaGFkLHJhcGlzdCxwZWRvLHBlZG9waGlsZQ==';
+  'c2hpdCxmdWNrLGZjayxjdW50LGRpY2ssY29jayxwdXNzeSxiaXRjaCxhc3Nob2xlLGJh' +
+  'c3RhcmQsc2x1dCx3aG9yZSx0d2F0LHdhbmsscHJpY2ssbmlnZ2VyLG5pZ2dhLGZhZ2dv' +
+  'dCxyZXRhcmQsc3BpYyxraWtlLGNoaW5rLGdvb2ssdHJhbm55LGR5a2Usd2V0YmFjayxu' +
+  'YXppLGppaGFkLHJhcGlzdCxwZWRvLHBlZG9waGlsZSxwaXNzLGppenosdmFnaW5hLHBl' +
+  'bmlzLGJsb3dqb2IsaGFuZGpvYixob29rZXIsZ2FuZ2JhbmcsbWFzdHVyYmF0ZSx0aXRz' +
+  'LGJvb2JzLGZhZyxwYWtpLGJlYW5lcixyYWdoZWFkLHRvd2VsaGVhZCxzaGVtYWxlLGhp' +
+  'dGxlcixra2ssbG9saWNvbixiZXN0aWFsaXR5LHRlcnJvcmlzdCxzZXgsYW5hbCxtaWxm' +
+  'LGNvb24sY3Vt';
 // Normalize: lowercase, leetspeak swap, strip non-letters. We deliberately
 // don't collapse repeats here — the regex below allows each letter of a
 // bad word to repeat one or more times, so "shiiit", "f-u-c-k", "$h1t",
@@ -406,7 +415,7 @@ function renderLeaderboardPreview(entry) {
         <span class="lb-rank">#${rank}</span>
         ${isUser ? `<span class="lb-you">You</span>` : ''}
         ${inputHtml}
-        <span class="lb-score">${e.score.toLocaleString()}</span>
+        <span class="lb-score">${crownIfQualified(e.score, e.difficulty || entry.difficulty)}${e.score.toLocaleString()}</span>
       </div>`;
   }).join('');
 
@@ -489,7 +498,7 @@ function renderLeaderboardView() {
           <div class="lbf-row${isHighlight ? ' lbf-row-highlight' : ''}">
             <span class="lbf-rank">#${rank}</span>
             <span class="lbf-name">${escapeHtml(name)}</span>
-            <span class="lbf-score">${e.score.toLocaleString()}<span class="lbf-denom"> / ${maxTotal.toLocaleString()}</span></span>
+            <span class="lbf-score">${crownIfQualified(e.score, e.difficulty || lbView.difficulty)}${e.score.toLocaleString()}<span class="lbf-denom"> / ${maxTotal.toLocaleString()}</span></span>
             <span class="lbf-date">${dateStr}</span>
           </div>`;
       }).join('');
@@ -1282,7 +1291,7 @@ function showSummary() {
   summaryEl.innerHTML = `
     <div class="top">
       <h2>Game complete · ${DIFFICULTIES[game.difficulty].name}</h2>
-      <div class="total">${crownSvg}<span class="total-num">${total.toLocaleString()}</span><span class="denom"> / ${maxTotal.toLocaleString()}</span></div>
+      <div class="total">${summaryCrownSvg}<span class="total-num">${total.toLocaleString()}</span><span class="denom"> / ${maxTotal.toLocaleString()}</span></div>
     </div>
     <div class="grid">${panels}</div>
     ${renderLeaderboardPreview(newEntry)}
