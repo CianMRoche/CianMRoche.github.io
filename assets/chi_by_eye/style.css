@@ -1018,18 +1018,19 @@ html[data-theme="dark"] .tutorial-tooltip {
   .topbar .title { font-size: 14px; }
   .topbar a.exit { padding: 4px 10px; font-size: 10.5px; }
 
-  /* ---- plot wrap padding tighter so plot uses more room ---- */
-  .plot-wrap { padding: 12px 12px 4px; }
+  /* ---- plot wrap: extra top padding to stack the two HUDs above the canvas ---- */
+  .plot-wrap { padding: 56px 12px 4px; }
 
-  /* ---- HUD overlays: smaller, tighter, allow wrap ---- */
+  /* ---- HUD overlays: smaller, stacked vertically so they don't collide
+         horizontally on narrow viewports (the dof item on the left was
+         running into the σ readout on the right) ---- */
   .plot-hud {
     font-size: 11px;
     gap: 8px;
-    top: 18px;
     flex-wrap: wrap;
   }
-  .plot-hud-tl { left: 22px; }
-  .plot-hud-tr { right: 18px; }
+  .plot-hud-tl { top: 12px;  left: 18px; }
+  .plot-hud-tr { top: 34px;  right: 18px; left: 18px; justify-content: flex-start; }
   .plot-hud .hud-k { font-size: 9.5px; }
   .plot-hud .hud-sigma { font-size: 12.5px; }
   .plot-hud .hud-info { width: 16px; height: 16px; font-size: 10.5px; }
