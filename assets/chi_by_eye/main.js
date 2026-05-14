@@ -146,11 +146,22 @@ function updateLeaderboardEntryName(entry, newName) {
   if (entry._remoteKey) patchRemoteEntryName(entry, newName);
 }
 // Push this entry to the remote leaderboard with whatever name it has now.
-// Idempotent: if already pushed, becomes a no-op (or PATCH if name changed).
+// Idempotent: if already pushed, becomes a no-op. If a push is currently in
+// flight for the same entry id, we return that in-flight Promise instead of
+// firing a second POST — prevents the "two entries per submission" bug when
+// the user hits Enter and then clicks Play Again before the first POST has
+// resolved.
+const _entryPushPromises = new Map(); // entry.id -> Promise
 async function commitEntryToRemote(entry) {
   if (!isRemoteEnabled()) return;
-  if (entry._remoteKey) return; // already there
-  await pushRemoteEntry(entry);
+  if (entry._remoteKey) return;
+  const existing = _entryPushPromises.get(entry.id);
+  if (existing) return existing;
+  const promise = pushRemoteEntry(entry).finally(() => {
+    _entryPushPromises.delete(entry.id);
+  });
+  _entryPushPromises.set(entry.id, promise);
+  return promise;
 }
 function leaderboardDisplayName(entry) {
   return (entry.name && entry.name.trim()) || `Anonymous ${entry.animal}`;
@@ -293,15 +304,24 @@ function getMergedLeaderboard(diff, timeChoice) {
 // most-used slurs (racial, ethnic, homophobic, transphobic, ableist), and
 // taboo/extremist terms. ~53 entries. Substring-matched with leetspeak
 // normalization, so "Sh1t", "f-u-c-k", and "shiiiit" all flag.
+// ~94 entries: common English profanity + tense variants where the regex
+// repeat-each-letter trick can't catch them, sexual / explicit terms,
+// major slurs (racial, ethnic, homophobic, transphobic, ableist) including
+// British and less common ones, and taboo/extremist terms. Substring-matched
+// with leetspeak normalization, so "Sh1t", "f-u-c-k", "shiiit" all flag.
 const PROFANITY_B64 =
   'c2hpdCxmdWNrLGZjayxjdW50LGRpY2ssY29jayxwdXNzeSxiaXRjaCxhc3Nob2xlLGJh' +
   'c3RhcmQsc2x1dCx3aG9yZSx0d2F0LHdhbmsscHJpY2ssbmlnZ2VyLG5pZ2dhLGZhZ2dv' +
   'dCxyZXRhcmQsc3BpYyxraWtlLGNoaW5rLGdvb2ssdHJhbm55LGR5a2Usd2V0YmFjayxu' +
   'YXppLGppaGFkLHJhcGlzdCxwZWRvLHBlZG9waGlsZSxwaXNzLGppenosdmFnaW5hLHBl' +
-  'bmlzLGJsb3dqb2IsaGFuZGpvYixob29rZXIsZ2FuZ2JhbmcsbWFzdHVyYmF0ZSx0aXRz' +
-  'LGJvb2JzLGZhZyxwYWtpLGJlYW5lcixyYWdoZWFkLHRvd2VsaGVhZCxzaGVtYWxlLGhp' +
-  'dGxlcixra2ssbG9saWNvbixiZXN0aWFsaXR5LHRlcnJvcmlzdCxzZXgsYW5hbCxtaWxm' +
-  'LGNvb24sY3Vt';
+  'bmlzLGJsb3dqb2IsaGFuZGpvYixob29rZXIsZ2FuZ2JhbmcsbWFzdHVyYmF0LHRpdHMs' +
+  'Ym9vYnMsZmFnLHBha2ksYmVhbmVyLHJhZ2hlYWQsdG93ZWxoZWFkLHNoZW1hbGUsaGl0' +
+  'bGVyLGtrayxsb2xpY29uLGJlc3RpYWxpdHksdGVycm9yaXN0LHNleCxhbmFsLG1pbGYs' +
+  'Y29vbixjdW0sYm9sbG9ja3MsYnVnZ2VyLGtub2Isa25vYmhlYWQsbWluZ2UsdG9zc2Vy' +
+  'LHdhbmtlcixhcnNlLGFyc2Vob2xlLHNoYWcsYmludCxzbGFnLGNoYXYscGlrZXksbm9u' +
+  'Y2UscHJhdCxwaWxsb2NrLHdvZyxneXBwbyxrYWZmaXIsZGFya2llLGppZ2Fib28scGlj' +
+  'a2FuaW5ueSxob25reSxrcmF1dCxzcGF6LHNwYXN0aWMsbW9uZyxjcmlwcGxlLG1pZGdl' +
+  'dCxwb29mLHBvb2Z0ZXIscGFuc3ksc2lzc3ksZmFpcnksdGl0dHksdGl0dGllcw==';
 // Normalize: lowercase, leetspeak swap, strip non-letters. We deliberately
 // don't collapse repeats here — the regex below allows each letter of a
 // bad word to repeat one or more times, so "shiiit", "f-u-c-k", "$h1t",
@@ -436,16 +456,19 @@ function renderLeaderboardPreview(entry) {
 // ---------- full leaderboard view ----------
 // Shown when the player clicks "Leaderboards" from the menu (or "View all"
 // from the summary preview). Lets them switch difficulty and time choice.
+const LB_PAGE_SIZE = 20;
 const lbView = {
   difficulty: 'challenging',
   timeChoice: 'unlimited',
   highlightEntryId: null,
+  shown: LB_PAGE_SIZE,        // how many rows currently visible
 };
 
 function openLeaderboardView(opts = {}) {
   if (opts.difficulty)       lbView.difficulty       = opts.difficulty;
   if (opts.timeChoice)       lbView.timeChoice       = opts.timeChoice;
   lbView.highlightEntryId = opts.highlightEntryId || null;
+  lbView.shown = LB_PAGE_SIZE; // reset pagination whenever the view opens
 
   menuEl.classList.add('hidden');
   summaryEl.classList.add('hidden');
@@ -485,9 +508,22 @@ function renderLeaderboardView() {
   const maxPerRound = BASE_SCORE_PER_ROUND * DIFFICULTIES[lbView.difficulty].scoreMultiplier;
   const maxTotal = maxPerRound * ROUNDS_PER_GAME;
 
+  // If the highlighted entry exists but lies beyond the current page,
+  // expand the page so the player's own row is always visible without
+  // needing to click "Show more".
+  if (lbView.highlightEntryId) {
+    const hi = board.findIndex(e => e.id === lbView.highlightEntryId);
+    if (hi >= 0 && hi + 1 > lbView.shown) {
+      const pages = Math.ceil((hi + 1) / LB_PAGE_SIZE);
+      lbView.shown = pages * LB_PAGE_SIZE;
+    }
+  }
+  const visible = board.slice(0, lbView.shown);
+  const hiddenCount = Math.max(0, board.length - visible.length);
+
   const rowsHtml = board.length === 0
     ? `<div class="lb-empty">No scores yet for this difficulty / time. Play a game to be the first!</div>`
-    : board.map((e, i) => {
+    : visible.map((e, i) => {
         const rank = i + 1;
         const isHighlight = e.id === lbView.highlightEntryId;
         const name = leaderboardDisplayName(e);
@@ -502,6 +538,14 @@ function renderLeaderboardView() {
             <span class="lbf-date">${dateStr}</span>
           </div>`;
       }).join('');
+
+  const showMoreHtml = hiddenCount > 0
+    ? `<div class="lbf-show-more-wrap">
+         <button class="lbf-show-more" id="lbf-show-more" type="button">
+           Show more <span class="lbf-show-more-count">(${hiddenCount} more)</span>
+         </button>
+       </div>`
+    : '';
 
   leaderboardViewEl.innerHTML = `
     <div class="lbf-top">
@@ -528,6 +572,7 @@ function renderLeaderboardView() {
         <span class="lbf-date">date</span>
       </div>
       <div class="lbf-list">${rowsHtml}</div>
+      ${showMoreHtml}
     </div>
     <div class="lbf-foot">${isRemoteEnabled() ? 'Shared leaderboard. Scores from all players who have visited this page.' : 'Scores are stored locally on this device.'}</div>
   `;
@@ -536,6 +581,7 @@ function renderLeaderboardView() {
   leaderboardViewEl.querySelectorAll('.lbf-diff-row button').forEach(btn => {
     btn.addEventListener('click', () => {
       lbView.difficulty = btn.dataset.diff;
+      lbView.shown = LB_PAGE_SIZE; // reset pagination on filter change
       renderLeaderboardView();
       requestAnimationFrame(scrollHighlightIntoView);
       if (isRemoteEnabled()) {
@@ -547,6 +593,7 @@ function renderLeaderboardView() {
   });
   document.getElementById('lbf-time-choice').addEventListener('change', e => {
     lbView.timeChoice = e.target.value;
+    lbView.shown = LB_PAGE_SIZE;
     renderLeaderboardView();
     requestAnimationFrame(scrollHighlightIntoView);
     if (isRemoteEnabled()) {
@@ -556,6 +603,14 @@ function renderLeaderboardView() {
     }
   });
   document.getElementById('lbf-back').addEventListener('click', closeLeaderboardView);
+  // Show more — bring in the next page of entries.
+  const showMoreBtn = document.getElementById('lbf-show-more');
+  if (showMoreBtn) {
+    showMoreBtn.addEventListener('click', () => {
+      lbView.shown += LB_PAGE_SIZE;
+      renderLeaderboardView();
+    });
+  }
 
   scrollHighlightIntoView();
 }
@@ -588,14 +643,21 @@ function wireLeaderboardPreviewHandlers(entry) {
     if (entry._remoteKey) showSaved();
     else if (input.value) showPending();
 
-    // Live update of the local entry name on every keystroke (no remote
-    // round-trip until commit).
+    // Live update is delicate here: we don't want the entry.name (which is
+    // what gets pushed to the leaderboard if the user navigates away) to
+    // ever hold profanity. So while typing we only mirror clean values into
+    // entry.name. Profane drafts stay in the input until the user fixes
+    // them or navigates away (in which case the entry falls back to the
+    // last clean name → anonymous animal).
     input.addEventListener('input', () => {
-      updateLeaderboardEntryName(entry, input.value);
-      // Once they start typing again after a saved/rejected state, prompt.
+      // Reset feedback when the user resumes typing after a rejection.
       if (warnEl && !warnEl.classList.contains('hidden')) {
         warnEl.classList.add('hidden');
         input.classList.remove('lb-name-input-error');
+      }
+      const v = input.value;
+      if (!isProfaneName(v)) {
+        updateLeaderboardEntryName(entry, v);
       }
       if (!entry._remoteKey) showPending();
     });
@@ -607,10 +669,11 @@ function wireLeaderboardPreviewHandlers(entry) {
           warnEl.textContent = 'sorry, profanity checker flagged this one, please use another name';
           warnEl.classList.remove('hidden');
         }
-        updateLeaderboardEntryName(entry, lastAccepted);
-        input.value = lastAccepted;
+        // Keep the typed text in the input so the player can see what was
+        // rejected and edit it. Don't update entry.name (which stays at the
+        // last clean value); don't push anything to the remote.
         input.classList.add('lb-name-input-error');
-        setStatus('error', 'rejected');
+        setStatus('error', 'rejected — try a different name');
         setTimeout(() => { input.focus(); input.select(); }, 0);
         return;
       }
@@ -1348,12 +1411,15 @@ function showSummary() {
   // navigate away. Uses whatever name is currently in the entry (empty →
   // "Anonymous <animal>").
   function flushUnsavedEntry() {
-    const e = game.rounds.length ? null : null; // (placeholder for clarity)
-    if (game.lastEntryId && isRemoteEnabled()) {
-      const board = getLeaderboard(game.difficulty, game.timeChoice);
-      const entry = board.find(x => x.id === game.lastEntryId);
-      if (entry && !entry._remoteKey) commitEntryToRemote(entry);
-    }
+    if (!game.lastEntryId || !isRemoteEnabled()) return;
+    const board = getLeaderboard(game.difficulty, game.timeChoice);
+    const entry = board.find(x => x.id === game.lastEntryId);
+    if (!entry || entry._remoteKey) return;
+    // Defensive: if the stored name somehow became profane (shouldn't happen
+    // with the current input handler, but belt-and-braces), strip it before
+    // pushing so the global leaderboard never sees profanity.
+    if (isProfaneName(entry.name)) updateLeaderboardEntryName(entry, '');
+    commitEntryToRemote(entry);
   }
   document.getElementById('play-again').addEventListener('click', () => {
     flushUnsavedEntry();
