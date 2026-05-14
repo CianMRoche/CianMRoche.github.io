@@ -22,6 +22,11 @@
   --diff-hard:         #ef4444;
   --diff-impossible:   #a855f7;
 
+  /* Truth color — used for the true-σ marker (slider bar, label, mini-slider
+     truth marker, and the "true" rows in summary panels). Distinctly orange
+     rather than red so it doesn't read as a "warning". */
+  --truth:             #ea580c;
+
   /* Plot colors — read by plot.js via getComputedStyle */
   --plot-bg:      #ffffff;
   --plot-fg:      #1f2937;
@@ -42,6 +47,7 @@ html[data-theme="dark"] {
   --diff-challenging:  #fbbf24;
   --diff-hard:         #f87171;
   --diff-impossible:   #c084fc;
+  --truth:             #fb923c;
 }
 
 html[data-theme="dark"] {
@@ -163,7 +169,8 @@ body {
   flex: 1;
   position: relative;
   min-height: 0;
-  padding: 20px 28px 4px;
+  /* Reduced top padding now that the HUD-tl sits *inside* the plot rect. */
+  padding: 8px 28px 4px;
 }
 .plot-wrap canvas {
   width: 100%;
@@ -171,20 +178,28 @@ body {
   display: block;
 }
 /* ---------- plot HUD overlays ---------- */
+/* HUD-tl now sits inside the plot rectangle (the canvas reserves the top
+   ~32 CSS px and the left ~64 CSS px as empty axis margin; we land just
+   inside that). A subtle background keeps it readable over plot content. */
 .plot-hud {
   position: absolute;
-  top: 24px;
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 13px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
   color: var(--fg);
+  padding: 5px 9px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  backdrop-filter: blur(2px);
 }
-.plot-hud-tl { left: 42px; }
-.plot-hud-tr { right: 38px; }
+.plot-hud-tl {
+  top: 48px;
+  left: 100px;
+}
 .plot-hud .hud-item { display: inline-flex; align-items: baseline; gap: 5px; }
 .plot-hud .hud-k {
   color: var(--muted);
@@ -308,6 +323,67 @@ html[data-theme="dark"] .hud-popover { box-shadow: 0 6px 24px rgba(0,0,0,0.5); }
   font-size: 17px;
   color: var(--accent);
   font-weight: 600;
+  /* Sit closer to the slider, further from the mini-stats column. */
+  margin-left: -10px;
+  margin-right: 12px;
+}
+
+/* ---------- mini-stat sliders (next to the σ slider) ----------
+   Each row: <label>  <bar>  <value>.  The bar is a non-interactive fill
+   on a muted track — drawn with alpha rather than color so the eye reads
+   them as secondary, derived numbers.  The p-value bar shows 0/1 ticks. */
+.controls .mini-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 220px;
+  flex-shrink: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.mini-stat {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 54px;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+.mini-stat.with-ticks { align-items: start; }
+.mini-stat .ms-label {
+  text-align: right;
+  font-size: 11px;
+  opacity: 0.85;
+}
+.mini-stat .ms-label em { font-style: italic; font-family: 'Times New Roman', serif; }
+.mini-stat .ms-bar-wrap { display: flex; flex-direction: column; gap: 1px; }
+.mini-stat .ms-bar {
+  position: relative;
+  height: 4px;
+  background: color-mix(in srgb, var(--fg) 22%, transparent);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.mini-stat .ms-fill {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 0;
+  background: var(--fg);
+  opacity: 0.7;
+  border-radius: 2px;
+  transition: width 0.06s linear;
+}
+.mini-stat .ms-ticks {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  opacity: 0.5;
+  letter-spacing: 0;
+}
+.mini-stat .ms-value {
+  text-align: left;
+  font-size: 11.5px;
+  opacity: 0.85;
 }
 
 /* Slider styling.
@@ -389,7 +465,7 @@ input[type="range"].sigma:disabled { opacity: 0.6; }
 .slider-truth .truth-bar {
   width: 3px;
   height: 30px;
-  background: var(--bad);
+  background: var(--truth);
   border-radius: 1.5px;
   box-shadow: 0 0 0 1px var(--bg);
 }
@@ -399,7 +475,7 @@ input[type="range"].sigma:disabled { opacity: 0.6; }
   font-size: 9.5px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--bad);
+  color: var(--truth);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -637,6 +713,9 @@ html[data-theme="dark"] .reveal-banner { box-shadow: 0 4px 16px rgba(0,0,0,0.4);
   font-size: 20px; font-weight: 500; color: var(--fg);
 }
 .reveal-banner .pair.score .v { color: var(--accent); }
+/* Color the guess and truth values to match the slider markers below. */
+.reveal-banner #rb-user { color: var(--accent); }
+.reveal-banner #rb-true { color: var(--truth); }
 /* Primary pairs (Your guess / Truth) draw the eye first. Secondary pairs
    (true χ² and χ²/dof) are de-emphasized — same info, dimmer. */
 .reveal-banner .pair.secondary .k,
@@ -829,6 +908,12 @@ html[data-theme="dark"] .summary .total .crown {
   margin-top: 8px;
 }
 .summary .panel .row .k { color: var(--muted); }
+/* Match these rows to the colors of the user/truth markers in the mini-slider
+   so the eye connects label, value, and the bar position visually. */
+.summary .panel .row.row-guess,
+.summary .panel .row.row-guess .k { color: var(--accent); }
+.summary .panel .row.row-truth,
+.summary .panel .row.row-truth .k { color: var(--truth); }
 .summary .panel .score-row {
   margin-top: 6px;
   font-weight: 500;
@@ -855,7 +940,7 @@ html[data-theme="dark"] .summary .total .crown {
   margin-left: -1px;
 }
 .mini-slider .marker.user { background: var(--accent); }
-.mini-slider .marker.truth { background: var(--bad); height: 17px; top: 1px; }
+.mini-slider .marker.truth { background: var(--truth); height: 17px; top: 1px; }
 .mini-slider .marker-labels {
   position: absolute;
   top: -4px;
@@ -1168,6 +1253,13 @@ html[data-theme="dark"] .tutorial-tooltip {
   background: var(--accent-soft);
   outline: 1px solid var(--accent);
 }
+/* Empty slot — same vertical footprint as a real row so the user's row
+   stays centered when fewer than 3 scores exist above or below. */
+.leaderboard-preview .lb-row-empty {
+  min-height: 30px;
+  padding: 7px 8px;
+  /* No content; the gradient mask on .lb-list does the visual fade. */
+}
 .leaderboard-preview .lb-row-user .lb-rank { color: var(--accent); font-weight: 600; }
 .leaderboard-preview .lb-row-user .lb-score { color: var(--accent); font-weight: 600; }
 .leaderboard-preview .lb-foot {
@@ -1398,19 +1490,19 @@ html[data-theme="dark"] .tutorial-tooltip {
   .topbar .title { font-size: 14px; }
   .topbar a.exit { padding: 4px 10px; font-size: 10.5px; }
 
-  /* ---- plot wrap: extra top padding to stack the two HUDs above the canvas ---- */
-  .plot-wrap { padding: 56px 12px 4px; }
+  /* ---- plot wrap: HUD lives inside the plot rect now, so the wrapper
+         only needs a slim top padding ---- */
+  .plot-wrap { padding: 8px 12px 4px; }
 
-  /* ---- HUD overlays: smaller, stacked vertically so they don't collide
-         horizontally on narrow viewports (the dof item on the left was
-         running into the σ readout on the right) ---- */
+  /* ---- HUD-tl positioned inside the plot rect on phones too. Plot rect
+         starts at plot-wrap padding-top (8) + canvas internal PAD.t (32)
+         = ~40 px, plus a small inset. ---- */
   .plot-hud {
-    font-size: 11px;
+    font-size: 10.5px;
     gap: 8px;
-    flex-wrap: wrap;
+    padding: 4px 8px;
   }
-  .plot-hud-tl { top: 12px;  left: 18px; }
-  .plot-hud-tr { top: 34px;  right: 18px; left: 18px; justify-content: flex-start; }
+  .plot-hud-tl { top: 48px; left: 78px; }
   .plot-hud .hud-k { font-size: 9.5px; }
   .plot-hud .hud-sigma { font-size: 12.5px; }
   .plot-hud .hud-info { width: 16px; height: 16px; font-size: 10.5px; }
@@ -1487,6 +1579,19 @@ html[data-theme="dark"] .tutorial-tooltip {
     width: 100%;
     padding: 12px;
     margin-top: 14px;
+  }
+  /* Mini-stats: take full width, sit between σ value and slider. Rows are
+     still horizontal (label/bar/value). */
+  .controls .mini-stats {
+    width: 100%;
+    gap: 6px;
+    margin-top: 4px;
+    order: 1;            /* between value (order:-1) and submit (after) */
+    align-self: stretch;
+  }
+  .controls .mini-stats .mini-stat {
+    grid-template-columns: 44px minmax(0, 1fr) 60px;
+    font-size: 12px;
   }
 
   /* ---- menu: tighter, difficulty grid stacks ---- */

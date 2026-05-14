@@ -1,6 +1,6 @@
 // Chi By Eye - main entry & game state machine.
 
-import { sigmaToChi2, chi2ToSigma } from './stats.js';
+import { sigmaToChi2, chi2ToSigma, normCDF } from './stats.js';
 import { DIFFICULTIES, makeRound } from './round.js';
 import { Plot } from './plot.js';
 
@@ -151,6 +151,11 @@ function leaderboardDisplayName(entry) {
 // key. Re-fetched whenever the player opens the leaderboard preview / view.
 const _remoteCache = {};      // key -> Array<entry>
 const _remoteInFlight = {};   // key -> Promise (so we don't double-fetch)
+// If the player edits their name before the initial POST resolves (i.e.
+// before _remoteKey is known), park the latest name update here and flush
+// it once the POST returns. Otherwise the PATCH would no-op and the remote
+// entry would stay with the empty (anonymous) name.
+const _pendingNameUpdates = new Map(); // entry.id -> latest pending name
 function _remoteKey(diff, timeChoice) { return `${diff}.${timeChoice}`; }
 function _remoteEndpoint(diff, timeChoice) {
   return `${REMOTE_LEADERBOARD_URL}/scores/${encodeURIComponent(diff)}/${encodeURIComponent(timeChoice)}.json`;
@@ -208,13 +213,30 @@ async function pushRemoteEntry(entry) {
     const cacheKey = _remoteKey(entry.difficulty, entry.timeChoice);
     if (!_remoteCache[cacheKey]) _remoteCache[cacheKey] = [];
     _remoteCache[cacheKey].push(entry);
+    // If the player typed a name before the POST resolved, flush that
+    // queued update now that we know the entry's remote key.
+    if (_pendingNameUpdates.has(entry.id)) {
+      const pendingName = _pendingNameUpdates.get(entry.id);
+      _pendingNameUpdates.delete(entry.id);
+      // Avoid an unnecessary round-trip if the queued name matches what we
+      // just POSTed.
+      if (pendingName !== entry.name) {
+        patchRemoteEntryName(entry, pendingName);
+      }
+    }
   } catch (e) {
     console.warn('[leaderboard] remote push failed:', e);
   }
 }
 
 async function patchRemoteEntryName(entry, newName) {
-  if (!isRemoteEnabled() || !entry._remoteKey) return;
+  if (!isRemoteEnabled()) return;
+  if (!entry._remoteKey) {
+    // POST hasn't resolved yet — queue this update and let pushRemoteEntry
+    // flush it once _remoteKey is known. Latest write wins.
+    _pendingNameUpdates.set(entry.id, newName);
+    return;
+  }
   try {
     await fetch(`${REMOTE_LEADERBOARD_URL}/scores/${encodeURIComponent(entry.difficulty)}/${encodeURIComponent(entry.timeChoice)}/${entry._remoteKey}.json`, {
       method: 'PATCH',
@@ -314,21 +336,29 @@ function timeChoiceLabel(tc) {
   return tc === 'unlimited' ? 'Unlimited' : `${tc}s / round`;
 }
 
-// Render a 7-row leaderboard window centered on the player's entry, with
-// the player's row highlighted, name editable, and fade at top/bottom edges
-// to hint that more entries lie beyond.
+// Render a 7-row leaderboard window centered on the player's entry. The
+// player's row is highlighted and always sits in the visual middle of the
+// box; if there aren't 3 scores above/below them, the empty slots render as
+// blank rows so the centering stays consistent regardless of rank.
 function renderLeaderboardPreview(entry) {
   const board = getMergedLeaderboard(entry.difficulty, entry.timeChoice);
   const userIdx = board.findIndex(e => e.id === entry.id);
   if (userIdx === -1) return '';
 
-  const windowSize = 3;                                  // rows above/below
-  const startIdx = Math.max(0, userIdx - windowSize);
-  const endIdx   = Math.min(board.length, userIdx + windowSize + 1);
-  const slice    = board.slice(startIdx, endIdx);
+  const windowSize = 3;
+  const slots = [];                                       // null = empty placeholder
+  for (let off = -windowSize; off <= windowSize; off++) {
+    const idx = userIdx + off;
+    if (idx < 0 || idx >= board.length) slots.push(null);
+    else slots.push({ entry: board[idx], rank: idx + 1 });
+  }
 
-  const rows = slice.map((e, i) => {
-    const rank = startIdx + i + 1;
+  const rows = slots.map(slot => {
+    if (slot === null) {
+      return `<div class="lb-row lb-row-empty" aria-hidden="true"></div>`;
+    }
+    const e = slot.entry;
+    const rank = slot.rank;
     const isUser = (e.id === entry.id);
     const name = leaderboardDisplayName(e);
     const inputHtml = isUser
@@ -379,7 +409,6 @@ function openLeaderboardView(opts = {}) {
   topbarEl.classList.add('hidden');
   controlsEl.classList.add('hidden');
   hudTlEl.classList.add('hidden');
-  hudTrEl.classList.add('hidden');
   revealBannerEl.classList.add('hidden');
   document.getElementById('reveal-restore').classList.add('hidden');
   document.getElementById('slider-truth').classList.add('hidden');
@@ -598,7 +627,7 @@ const game = {
 };
 
 // ---------- DOM refs (assigned in init) ----------
-let app, menuEl, topbarEl, stageEl, plotWrapEl, canvasEl, hudTlEl, hudTrEl,
+let app, menuEl, topbarEl, stageEl, plotWrapEl, canvasEl, hudTlEl,
     controlsEl, sliderEl, sliderValEl, submitBtn, revealBannerEl,
     summaryEl, leaderboardViewEl, exitLinkEl, plot;
 
@@ -638,12 +667,6 @@ function buildShell() {
           <span class="hud-badge hidden" id="hud-logy">log y</span>
           <button class="hud-info" id="hud-info-btn" aria-label="Symbol legend">i</button>
         </div>
-        <div class="plot-hud plot-hud-tr hidden" id="hud-tr">
-          <span class="hud-sigma" id="readout-sigma">1.00&sigma;</span>
-          <span class="hud-arrow-double">&hArr;</span>
-          <span class="hud-item"><span class="hud-k">&chi;&sup2;</span><span class="hud-v" id="readout-chi">—</span></span>
-          <span class="hud-item"><span class="hud-k">&chi;&sup2;/dof</span><span class="hud-v" id="readout-red">—</span></span>
-        </div>
         <div class="hud-popover hidden" id="hud-popover">
           <div class="popover-row"><span class="popover-k">N</span><span class="popover-v">number of data points</span></div>
           <div class="popover-row"><span class="popover-k">k</span><span class="popover-v">free model parameters</span></div>
@@ -669,6 +692,10 @@ function buildShell() {
             <div class="pair secondary">
               <span class="k">True &chi;&sup2;/dof</span>
               <span class="v" id="rb-red">—</span>
+            </div>
+            <div class="pair secondary">
+              <span class="k">True <em>p</em></span>
+              <span class="v" id="rb-pvalue">—</span>
             </div>
             <div class="pair score">
               <span class="k">Score</span>
@@ -704,6 +731,30 @@ function buildShell() {
           <div class="slider-ticks" id="slider-ticks"></div>
         </div>
         <div class="value" id="sigma-val">1.00&sigma;</div>
+        <div class="mini-stats" aria-label="Stats derived from your tension slider">
+          <div class="mini-stat">
+            <span class="ms-label">&chi;&sup2;</span>
+            <div class="ms-bar-wrap">
+              <div class="ms-bar"><div class="ms-fill" id="ms-fill-chi"></div></div>
+            </div>
+            <span class="ms-value" id="ms-value-chi">—</span>
+          </div>
+          <div class="mini-stat">
+            <span class="ms-label">&chi;&sup2;/dof</span>
+            <div class="ms-bar-wrap">
+              <div class="ms-bar"><div class="ms-fill" id="ms-fill-red"></div></div>
+            </div>
+            <span class="ms-value" id="ms-value-red">—</span>
+          </div>
+          <div class="mini-stat with-ticks">
+            <span class="ms-label"><em>p</em></span>
+            <div class="ms-bar-wrap">
+              <div class="ms-bar"><div class="ms-fill" id="ms-fill-p"></div></div>
+              <div class="ms-ticks"><span>0</span><span>1</span></div>
+            </div>
+            <span class="ms-value" id="ms-value-p">—</span>
+          </div>
+        </div>
         <button class="primary" id="submit-btn">Submit</button>
       </div>
 
@@ -723,7 +774,6 @@ function buildShell() {
   plotWrapEl = document.getElementById('plot-wrap');
   canvasEl = document.getElementById('plot-canvas');
   hudTlEl = document.getElementById('hud-tl');
-  hudTrEl = document.getElementById('hud-tr');
   controlsEl = document.getElementById('controls');
   sliderEl = document.getElementById('sigma-slider');
   sliderValEl = document.getElementById('sigma-val');
@@ -826,7 +876,7 @@ function menuMarkup() {
   return `
     <h1><span class="chi">&chi;</span> by eye</h1>
     <p class="tagline">
-      Estimate how many &sigma; the data is in tension with the model. Five rounds per game. New to &chi;&sup2;?
+      Estimate the tension between data and model. <br>New to &chi;&sup2;?
       <button type="button" class="tutorial-link" id="tutorial-link">walk through the tutorial &rarr;</button>
     </p>
     <div class="diff-grid">${diffBtns}</div>
@@ -889,7 +939,6 @@ function showMenu() {
   topbarEl.classList.add('hidden');
   controlsEl.classList.add('hidden');
   hudTlEl.classList.add('hidden');
-  hudTrEl.classList.add('hidden');
   revealBannerEl.classList.add('hidden');
   document.getElementById('reveal-restore').classList.add('hidden');
   document.getElementById('slider-truth').classList.add('hidden');
@@ -921,11 +970,15 @@ function beginRound() {
   document.getElementById('round-num').textContent = String(game.roundIndex + 1);
   controlsEl.classList.remove('hidden');
   hudTlEl.classList.remove('hidden');
-  hudTrEl.classList.remove('hidden');
   revealBannerEl.classList.add('hidden');
 
   const r = makeRound(game.difficulty);
   game.rounds.push(r);
+
+  // Cache max χ² and reduced χ² (at the slider's max σ) for the mini-stat
+  // sliders — recomputed once per round since dof changes.
+  game._maxChi2 = sigmaToChi2(SIGMA_SLIDER_MAX, r.dof);
+  game._maxRedChi2 = game._maxChi2 / r.dof;
 
   // Populate top-left HUD
   document.getElementById('hud-N').textContent = String(r.N);
@@ -967,10 +1020,25 @@ function updateSliderDisplay() {
   if (!r) return;
   const chi2 = sigmaToChi2(sigma, r.dof);
   const red = chi2 / r.dof;
-  // top-right HUD: σ value matches slider so connection is obvious
-  document.getElementById('readout-sigma').innerHTML = sigmaText;
-  document.getElementById('readout-chi').textContent = chi2.toFixed(2);
-  document.getElementById('readout-red').textContent = red.toFixed(2);
+  // χ² upper-tail p-value via the two-sided sigma relation (no extra
+  // sigmaToChi2 lookup needed).
+  const p = 2 * (1 - normCDF(sigma));
+  // Cached per-round max values for the mini-slider scales.
+  const maxChi2 = game._maxChi2 || sigmaToChi2(SIGMA_SLIDER_MAX, r.dof);
+  const maxRed  = game._maxRedChi2 || (maxChi2 / r.dof);
+  const fChi = (chi2 / maxChi2) * 100;
+  const fRed = (red  / maxRed)  * 100;
+  const fP   = p * 100;
+  const clamp01 = v => Math.max(0, Math.min(100, v));
+  document.getElementById('ms-fill-chi').style.width = `${clamp01(fChi)}%`;
+  document.getElementById('ms-fill-red').style.width = `${clamp01(fRed)}%`;
+  document.getElementById('ms-fill-p').style.width   = `${clamp01(fP)}%`;
+  document.getElementById('ms-value-chi').textContent = chi2.toFixed(2);
+  document.getElementById('ms-value-red').textContent = red.toFixed(2);
+  document.getElementById('ms-value-p').textContent =
+    p >= 0.01  ? p.toFixed(3)
+    : p > 0    ? p.toExponential(1)
+                : '0';
 }
 
 function onSliderInput() {
@@ -1019,6 +1087,12 @@ function finalizeRound(userSigma) {
   document.getElementById('rb-true').innerHTML  = trueLabel;
   document.getElementById('rb-chi2').textContent = r.chi2.toFixed(2);
   document.getElementById('rb-red').textContent  = r.redChi2.toFixed(2);
+  // p-value of the true chi² for this dof (= 2 · (1 − Φ(true σ))).
+  const truePvalue = 2 * (1 - normCDF(Math.min(r.trueSigma, 37)));
+  document.getElementById('rb-pvalue').textContent =
+    truePvalue >= 0.01 ? truePvalue.toFixed(3)
+    : truePvalue > 0    ? truePvalue.toExponential(1)
+                         : '0';
   document.getElementById('rb-score').innerHTML  =
     `${Math.round(score).toLocaleString()} <span class="score-denom">/ ${Math.round(roundMax).toLocaleString()}</span>`;
   revealBannerEl.classList.remove('hidden');
@@ -1068,7 +1142,6 @@ function showSummary() {
   game.state = State.SUMMARY;
   controlsEl.classList.add('hidden');
   hudTlEl.classList.add('hidden');
-  hudTrEl.classList.add('hidden');
   revealBannerEl.classList.add('hidden');
   document.getElementById('reveal-restore').classList.add('hidden');
   plot.stopAnimation();
@@ -1087,6 +1160,12 @@ function showSummary() {
       <circle cx="21" cy="7"   r="1.2" fill="currentColor"/>
     </svg>` : '';
 
+  function formatP(sig) {
+    const pv = 2 * (1 - normCDF(Math.min(sig, 37)));
+    if (pv >= 0.01)  return pv.toFixed(3);
+    if (pv > 0)      return pv.toExponential(1);
+    return '0';
+  }
   let panels = '';
   for (let i = 0; i < game.rounds.length; i++) {
     const r = game.rounds[i];
@@ -1097,9 +1176,11 @@ function showSummary() {
           <span>dof ${r.dof}</span>
         </div>
         <canvas data-mini="${i}"></canvas>
-        <div class="row"><span class="k">your guess</span><span>${game.guesses[i].toFixed(2)}&sigma;</span></div>
-        <div class="row"><span class="k">true</span><span>${r.trueSigma.toFixed(2)}&sigma;${r.trueSigma > SIGMA_SLIDER_MAX ? ' <span style="color:var(--muted);font-size:10px;">off-scale</span>' : ''}</span></div>
-        <div class="row"><span class="k">&chi;&sup2;</span><span>${r.chi2.toFixed(2)}  (&chi;&sup2;/dof = ${r.redChi2.toFixed(2)})</span></div>
+        <div class="row row-guess"><span class="k">your guess</span><span>${game.guesses[i].toFixed(2)}&sigma;</span></div>
+        <div class="row row-truth"><span class="k">true</span><span>${r.trueSigma.toFixed(2)}&sigma;${r.trueSigma > SIGMA_SLIDER_MAX ? ' <span style="color:var(--muted);font-size:10px;">off-scale</span>' : ''}</span></div>
+        <div class="row"><span class="k">&chi;&sup2;</span><span>${r.chi2.toFixed(2)}</span></div>
+        <div class="row"><span class="k">&chi;&sup2;/dof</span><span>${r.redChi2.toFixed(2)}</span></div>
+        <div class="row"><span class="k"><em>p</em></span><span>${formatP(r.trueSigma)}</span></div>
         <div class="mini-slider">
           <div class="track"></div>
           ${miniSliderMarker('user', game.guesses[i])}
@@ -1328,11 +1409,12 @@ const TUTORIAL_STEPS = [
   },
   {
     label: 'Live readout',
-    text: 'Top-right shows your slider <span class="math">σ</span> in two equivalent forms — ' +
-          '<span class="math">χ²</span> and <span class="math">χ²/dof</span> — for this ' +
-          "round's dof. Move the slider and all three change together.",
-    target: '#hud-tr',
-    arrow: 'below',
+    text: 'Next to the slider, your <span class="math">σ</span> value gets translated into ' +
+          '<span class="math">χ²</span>, <span class="math">χ²/dof</span>, and the ' +
+          '<span class="math">p</span>-value — four equivalent ways of saying the same ' +
+          "thing for this round's dof. Move the slider and all of them update together.",
+    target: '.mini-stats',
+    arrow: 'above',
   },
   {
     label: 'Demo: empty plot',
@@ -1386,7 +1468,7 @@ const TUTORIAL_STEPS = [
     text: 'Dividing by dof gives <span class="math">χ²/dof</span>, which is ≈ 1 for a fit ' +
           'consistent with its quoted errors. Much greater than 1 → the model misses the data. ' +
           'Much less → errors are likely overestimated.',
-    target: '#hud-tr',
+    target: '.mini-stats',
     arrow: 'below',
   },
   {
@@ -1394,7 +1476,7 @@ const TUTORIAL_STEPS = [
     text: 'Finally, the χ² maps to a sigma equivalent — how unlikely is a χ² this large under ' +
           'the null hypothesis that the model is correct? 0–1σ: consistent. 2–3σ: unclear. 4-5σ+: ' +
           'serious tension.',
-    target: '#hud-tr',
+    target: '.mini-stats',
     arrow: 'below',
   },
   {
@@ -1426,7 +1508,6 @@ function startTutorial(e) {
   topbarEl.classList.add('hidden');
   controlsEl.classList.remove('hidden');
   hudTlEl.classList.remove('hidden');
-  hudTrEl.classList.remove('hidden');
   revealBannerEl.classList.add('hidden');
   summaryEl.classList.add('hidden');
 
