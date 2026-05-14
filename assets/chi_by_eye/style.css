@@ -289,7 +289,11 @@ html[data-theme="dark"] .hud-popover { box-shadow: 0 6px 24px rgba(0,0,0,0.5); }
   font-weight: 600;
 }
 
-/* Slider styling */
+/* Slider styling.
+   The gradient is a "U" shape: red at very low σ (data fits suspiciously
+   well — errors likely overestimated / overfitting), green in the middle
+   (~1σ, consistent with quoted errors), amber as tension grows, and red
+   again at high σ (real tension). */
 input[type="range"].sigma {
   -webkit-appearance: none;
   appearance: none;
@@ -297,8 +301,10 @@ input[type="range"].sigma {
   height: 6px;
   background: linear-gradient(
     to right,
-    var(--good) 0%,
-    var(--good) 18%,
+    var(--bad)  0%,
+    var(--warn) 1.5%,
+    var(--good) 3%,
+    var(--good) 22%,
     var(--warn) 38%,
     var(--bad)  72%,
     var(--bad)  100%

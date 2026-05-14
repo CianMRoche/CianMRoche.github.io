@@ -56,7 +56,7 @@ html[data-theme="dark"] .sp-launch:hover {
   </div>
   <div>
   <h2><span style="font-family:'Times New Roman',serif;font-style:italic;">χ</span> by eye</h2>
-    <p>A short intuition-building browser game in the GeoGuessr style for astronomers and physicists. Each round shows a model curve and a handful of noisy data points with error bars (or, on harder settings, rotating error bars or animated Gaussian sample clouds), and your job is to estimate the sigma-equivalent tension between the data and the model on a single slider. The chi² and reduced chi² update live alongside the slider so you can develop a feel for how the three quantities relate at a given dnumber of degrees of freedom. Five rounds, optionally timed, five difficulty levels from Easy to Impossible. Good for developing a critical eye for plots :)</p>
+    <p>A short intuition-building browser game in the GeoGuessr style for students learning how to interpret data with uncertainties, or senior researchers looking to test their eye. Useful as an educational tool or just for fun. Works in browser or mobile :)</p>
     <a class="sp-launch" href="/assets/chi_by_eye/">Launch χ by eye →</a>
   </div>
 </div>
