@@ -346,6 +346,37 @@ input[type="range"].sigma:disabled { opacity: 0.6; }
   pointer-events: none;
 }
 
+/* Truth marker — shown on the slider once the round is revealed so the
+   player can see where the correct sigma was vs. where they put their thumb.
+   Positioned via inline `left: X%` set by main.js. */
+.slider-truth {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.slider-truth .truth-bar {
+  width: 3px;
+  height: 30px;
+  background: var(--bad);
+  border-radius: 1.5px;
+  box-shadow: 0 0 0 1px var(--bg);
+}
+.slider-truth .truth-label {
+  position: absolute;
+  top: -16px;
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--bad);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 /* ---------- buttons ---------- */
 button {
   font-family: inherit;
@@ -747,7 +778,6 @@ html[data-theme="dark"] .summary .total .crown {
   background: var(--bg);
   display: flex;
   flex-direction: column;
-  min-height: 200px;
 }
 .summary .panel .ptop {
   display: flex; align-items: center; justify-content: space-between;
@@ -758,7 +788,12 @@ html[data-theme="dark"] .summary .total .crown {
   margin-bottom: 6px;
 }
 .summary .panel canvas {
-  width: 100%; flex: 1; min-height: 130px;
+  /* Fixed aspect ratio breaks the feedback loop between the canvas's
+     intrinsic size (set by Plot._resize via canvas.width/height attrs)
+     and the panel's height. Without this, widening the viewport made
+     each panel grow taller, which made the canvas grow, ad infinitum. */
+  width: 100%;
+  aspect-ratio: 4 / 3;
   display: block;
 }
 .summary .panel .row {
@@ -1071,7 +1106,14 @@ html[data-theme="dark"] .tutorial-tooltip {
   }
 
   /* ---- menu: tighter, difficulty grid stacks ---- */
-  .menu { padding: 18px 16px; overflow-y: auto; }
+  /* Top-align (not center) so when the content is taller than the viewport
+     the top remains scrollable. Center-justification + overflow pushes
+     content above the scrollable region on phones. */
+  .menu {
+    justify-content: flex-start;
+    padding: 24px 16px 32px;
+    overflow-y: auto;
+  }
   .menu h1 { font-size: 32px; }
   .menu .tagline { font-size: 13px; margin-bottom: 22px; }
   .diff-grid {

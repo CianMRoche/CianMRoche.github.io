@@ -158,6 +158,10 @@ function buildShell() {
         <div class="slider-with-ticks">
           <input type="range" class="sigma" id="sigma-slider"
                  min="0" max="${SIGMA_SLIDER_MAX}" step="${SIGMA_SLIDER_STEP}" value="1">
+          <div class="slider-truth hidden" id="slider-truth" aria-hidden="true">
+            <div class="truth-bar"></div>
+            <div class="truth-label">truth</div>
+          </div>
           <div class="slider-ticks" id="slider-ticks"></div>
         </div>
         <div class="value" id="sigma-val">1.00&sigma;</div>
@@ -335,6 +339,7 @@ function showMenu() {
   hudTrEl.classList.add('hidden');
   revealBannerEl.classList.add('hidden');
   document.getElementById('reveal-restore').classList.add('hidden');
+  document.getElementById('slider-truth').classList.add('hidden');
   summaryEl.classList.add('hidden');
   menuEl.classList.remove('hidden');
 }
@@ -386,6 +391,8 @@ function beginRound() {
   // Hide χ² contribution labels during play — they only appear on reveal,
   // and only if the user has the preference turned on.
   plot.setChi2LabelsVisible(false);
+  // Clear the truth marker from any previous round
+  document.getElementById('slider-truth').classList.add('hidden');
 
   // Timer
   if (game.timed) {
@@ -439,6 +446,11 @@ function finalizeRound(userSigma) {
   const showLabels = getChi2LabelsPref();
   plot.setChi2LabelsVisible(showLabels);
   document.getElementById('rb-labels-toggle').checked = showLabels;
+  // Mark the truth on the slider (clamped to slider max for off-scale cases)
+  const truthPct = (Math.min(r.trueSigma, SIGMA_SLIDER_MAX) / SIGMA_SLIDER_MAX) * 100;
+  const truthEl = document.getElementById('slider-truth');
+  truthEl.style.left = `${truthPct}%`;
+  truthEl.classList.remove('hidden');
 
   // Banner — show real trueSigma, true χ²/χ²/dof, and round score out of max.
   const trueLabel = r.trueSigma > SIGMA_SLIDER_MAX
