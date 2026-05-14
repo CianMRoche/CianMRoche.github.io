@@ -1367,13 +1367,15 @@ function showSummary() {
       <div class="total">${summaryCrownSvg}<span class="total-num">${total.toLocaleString()}</span><span class="denom"> / ${maxTotal.toLocaleString()}</span></div>
     </div>
     <div class="grid">${panels}</div>
-    ${renderLeaderboardPreview(newEntry)}
     <div class="actions">
       <button class="primary" id="play-again">Play again</button>
       <button id="back-menu">Back to menu</button>
     </div>
+    ${renderLeaderboardPreview(newEntry)}
   `;
   summaryEl.classList.remove('hidden');
+  // Always start the player at the top of the summary
+  summaryEl.scrollTop = 0;
   wireLeaderboardPreviewHandlers(newEntry);
 
   // Kick off a remote fetch in the background; when it returns, re-render

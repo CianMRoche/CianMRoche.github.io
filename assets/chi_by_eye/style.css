@@ -973,6 +973,12 @@ html[data-theme="dark"] .summary .total .crown {
   display: flex; justify-content: center; gap: 12px;
   margin-top: 24px;
 }
+/* Equal-width action buttons on the summary screen. */
+.summary .actions button {
+  min-width: 180px;
+  padding: 10px 20px;
+  text-align: center;
+}
 
 /* ---------- tutorial overlay ---------- */
 .tutorial-backdrop {
