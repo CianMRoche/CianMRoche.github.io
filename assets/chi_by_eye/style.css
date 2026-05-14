@@ -770,6 +770,9 @@ html[data-theme="dark"] .summary .total .crown {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 18px;
   flex: 1;
+  /* Don't stretch panels to the tallest panel's height — each one should
+     hug its own content so the panel's bounding box matches the canvas. */
+  align-items: start;
 }
 .summary .panel {
   border: 1px solid var(--hairline);
