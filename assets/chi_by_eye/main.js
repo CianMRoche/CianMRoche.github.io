@@ -124,9 +124,10 @@ function addLeaderboardEntry(entry) {
   board.sort((a, b) => b.score - a.score);
   if (board.length > LB_MAX_ENTRIES) board.length = LB_MAX_ENTRIES;
   saveLeaderboard(entry.difficulty, entry.timeChoice, board);
-  // Fire-and-forget push to remote; the caller refreshes the UI when the
-  // remote round-trip completes.
-  pushRemoteEntry(entry);
+  // NOTE: we no longer auto-push to the remote here. The Firebase rules
+  // suggested in the setup commentary are "write-once" (existing entries
+  // can't be modified), so we wait until the player commits a name before
+  // doing the single remote POST. See commitEntryToRemote() below.
   return board;
 }
 function updateLeaderboardEntryName(entry, newName) {
@@ -139,8 +140,17 @@ function updateLeaderboardEntryName(entry, newName) {
     entry.name = newName;
     if (found._remoteKey) entry._remoteKey = found._remoteKey;
   }
-  // Push update to remote (debounced by browser network coalescing)
-  patchRemoteEntryName(entry, newName);
+  // If we've already pushed to remote, attempt a PATCH (will succeed only
+  // if the user has loosened the write-once rule). Otherwise the commit
+  // is deferred until commitEntryToRemote() runs.
+  if (entry._remoteKey) patchRemoteEntryName(entry, newName);
+}
+// Push this entry to the remote leaderboard with whatever name it has now.
+// Idempotent: if already pushed, becomes a no-op (or PATCH if name changed).
+async function commitEntryToRemote(entry) {
+  if (!isRemoteEnabled()) return;
+  if (entry._remoteKey) return; // already there
+  await pushRemoteEntry(entry);
 }
 function leaderboardDisplayName(entry) {
   return (entry.name && entry.name.trim()) || `Anonymous ${entry.animal}`;
@@ -336,6 +346,27 @@ function timeChoiceLabel(tc) {
   return tc === 'unlimited' ? 'Unlimited' : `${tc}s / round`;
 }
 
+// Crown awarded when score reaches ≥ 90% of the per-difficulty maximum.
+const CROWN_THRESHOLD = 0.9;
+function maxScoreForDifficulty(difficulty) {
+  const mult = DIFFICULTIES[difficulty].scoreMultiplier;
+  return BASE_SCORE_PER_ROUND * mult * ROUNDS_PER_GAME;
+}
+function crownSvg(size, ariaLabel = 'High score') {
+  return `
+    <svg class="crown" viewBox="0 0 24 24" width="${size}" height="${size}" aria-label="${ariaLabel}" role="img">
+      <path d="M3 18 L3 8.5 L7.5 13 L12 5 L16.5 13 L21 8.5 L21 18 Z" fill="currentColor"/>
+      <rect x="3" y="18" width="18" height="2.4" fill="currentColor"/>
+      <circle cx="3"  cy="7"   r="1.2" fill="currentColor"/>
+      <circle cx="12" cy="3.7" r="1.3" fill="currentColor"/>
+      <circle cx="21" cy="7"   r="1.2" fill="currentColor"/>
+    </svg>`;
+}
+function crownIfQualified(score, difficulty, size = 14) {
+  if (score < CROWN_THRESHOLD * maxScoreForDifficulty(difficulty)) return '';
+  return crownSvg(size, 'High score').trim().replace(/class="crown"/, 'class="crown crown-inline"');
+}
+
 // Render a 7-row leaderboard window centered on the player's entry. The
 // player's row is highlighted and always sits in the visual middle of the
 // box; if there aren't 3 scores above/below them, the empty slots render as
@@ -362,10 +393,13 @@ function renderLeaderboardPreview(entry) {
     const isUser = (e.id === entry.id);
     const name = leaderboardDisplayName(e);
     const inputHtml = isUser
-      ? `<input class="lb-name-input" type="text" maxlength="32"
-                placeholder="${escapeHtml(`Anonymous ${entry.animal}`)}"
-                value="${escapeHtml(entry.name || '')}"
-                aria-label="Edit your name">`
+      ? `<span class="lb-name-cell">
+           <input class="lb-name-input" type="text" maxlength="32"
+                  placeholder="${escapeHtml(`Anonymous ${entry.animal}`)}"
+                  value="${escapeHtml(entry.name || '')}"
+                  aria-label="Edit your name">
+           <span class="lb-save-status" aria-live="polite"></span>
+         </span>`
       : `<span class="lb-name">${escapeHtml(name)}</span>`;
     return `
       <div class="lb-row${isUser ? ' lb-row-user' : ''}">
@@ -526,15 +560,37 @@ function scrollHighlightIntoView() {
 function wireLeaderboardPreviewHandlers(entry) {
   const input = summaryEl.querySelector('.lb-name-input');
   const warnEl = summaryEl.querySelector('.lb-name-warning');
+  const statusEl = summaryEl.querySelector('.lb-save-status');
   if (input) {
     let lastAccepted = entry.name || '';
-    // Update the entry name live; on blur, re-validate against the profanity
-    // filter and bounce if needed.
+
+    // Status helpers — make "saved / unsaved / rejected" state explicit so
+    // the player can see when their name is locked in.
+    const setStatus = (kind, text) => {
+      if (!statusEl) return;
+      statusEl.className = `lb-save-status ${kind}`;
+      statusEl.textContent = text;
+    };
+    const showPending  = () => setStatus('pending', 'Press Enter to save');
+    const showSaved    = () => setStatus('saved',   '✓ saved');
+    const showLocal    = () => setStatus('saved',   '✓ saved locally');
+    // Initial state: if there's already a name and the entry is on the
+    // remote, show saved; if no name yet, prompt them.
+    if (entry._remoteKey) showSaved();
+    else if (input.value) showPending();
+
+    // Live update of the local entry name on every keystroke (no remote
+    // round-trip until commit).
     input.addEventListener('input', () => {
-      // Live-update only; profanity check happens on commit (blur/Enter) so
-      // we don't fight the user mid-typing.
       updateLeaderboardEntryName(entry, input.value);
+      // Once they start typing again after a saved/rejected state, prompt.
+      if (warnEl && !warnEl.classList.contains('hidden')) {
+        warnEl.classList.add('hidden');
+        input.classList.remove('lb-name-input-error');
+      }
+      if (!entry._remoteKey) showPending();
     });
+
     const commitOrReject = () => {
       const v = input.value;
       if (isProfaneName(v)) {
@@ -542,18 +598,39 @@ function wireLeaderboardPreviewHandlers(entry) {
           warnEl.textContent = 'sorry, profanity checker flagged this one, please use another name';
           warnEl.classList.remove('hidden');
         }
-        // Revert both the stored entry and the input back to the last
-        // accepted name, prompting the user to enter a different one.
         updateLeaderboardEntryName(entry, lastAccepted);
         input.value = lastAccepted;
         input.classList.add('lb-name-input-error');
-        // Defer the focus to after the blur completes
+        setStatus('error', 'rejected');
         setTimeout(() => { input.focus(); input.select(); }, 0);
+        return;
+      }
+      lastAccepted = v;
+      if (warnEl) warnEl.classList.add('hidden');
+      input.classList.remove('lb-name-input-error');
+      updateLeaderboardEntryName(entry, v);
+      // First commit pushes to the remote — once that's done, the rules
+      // we suggest in main.js make the entry write-once, so we lock the
+      // input afterward.
+      if (isRemoteEnabled() && !entry._remoteKey) {
+        setStatus('saving', 'saving…');
+        commitEntryToRemote(entry).then(() => {
+          if (entry._remoteKey) {
+            showSaved();
+            input.readOnly = true;
+            input.classList.add('lb-name-input-locked');
+          } else {
+            // Remote push failed; entry is still in localStorage.
+            showLocal();
+          }
+        });
+      } else if (!isRemoteEnabled()) {
+        showLocal();
       } else {
-        lastAccepted = v;
-        if (warnEl) warnEl.classList.add('hidden');
-        input.classList.remove('lb-name-input-error');
-        updateLeaderboardEntryName(entry, v);
+        // Already saved to remote; if rules allow editing, patchRemoteEntryName
+        // (called from updateLeaderboardEntryName) handles it. Either way,
+        // local is up-to-date.
+        showSaved();
       }
     };
     input.addEventListener('blur', commitOrReject);
@@ -562,15 +639,6 @@ function wireLeaderboardPreviewHandlers(entry) {
         e.preventDefault();
         commitOrReject();
         input.blur();
-      }
-    });
-    // Clearing the input also clears the warning
-    input.addEventListener('input', () => {
-      if (warnEl && !warnEl.classList.contains('hidden')) {
-        // If they're editing after a flag, clear the warning so they get fresh
-        // feedback on the next blur/Enter.
-        warnEl.classList.add('hidden');
-        input.classList.remove('lb-name-input-error');
       }
     });
   }
@@ -646,7 +714,7 @@ function buildShell() {
   app.innerHTML = `
     <div class="topbar hidden" id="topbar">
       <div class="left">
-        <div class="title"><span style="font-family:'Times New Roman',serif;font-style:italic;">&chi;</span> by eye</div>
+        <button class="title" id="title-quit" type="button" title="Quit current game"><span style="font-family:'Times New Roman',serif;font-style:italic;">&chi;</span> by eye</button>
         <div class="meta">Round <b id="round-num">1</b> / ${ROUNDS_PER_GAME}</div>
         <div class="meta">Difficulty <b id="diff-name">—</b></div>
       </div>
@@ -799,6 +867,8 @@ function buildShell() {
   submitBtn.addEventListener('click', onSubmit);
   document.getElementById('rb-next').addEventListener('click', onNext);
   exitLinkEl.addEventListener('click', e => { e.preventDefault(); confirmQuit(); });
+  // Clicking the title in the topbar also quits to menu (with confirmation).
+  document.getElementById('title-quit').addEventListener('click', confirmQuit);
   // Per-point χ² contribution toggle on the reveal banner
   document.getElementById('rb-labels-toggle').addEventListener('change', e => {
     const v = !!e.target.checked;
@@ -1158,16 +1228,10 @@ function showSummary() {
   const maxPerRound = BASE_SCORE_PER_ROUND * DIFFICULTIES[game.difficulty].scoreMultiplier;
   const maxTotal = maxPerRound * ROUNDS_PER_GAME;
   const total = Math.round(game.totalScore);
-  // Award a crown for >90% of the maximum possible.
-  const earnedCrown = total >= 0.9 * maxTotal;
-  const crownSvg = earnedCrown ? `
-    <svg class="crown" viewBox="0 0 24 24" width="28" height="28" aria-label="High score" role="img">
-      <path d="M3 18 L3 8.5 L7.5 13 L12 5 L16.5 13 L21 8.5 L21 18 Z" fill="currentColor"/>
-      <rect x="3" y="18" width="18" height="2.4" fill="currentColor"/>
-      <circle cx="3"  cy="7"   r="1.2" fill="currentColor"/>
-      <circle cx="12" cy="3.7" r="1.3" fill="currentColor"/>
-      <circle cx="21" cy="7"   r="1.2" fill="currentColor"/>
-    </svg>` : '';
+  // Crown for ≥ 90% of the max — same threshold used inline next to
+  // qualifying scores in the leaderboard preview / view.
+  const earnedCrown = total >= CROWN_THRESHOLD * maxTotal;
+  const summaryCrownSvg = earnedCrown ? crownSvg(28) : '';
 
   function formatP(sig) {
     const pv = 2 * (1 - normCDF(Math.min(sig, 37)));
@@ -1270,10 +1334,25 @@ function showSummary() {
     game._miniPlots.push(p);
   }
 
-  document.getElementById('play-again').addEventListener('click', startGame);
+  // If the player never committed a name (no remote push happened), make
+  // sure we still get the score onto the global leaderboard before they
+  // navigate away. Uses whatever name is currently in the entry (empty →
+  // "Anonymous <animal>").
+  function flushUnsavedEntry() {
+    const e = game.rounds.length ? null : null; // (placeholder for clarity)
+    if (game.lastEntryId && isRemoteEnabled()) {
+      const board = getLeaderboard(game.difficulty, game.timeChoice);
+      const entry = board.find(x => x.id === game.lastEntryId);
+      if (entry && !entry._remoteKey) commitEntryToRemote(entry);
+    }
+  }
+  document.getElementById('play-again').addEventListener('click', () => {
+    flushUnsavedEntry();
+    startGame();
+  });
   document.getElementById('back-menu').addEventListener('click', () => {
+    flushUnsavedEntry();
     showMenu();
-    // Re-render menu just in case state stale
     menuEl.innerHTML = menuMarkup();
     attachMenuHandlers();
   });

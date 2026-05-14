@@ -111,7 +111,17 @@ body {
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--fg);
+  /* It's a button (acts like Quit) — strip the default button chrome and add
+     a subtle hover affordance. */
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  transition: color 0.12s ease;
 }
+.topbar .title:hover { color: var(--muted); }
 .topbar .meta {
   font-size: 12px;
   color: var(--muted);
@@ -1239,6 +1249,33 @@ html[data-theme="dark"] .tutorial-tooltip {
   border-color: var(--bad);
   background: rgba(239, 68, 68, 0.08);
 }
+.leaderboard-preview .lb-row .lb-name-input.lb-name-input-locked {
+  /* After remote save: lock the name in visually. Subtle and read-only. */
+  border-color: var(--hairline);
+  background: transparent;
+  color: var(--fg-soft);
+  cursor: default;
+}
+
+/* Name cell wraps the input + the save-status badge in one grid column. */
+.leaderboard-preview .lb-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.leaderboard-preview .lb-name-cell .lb-name-input { flex: 1; min-width: 0; }
+.leaderboard-preview .lb-save-status {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: color 0.15s ease;
+}
+.leaderboard-preview .lb-save-status.pending { color: var(--muted); }
+.leaderboard-preview .lb-save-status.saving  { color: var(--muted); font-style: italic; }
+.leaderboard-preview .lb-save-status.saved   { color: var(--good); }
+.leaderboard-preview .lb-save-status.error   { color: var(--bad); }
 .leaderboard-preview .lb-name-warning {
   margin-top: 8px;
   font-size: 11.5px;
