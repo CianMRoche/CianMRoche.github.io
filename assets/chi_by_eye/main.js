@@ -330,7 +330,7 @@ const PROFANITY_B64 =
   'YWhlZ2FvLHlpZmYsZWNjaGksc2NobG9uZyx3ZWluZXIscGVlbixwZWNrZXIsZG9uZyx3' +
   'aWxseSxjb29jaGllLHNuYXRjaCxiZWF2ZXIsanVncyxrbm9ja2Vycyxob290ZXJzLG1l' +
   'bG9ucyxnb25hZHMsbmFkcyxidXR0aG9sZSxzdWljaWQsc2VsZmhhcm0sa3lzLGttcyxr' +
-  'aWxseW91cnNlbGYsZXJlY3QsZW5nb3JnZWQ=';
+  'aWxseW91cnNlbGYsZXJlY3QsZW5nb3Jn';
 // Normalize: lowercase, leetspeak swap, strip non-letters. We deliberately
 // don't collapse repeats here — the regex below allows each letter of a
 // bad word to repeat one or more times, so "shiiit", "f-u-c-k", "$h1t",
