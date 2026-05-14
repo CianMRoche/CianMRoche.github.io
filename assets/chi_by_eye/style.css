@@ -733,11 +733,12 @@ html[data-theme="dark"] .reveal-banner { box-shadow: 0 4px 16px rgba(0,0,0,0.4);
   letter-spacing: 0.02em;
 }
 .reveal-banner .off-scale {
+  display: block;             /* stack under the value so the pair stays narrow */
+  margin-top: 2px;
   font-size: 10px;
   color: var(--muted);
   letter-spacing: 0.04em;
   font-weight: 400;
-  margin-left: 4px;
   text-transform: uppercase;
 }
 .reveal-banner .next-btn {

@@ -394,7 +394,7 @@ function renderLeaderboardPreview(entry) {
 // Shown when the player clicks "Leaderboards" from the menu (or "View all"
 // from the summary preview). Lets them switch difficulty and time choice.
 const lbView = {
-  difficulty: 'intermediate',
+  difficulty: 'challenging',
   timeChoice: 'unlimited',
   highlightEntryId: null,
 };
@@ -612,7 +612,7 @@ const State = {
 
 const game = {
   state: State.MENU,
-  difficulty: 'intermediate',
+  difficulty: 'challenging',
   timed: false,
   timeChoice: 'unlimited',   // 'unlimited' | '5' | '10' | '30'
   timerSeconds: 0,
@@ -866,7 +866,7 @@ function menuMarkup() {
     const features = DIFFICULTY_FEATURES[key] || [];
     const bullets = features.map(f => `<li>${f}</li>`).join('');
     return `<div class="diff-cell" data-diff="${key}">
-       <button data-diff="${key}" class="${key === 'intermediate' ? 'selected' : ''}">
+       <button data-diff="${key}" class="${key === 'challenging' ? 'selected' : ''}">
          <span class="dname">${d.name}</span>
          <span class="dmult">&times;${d.scoreMultiplier.toFixed(1)} score</span>
        </button>
@@ -877,7 +877,7 @@ function menuMarkup() {
     <h1><span class="chi">&chi;</span> by eye</h1>
     <p class="tagline">
       Estimate the tension between data and model. <br>New to &chi;&sup2;?
-      <button type="button" class="tutorial-link" id="tutorial-link">walk through the tutorial &rarr;</button>
+      <button type="button" class="tutorial-link" id="tutorial-link">Walk through the tutorial &rarr;</button>
     </p>
     <div class="diff-grid">${diffBtns}</div>
     <div class="option-row">
@@ -936,6 +936,9 @@ function attachMenuHandlers() {
 // ---------- state transitions ----------
 function showMenu() {
   game.state = State.MENU;
+  // Reset to the default selection so the highlighted button on the menu
+  // matches what Start uses, regardless of what was played last.
+  game.difficulty = 'challenging';
   topbarEl.classList.add('hidden');
   controlsEl.classList.add('hidden');
   hudTlEl.classList.add('hidden');
@@ -1033,12 +1036,18 @@ function updateSliderDisplay() {
   document.getElementById('ms-fill-chi').style.width = `${clamp01(fChi)}%`;
   document.getElementById('ms-fill-red').style.width = `${clamp01(fRed)}%`;
   document.getElementById('ms-fill-p').style.width   = `${clamp01(fP)}%`;
-  document.getElementById('ms-value-chi').textContent = chi2.toFixed(2);
-  document.getElementById('ms-value-red').textContent = red.toFixed(2);
-  document.getElementById('ms-value-p').textContent =
+  // When the slider is pinned at its max σ, the three derived quantities are
+  // each pinned at one of their extremes — χ² and χ²/dof at their max for
+  // this round, p at its minimum. Show "≥" or "≤" to signal "or beyond".
+  const ge = atMax ? '≥' : '';
+  const le = atMax ? '≤' : '';
+  document.getElementById('ms-value-chi').textContent = ge + chi2.toFixed(2);
+  document.getElementById('ms-value-red').textContent = ge + red.toFixed(2);
+  const pStr =
     p >= 0.01  ? p.toFixed(3)
     : p > 0    ? p.toExponential(1)
                 : '0';
+  document.getElementById('ms-value-p').textContent = le + pStr;
 }
 
 function onSliderInput() {
@@ -1409,10 +1418,10 @@ const TUTORIAL_STEPS = [
   },
   {
     label: 'Live readout',
-    text: 'Next to the slider, your <span class="math">σ</span> value gets translated into ' +
+    text: 'Next to the slider, your <span class="math">σ</span> value is translated into ' +
           '<span class="math">χ²</span>, <span class="math">χ²/dof</span>, and the ' +
-          '<span class="math">p</span>-value — four equivalent ways of saying the same ' +
-          "thing for this round's dof. Move the slider and all of them update together.",
+          "<span class=\"math\">p</span>-value. All four are equivalent forms of the same " +
+          "number for this round's dof. Move the slider and they update together.",
     target: '.mini-stats',
     arrow: 'above',
   },
@@ -1433,7 +1442,7 @@ const TUTORIAL_STEPS = [
   },
   {
     label: 'Demo: a model',
-    text: 'Now suppose we have a model — here a straight line — we think describes the data. ' +
+    text: 'Now suppose we have a model that we think describes the data, here a straight line. ' +
           'Some points sit on it, some sit off. The question is: how well does it fit?',
     target: '#plot-wrap',
     arrow: 'right',
@@ -1446,8 +1455,8 @@ const TUTORIAL_STEPS = [
       '<span class="math">yᵢ</span> is the measured value at the <em>i</em>-th data point, ' +
       '<span class="math">fᵢ</span> is the model prediction at that <span class="math">xᵢ</span>, ' +
       'and <span class="math">σᵢ</span> is the quoted error on <span class="math">yᵢ</span>. ' +
-      'Each point contributes <span class="math">(yᵢ − fᵢ)² / σᵢ²</span> — points within ~1σ of ' +
-      'the model contribute ~1, outliers contribute much more. ' +
+      'Each point contributes <span class="math">(yᵢ − fᵢ)² / σᵢ²</span>. Points within ~1σ ' +
+      'of the model contribute ~1; outliers contribute much more. ' +
       'Beside each point: the signed residual in <span class="math">σᵢ</span> units, ' +
       'and that value squared (its actual contribution to χ²). Colors encode the same: ' +
       'green is small, red is large.' +
@@ -1472,12 +1481,47 @@ const TUTORIAL_STEPS = [
     arrow: 'below',
   },
   {
-    label: 'σ equivalent',
-    text: 'Finally, the χ² maps to a sigma equivalent — how unlikely is a χ² this large under ' +
-          'the null hypothesis that the model is correct? 0–1σ: consistent. 2–3σ: unclear. 4-5σ+: ' +
-          'serious tension.',
+    label: 'p-value and σ',
+    text:
+      'The <span class="math">χ²</span> first maps to a <em>p-value</em>: the ' +
+      'chi-squared probability of seeing a <span class="math">χ²</span> at least this ' +
+      'large by chance, if the model were correct. That maps in turn to a sigma equivalent. ' +
+      'Rule of thumb: 0–1σ: consistent. 2–3σ: notable. 4–5σ+: serious tension.',
     target: '.mini-stats',
+    arrow: 'above',
+  },
+  {
+    label: 'dof matters',
+    text:
+      'Now suppose the model had <span class="math">k = 5</span> free parameters instead of 2, ' +
+      'making <span class="math">dof = N − k = 1</span>. The data and curve are unchanged, ' +
+      'so <span class="math">χ²</span> stays the same (≈ 6 here). But ' +
+      '<span class="math">χ²/dof</span>, the <em>p</em>-value, and ' +
+      '<span class="math">σ</span> all shift. Under the null hypothesis the expected ' +
+      '<span class="math">χ²</span> equals <span class="math">dof</span>, so ' +
+      '<span class="math">χ²</span>≈6 is just above the expected value at <span class="math">dof = 4</span> ' +
+      '(p ≈ 0.17), but six times the expected value at <span class="math">dof = 1</span> ' +
+      '(p ≈ 0.011). <span class="math">σ</span> nearly doubles.' +
+      '<span class="tt-note">When you play, the round\'s k is shown in the top-left of the plot. ' +
+      'Pay attention to it before reading off χ²/dof or σ.</span>',
+    target: '#hud-tl',
     arrow: 'below',
+    action: () => {
+      // Reinterpret the same data with a parameter-heavy model so dof = 1.
+      // χ² is unchanged because it depends only on data + curve.
+      const r = tutorial.round;
+      r.k = 5;
+      r.dof = 1;
+      r.trueSigma = chi2ToSigma(r.chi2, r.dof);
+      r.redChi2 = r.chi2 / r.dof;
+      document.getElementById('hud-k').textContent   = String(r.k);
+      document.getElementById('hud-dof').textContent = String(r.dof);
+      // Recompute mini-stat scale for the new dof and re-render the readout.
+      game._maxChi2    = sigmaToChi2(SIGMA_SLIDER_MAX, r.dof);
+      game._maxRedChi2 = game._maxChi2 / r.dof;
+      sliderEl.value = String(Math.min(r.trueSigma, SIGMA_SLIDER_MAX));
+      updateSliderDisplay();
+    },
   },
   {
     label: "You're ready",
