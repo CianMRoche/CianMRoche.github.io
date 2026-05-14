@@ -12,9 +12,10 @@ import { Plot } from './plot.js';
 
 // ---------- constants ----------
 const ROUNDS_PER_GAME = 5;
-const SIGMA_SLIDER_MAX = 7;       // slider range 0 .. SIGMA_SLIDER_MAX
+const SIGMA_SLIDER_MAX = 5;       // slider range 0 .. SIGMA_SLIDER_MAX; the
+                                  // max position represents "≥ this σ"
 const SIGMA_SLIDER_STEP = 0.01;
-const SIGMA_TICK_MARKS = [0, 1, 2, 3, 4, 5, 6, 7];
+const SIGMA_TICK_MARKS = [0, 1, 2, 3, 4, 5];
 const BASE_SCORE_PER_ROUND = 1000;
 // Scoring: full points if guess is within FULL_TOL sigma of truth; falls
 // to zero at MAX_ERR sigma with a quadratic curve.
@@ -192,10 +193,14 @@ function buildShell() {
   summaryEl = document.getElementById('summary');
   exitLinkEl = document.getElementById('exit-link');
 
-  // Slider tick labels
+  // Slider tick labels. The last tick is marked "Nσ+" because the slider's
+  // maximum position represents "≥ Nσ" — anything above just clamps here.
   const ticksEl = document.getElementById('slider-ticks');
   ticksEl.innerHTML = SIGMA_TICK_MARKS
-    .map(v => `<span>${v}&sigma;</span>`).join('');
+    .map((v, i, arr) => {
+      const suffix = (i === arr.length - 1) ? '+' : '';
+      return `<span>${v}&sigma;${suffix}</span>`;
+    }).join('');
 
   plot = new Plot(canvasEl);
 
@@ -403,13 +408,16 @@ function beginRound() {
 
 function updateSliderDisplay() {
   const sigma = parseFloat(sliderEl.value);
-  sliderValEl.innerHTML = `${sigma.toFixed(2)}&sigma;`;
+  // Append "+" when pinned at the slider's maximum to signal "or more".
+  const atMax = sigma >= SIGMA_SLIDER_MAX - 1e-6;
+  const sigmaText = `${sigma.toFixed(2)}&sigma;${atMax ? '+' : ''}`;
+  sliderValEl.innerHTML = sigmaText;
   const r = game.rounds[game.roundIndex];
   if (!r) return;
   const chi2 = sigmaToChi2(sigma, r.dof);
   const red = chi2 / r.dof;
   // top-right HUD: σ value matches slider so connection is obvious
-  document.getElementById('readout-sigma').innerHTML = `${sigma.toFixed(2)}&sigma;`;
+  document.getElementById('readout-sigma').innerHTML = sigmaText;
   document.getElementById('readout-chi').textContent = chi2.toFixed(2);
   document.getElementById('readout-red').textContent = red.toFixed(2);
 }

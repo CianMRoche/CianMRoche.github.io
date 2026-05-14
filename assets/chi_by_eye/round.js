@@ -12,7 +12,7 @@
 // The user-facing answer is the two-sided sigma equivalent of that chi^2
 // for that dof, computed in stats.js.
 
-import { chi2ToSigma } from './stats.js';
+import { chi2ToSigma, sigmaToChi2 } from './stats.js';
 
 // ---------- difficulty configuration ----------
 export const DIFFICULTIES = {
@@ -251,8 +251,30 @@ export function makeRound(difficultyKey) {
   }
   const ySpan = logY ? Math.log10(yMax / yMin) : (yMax - yMin);
 
-  // errFactor: log-uniform in [0.45, 2.4] for a mix of tight and tense fits.
-  const errFactor = Math.exp(rand(Math.log(0.45), Math.log(2.4)));
+  // Sample the round's target true sigma so the full slider range gets used,
+  // with a gentle bias toward the low end where intuition is hardest to
+  // develop (the "fit looks fine but is it suspiciously fine?" zone). Use a
+  // power-law transformation of a uniform variate: target = MIN + range·u^p.
+  // p > 1 squashes mass toward the low end; p = 1.3 gives a moderate skew
+  // without sacrificing the high end.
+  //
+  // The deterministic target → errFactor mapping then sets the *expected*
+  // chi²:   E[chi²] = N / errFactor², so errFactor = sqrt(N / target_chi²).
+  // Realized chi² scatters around the target due to chi²-distribution
+  // noise, which smooths the histogram.
+  //
+  // SIGMA_SAMPLE_MAX is slightly above the slider's max so a small fraction
+  // of rounds land off-scale, giving the player occasional very-high-tension
+  // rounds.
+  const SIGMA_SAMPLE_MIN = 0.05;
+  const SIGMA_SAMPLE_MAX = 5.3;
+  const SIGMA_SKEW = 1.3;
+  const u = Math.random();
+  const targetSigma = SIGMA_SAMPLE_MIN +
+    (SIGMA_SAMPLE_MAX - SIGMA_SAMPLE_MIN) * Math.pow(u, SIGMA_SKEW);
+  const targetChi2 = Math.max(0.5, sigmaToChi2(targetSigma, dof));
+  // Clamp errFactor to a range that keeps the visual errorbar size sensible.
+  const errFactor = Math.max(0.3, Math.min(3.0, Math.sqrt(N / targetChi2)));
 
   const points = [];
   const xPad = 0.04;
