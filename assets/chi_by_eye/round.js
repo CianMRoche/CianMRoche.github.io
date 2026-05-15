@@ -312,11 +312,15 @@ export function makeRound(difficultyKey) {
   const labels = makeLabels();
 
   // Expand the displayed y-range so the curve, all data points, and their
-  // ±3σ error bars / cloud samples all fit, with a 10% margin on each side.
-  // err is always in linear units; the displayed range is computed in linear
-  // and then (for log y) converted to log when rendering.
+  // ±3σ error bars / cloud samples all fit. Bottom gets 10% margin; top gets
+  // a larger margin (22%) to reserve clear airspace behind the N/k/dof HUD
+  // in the top-left of the plot. This is purely a display tweak — chi², σ,
+  // and every other stat are computed from yObs / yTrue / err, which are
+  // unaffected by the rendered axis range.
   let dispYMin, dispYMax;
   const ERR_VIS = 3;
+  const PAD_BOTTOM = 0.10;
+  const PAD_TOP    = 0.22;
   if (logY) {
     // Work in log space so the margin is symmetric on the axis.
     let logLo = Math.log10(yMin);
@@ -331,18 +335,18 @@ export function makeRound(difficultyKey) {
                               : Math.log10(p.yObs) - 0.6; // ~0.4× yObs floor
       logLo = Math.min(logLo, dnFloor);
     }
-    const pad = 0.1 * (logHi - logLo);
-    dispYMin = Math.pow(10, logLo - pad);
-    dispYMax = Math.pow(10, logHi + pad);
+    const span = logHi - logLo;
+    dispYMin = Math.pow(10, logLo - PAD_BOTTOM * span);
+    dispYMax = Math.pow(10, logHi + PAD_TOP    * span);
   } else {
     let lo = yMin, hi = yMax;
     for (const p of points) {
       lo = Math.min(lo, p.yObs - ERR_VIS * p.err);
       hi = Math.max(hi, p.yObs + ERR_VIS * p.err);
     }
-    const pad = 0.1 * (hi - lo);
-    dispYMin = lo - pad;
-    dispYMax = hi + pad;
+    const span = hi - lo;
+    dispYMin = lo - PAD_BOTTOM * span;
+    dispYMax = hi + PAD_TOP    * span;
   }
 
   return {

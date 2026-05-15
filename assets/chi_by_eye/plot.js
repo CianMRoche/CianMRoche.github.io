@@ -366,10 +366,16 @@ export class Plot {
       }
 
       // Optional per-point χ² contribution label (tutorial).
-      // Format: "(±X.X σᵢ)² = Y.Y" — shows the signed residual in units of the
+      // Format: "(±X.X σᵢ)² → Y.Y" — shows the signed residual in units of the
       // point's own error (σᵢ, distinct from the round's overall tension σ)
       // and the squared contribution to χ². Lets readers see both the visual
       // residual-in-sigmas and the contribution at once.
+      //
+      // Layout: the label is rotated 90° counter-clockwise (reads bottom-to-
+      // top, like a y-axis title) and placed either above the upper error-bar
+      // cap or below the lower one — whichever side has more vertical room.
+      // This avoids the horizontal overlap with the curve and with neighboring
+      // points that the previous side-of-point layout had.
       if (this.revealed && this._showChi2Labels && contrib != null) {
         const ctx = this.ctx;
         const dpr = this._dpr;
@@ -379,17 +385,45 @@ export class Plot {
         const txt = `(${ratioStr}σᵢ)² → ${contribStr}`;
         ctx.font = `600 ${10.5 * dpr}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
         ctx.fillStyle = pointColor;
+
+        // Where the error-bar caps live (clamped to the axis for log y).
+        // We anchor the label just outside the cap so it never overlaps the
+        // bar or the central marker.
+        const { upPx, dnPx } = this._dyToPxAt(p.yObs, p.err, R);
+        const clearance = 8 * dpr;
+
+        // Vertical span the rotated text will occupy = its horizontal width.
+        const labelW = ctx.measureText(txt).width;
+
+        // Available room above the upper cap vs below the lower cap.
+        const roomAbove = (upPx - R.y0) - clearance;
+        const roomBelow = (R.y0 + R.h - dnPx) - clearance;
+
+        // Prefer above if the label fits; otherwise below if it fits; if
+        // neither side has enough room, hug whichever side has more.
+        let placeAbove;
+        if (labelW <= roomAbove)      placeAbove = true;
+        else if (labelW <= roomBelow) placeAbove = false;
+        else                          placeAbove = roomAbove >= roomBelow;
+
+        ctx.save();
         ctx.textBaseline = 'middle';
-        // Right-align labels for points in the rightmost ~22% of the plot,
-        // so the label sits to the LEFT of the point and doesn't run off.
-        const farRight = (px - R.x0) / R.w > 0.78;
-        if (farRight) {
-          ctx.textAlign = 'right';
-          ctx.fillText(txt, px - 11 * dpr, py - 11 * dpr);
-        } else {
+        // rotate(-π/2) maps canvas +x to screen "up", so a left-aligned
+        // string drawn at the origin reads bottom-to-top extending upward.
+        // For below-the-point placement we right-align so the END of the
+        // string sits at the anchor (just below the lower cap) and the rest
+        // extends further down — still reading bottom-to-top.
+        if (placeAbove) {
+          ctx.translate(px, upPx - clearance);
+          ctx.rotate(-Math.PI / 2);
           ctx.textAlign = 'left';
-          ctx.fillText(txt, px + 11 * dpr, py - 11 * dpr);
+        } else {
+          ctx.translate(px, dnPx + clearance);
+          ctx.rotate(-Math.PI / 2);
+          ctx.textAlign = 'right';
         }
+        ctx.fillText(txt, 0, 0);
+        ctx.restore();
       }
     }
 

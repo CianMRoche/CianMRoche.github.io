@@ -23,9 +23,10 @@
   --diff-impossible:   #a855f7;
 
   /* Truth color — used for the true-σ marker (slider bar, label, mini-slider
-     truth marker, and the "true" rows in summary panels). Distinctly orange
-     rather than red so it doesn't read as a "warning". */
-  --truth:             #ea580c;
+     truth marker, and the "true" rows in summary panels). Warm gold/amber:
+     pairs as a blue↔yellow contrast against the accent ("Your guess") rather
+     than reading as a "warning". */
+  --truth:             #c2871a;
 
   /* Plot colors — read by plot.js via getComputedStyle */
   --plot-bg:      #ffffff;
@@ -47,7 +48,7 @@ html[data-theme="dark"] {
   --diff-challenging:  #fbbf24;
   --diff-hard:         #f87171;
   --diff-impossible:   #c084fc;
-  --truth:             #fb923c;
+  --truth:             #e6c34d;
 }
 
 html[data-theme="dark"] {
@@ -203,8 +204,10 @@ body {
   color: var(--fg);
   padding: 5px 9px;
   border-radius: 4px;
-  background: color-mix(in srgb, var(--bg) 78%, transparent);
-  backdrop-filter: blur(2px);
+  /* High background opacity + a soft blur so the HUD stays legible even when
+     a high data point happens to sit behind it. */
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(3px);
 }
 .plot-hud-tl {
   /* HUD top aligns so the text's top sits on the plot rect's top edge.
@@ -519,6 +522,10 @@ button {
   color: var(--fg);
   cursor: pointer;
   transition: background 0.1s ease, border-color 0.1s ease, color 0.1s ease;
+  /* Disable the mobile browser's 300ms double-tap-to-zoom delay so rapid
+     successive taps (e.g. the difficulty quick-start gesture) register as
+     two separate click events instead of being swallowed as a zoom. */
+  touch-action: manipulation;
 }
 button:hover { background: var(--bg-soft); }
 button.primary {
@@ -740,9 +747,13 @@ html[data-theme="dark"] .reveal-banner { box-shadow: 0 4px 16px rgba(0,0,0,0.4);
   font-size: 20px; font-weight: 500; color: var(--fg);
 }
 .reveal-banner .pair.score .v { color: var(--accent); }
-/* Color the guess and truth values to match the slider markers below. */
+/* Color the guess and truth values to match the slider markers below — and
+   color their labels to match, so the "Your guess" / "Truth" headings echo
+   the value tinting (parallels the row labels on the summary screen). */
 .reveal-banner #rb-user { color: var(--accent); }
 .reveal-banner #rb-true { color: var(--truth); }
+.reveal-banner .pair.primary:has(#rb-user) .k { color: var(--accent); }
+.reveal-banner .pair.primary:has(#rb-true) .k { color: var(--truth); }
 /* Primary pairs (Your guess / Truth) draw the eye first. Secondary pairs
    (true χ² and χ²/dof) are de-emphasized — same info, dimmer. */
 .reveal-banner .pair.secondary .k,
