@@ -1058,12 +1058,18 @@ function menuMarkup() {
 }
 
 function attachMenuHandlers() {
-  // Difficulty buttons
+  // Difficulty buttons. Clicking a different difficulty selects it.
+  // Clicking the already-selected one launches the game — which means
+  // double-clicking any difficulty is a quick-start shortcut.
   menuEl.querySelectorAll('.diff-grid button').forEach(btn => {
     btn.addEventListener('click', () => {
+      const wasSelected = btn.classList.contains('selected');
       menuEl.querySelectorAll('.diff-grid button').forEach(b => b.classList.remove('selected'));
       btn.classList.add('selected');
       game.difficulty = btn.dataset.diff;
+      if (wasSelected) {
+        document.getElementById('start-btn').click();
+      }
     });
   });
   // Time-per-round dropdown
