@@ -982,9 +982,9 @@ function buildShell() {
 }
 
 // Per-difficulty feature list rendered on the difficulty cards.
-// First line is the score multiplier; subsequent lines describe what changes
-// from the previous tier (using "all from X" inheritance language to keep
-// the cards compact).
+// Each tier lists its own full set of bullets (no "inherits from" shorthand).
+// The bullets follow a consistent template: number of points → y-axis type →
+// error-bar treatment → optional extras (rotation, clouds).
 const DIFFICULTY_FEATURES = {
   easy: [
     '5–8 data points',
@@ -992,23 +992,26 @@ const DIFFICULTY_FEATURES = {
     'uniform error bars',
   ],
   intermediate: [
-    'all from Easy',
     '7–12 data points',
+    'linear y axis',
+    'variable error bar sizes',
   ],
   challenging: [
-    'all from Intermediate',
-    'log y axis sometimes',
-    'variable bar sizes',
+    '8–12 data points',
+    'linear / log y axis',
+    'variable error bar sizes',
   ],
   hard: [
-    'all from Challenging',
     '12–20 data points',
-    'error bars rotated',
+    'linear / log y axis',
+    'variable error bar sizes',
+    'rotating error bars',
   ],
   impossible: [
-    'all from Challenging',
     '12–20 data points',
-    'no bars — sample clouds',
+    'linear / log y axis',
+    'variable error bar sizes',
+    "bar visuals replaced by ongoing samples from each point's uncertainty",
   ],
 };
 

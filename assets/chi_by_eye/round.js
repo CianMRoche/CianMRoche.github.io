@@ -35,7 +35,7 @@ export const DIFFICULTIES = {
     logYProb: 0.0,
     perPointRotation: false,
     sampledErrorbars: false,
-    errSizeSpread: 0,
+    errSizeSpread: 0.25,
   },
   challenging: {
     name: 'Challenging',
