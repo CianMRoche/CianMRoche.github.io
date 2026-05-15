@@ -59,12 +59,40 @@ export function regenerateModel(state) {
   state.points = [];
 }
 
-// Toggle log y. We have to regenerate the curve so it's guaranteed
-// strictly positive (or not), and clear points for the same reason.
+// Re-sample the existing curve to find its visible y-extent under the
+// current axis convention. For log y we restrict to STRICTLY POSITIVE
+// values so log10 stays well-defined; segments where the curve dips
+// non-positive are simply skipped (the renderer already handles this by
+// drawing gaps there).
+function recomputeCurveExtent(state) {
+  let lo = Infinity, hi = -Infinity;
+  let sawPositive = false;
+  for (let i = 0; i <= 400; i++) {
+    const y = state.f(i / 400);
+    if (!isFinite(y)) continue;
+    if (state.logY) {
+      if (y <= 0) continue;
+      sawPositive = true;
+    }
+    if (y < lo) lo = y;
+    if (y > hi) hi = y;
+  }
+  if (state.logY && !sawPositive) return false;        // curve is fully non-positive
+  if (!isFinite(lo) || !isFinite(hi)) return false;
+  state.curveYMin = lo;
+  state.curveYMax = hi;
+  return true;
+}
+
+// Toggle log y. Keep the user's curve and points — they retain their
+// linear-y values and just get re-rendered on the new axis. The curve's
+// own extent is recomputed for the new mode; if log y is requested but
+// the curve has no positive region at all, we fall back to regenerating
+// the model (rare, but it stops the y-range math from going NaN).
 export function setLogY(state, logY) {
   if (state.logY === logY) return;
   state.logY = logY;
-  regenerateModel(state);
+  if (!recomputeCurveExtent(state)) regenerateModel(state);
 }
 
 // Pick a random error-bar half-width for a new point. Linear on linear-y
