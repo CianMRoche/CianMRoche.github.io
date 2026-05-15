@@ -207,8 +207,11 @@ body {
   backdrop-filter: blur(2px);
 }
 .plot-hud-tl {
-  top: 48px;
-  left: 100px;
+  /* HUD top aligns so the text's top sits on the plot rect's top edge.
+     Plot rect top = plot-wrap padding-top (8) + canvas internal PAD.t (32) = 40.
+     Subtract the HUD's own padding-top (5) → HUD top = 35. */
+  top: 35px;
+  left: 80px;
 }
 .plot-hud .hud-item { display: inline-flex; align-items: baseline; gap: 5px; }
 .plot-hud .hud-k {
@@ -1597,7 +1600,9 @@ html[data-theme="dark"] .tutorial-tooltip {
     gap: 8px;
     padding: 4px 8px;
   }
-  .plot-hud-tl { top: 48px; left: 78px; }
+  /* Mobile: HUD padding-top is 4, so HUD top = 40 − 4 = 36.
+     Plot rect left = plot-wrap padding-left (12) + canvas PAD.l (44) = 56. */
+  .plot-hud-tl { top: 36px; left: 60px; }
   .plot-hud .hud-k { font-size: 9.5px; }
   .plot-hud .hud-sigma { font-size: 12.5px; }
   .plot-hud .hud-info { width: 16px; height: 16px; font-size: 10.5px; }

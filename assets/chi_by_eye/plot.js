@@ -14,7 +14,7 @@
 // Plot region inset relative to canvas size (left/right/top/bottom).
 // Used when compact=false. Compact mode (summary mini-plots) uses tight
 // inset values computed in _plotRect.
-const PAD_FULL    = { l: 64, r: 24, t: 32, b: 56 };
+const PAD_FULL    = { l: 44, r: 24, t: 32, b: 56 };
 const PAD_COMPACT = { l: 14, r: 8,  t: 10, b: 14 };
 // Number of polyline samples for the model curve.
 const CURVE_SAMPLES = 240;
@@ -281,7 +281,7 @@ export class Plot {
       ctx.textBaseline = 'top';
       ctx.fillText(this.round.labels.x, (R.x0 + R.x1) / 2, R.y1 + 26 * dpr);
       ctx.save();
-      ctx.translate(R.x0 - 46 * dpr, (R.y0 + R.y1) / 2);
+      ctx.translate(R.x0 - 22 * dpr, (R.y0 + R.y1) / 2);
       ctx.rotate(-Math.PI / 2);
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
