@@ -400,11 +400,32 @@ function isProfaneName(name) {
 // Matched as EXACT-equality against the normalized 3-char form. Leetspeak
 // (4→a, 5→s, 0→o, etc.) collapses before the check, so "@55", "4SS", etc.
 // all map to "ass".
+//
+// Coverage:
+//   * exact 3-char profanity / lewd stems (ass, cum, dik, tit, vag, …);
+//   * letter-swap variants for the same stems so "k"/"c"/"q" alternates
+//     of fuck / cock / cum / cunt / phuk all flag (kum, kok, kuk, coc,
+//     phu, phk, fkn, fkr, mfk, knt, qnt, fuq, twa, jzz);
+//   * slur stems and common abbreviations: nig + variants (nga, ngr, niq,
+//     nyg), kik, kkk, jew, jap, wog, wop, pak, gyp, spz, spc, chk (chink),
+//     gok (gook), coo (coon), dyk (dyke), abo (aboriginal slur), ret
+//     (retard), crp (cripple), fgt (faggot), wnk, hor, bch;
+//   * hostility abbreviations (gtf, stf, omf, bsh);
+//   * letter-only emoticons that survive the alphanumeric filter
+//     (owo, uwu, ovo, uvu, awa, xwx, xdd).
+//
+// To extend, regenerate the base64 with:
+//   Buffer.from(['ass','fag','nig',...].join(',')).toString('base64')
+// To revert: remove this constant and the helpers below, and the
+// isProfaneArcadeName call sites fall back to isProfaneName alone.
 const ARCADE_BLOCKLIST_B64 =
   'YXNzLGZhZyxuaWcsa2lrLGtrayxmdWssZnVjLGZjayxmdXgsZmNjLGN1bSxkaWss' +
   'aml6LHRpdCx2YWcsdHd0LHNsdSxwdXMsc2V4LGd5cCxqYXAsamV3LHdvZyx3b3As' +
   'cGFrLGhvcixiY2gsZ2F5LGFobyxzaHQsc2hpLHduayxzcHosc3BjLHlpZixiZG0s' +
-  'eHh4LG93byx1d3Usb3ZvLHV2dSxhd2EseHd4LHRudCx4ZGQ=';
+  'eHh4LG93byx1d3Usb3ZvLHV2dSxhd2EseHd4LHRudCx4ZGQsa3VtLGtvayxrdWss' +
+  'Y29jLHBodSxwaGssZmtuLGZrcixtZmssa250LHFudCxmdXEsdHdhLGp6eixuZ2Es' +
+  'bmdyLG5pcSxueWcsY2hrLGdvayxjb28sZHlrLGFibyxyZXQsY3JwLGZndCxndGYs' +
+  'c3RmLG9tZixic2g=';
 let _arcadeBlocklist = null;
 function getArcadeBlocklist() {
   if (_arcadeBlocklist) return _arcadeBlocklist;
