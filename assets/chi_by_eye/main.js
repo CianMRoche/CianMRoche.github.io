@@ -168,7 +168,20 @@ async function commitEntryToRemote(entry) {
   return promise;
 }
 function leaderboardDisplayName(entry) {
-  return (entry.name && entry.name.trim()) || `Anonymous ${entry.animal}`;
+  // === ARCADE NAMING (3-char ALL-CAPS) ===
+  // For database entries with longer names (legacy from the previous
+  // naming scheme), we just take the first 3 alphanumeric characters and
+  // uppercase. If those happen to map to a blocked arcade tag, we fall
+  // back to the animal's first 3 chars.
+  let n = arcadeName(entry.name);
+  if (n && isProfaneArcadeName(n)) n = '';
+  if (n) return n;
+  const a = arcadeName(entry.animal);
+  return a || '---';
+  // === OLD NAMING (longer names + "Anonymous <animal>" fallback). To
+  // revert to the previous scheme, comment out the arcade block above
+  // and uncomment the line below: ===
+  // return (entry.name && entry.name.trim()) || `Anonymous ${entry.animal}`;
 }
 
 // ---------- remote leaderboard (Firebase Realtime DB via REST) ----------
@@ -376,6 +389,57 @@ function isProfaneName(name) {
   if (!norm) return false;
   return getProfanityRegex().test(norm);
 }
+
+// ---------- arcade-name blocklist ----------
+// Short (3-character) rude / lewd / slur terms that the main substring-
+// matched profanity regex doesn't catch because the equivalent full word
+// is what's listed there (e.g. "asshole" is in PROFANITY_B64, but "ASS"
+// alone wouldn't match). Also covers letter-only emoticons like OWO/UWU
+// that arrive intact through the alphanumeric-only input filter.
+//
+// Matched as EXACT-equality against the normalized 3-char form. Leetspeak
+// (4→a, 5→s, 0→o, etc.) collapses before the check, so "@55", "4SS", etc.
+// all map to "ass".
+const ARCADE_BLOCKLIST_B64 =
+  'YXNzLGZhZyxuaWcsa2lrLGtrayxmdWssZnVjLGZjayxmdXgsZmNjLGN1bSxkaWss' +
+  'aml6LHRpdCx2YWcsdHd0LHNsdSxwdXMsc2V4LGd5cCxqYXAsamV3LHdvZyx3b3As' +
+  'cGFrLGhvcixiY2gsZ2F5LGFobyxzaHQsc2hpLHduayxzcHosc3BjLHlpZixiZG0s' +
+  'eHh4LG93byx1d3Usb3ZvLHV2dSxhd2EseHd4LHRudCx4ZGQ=';
+let _arcadeBlocklist = null;
+function getArcadeBlocklist() {
+  if (_arcadeBlocklist) return _arcadeBlocklist;
+  try {
+    _arcadeBlocklist = new Set(
+      atob(ARCADE_BLOCKLIST_B64).split(',').map(s => s.trim()).filter(Boolean)
+    );
+  } catch {
+    _arcadeBlocklist = new Set();
+  }
+  return _arcadeBlocklist;
+}
+function isArcadeNameBlocked(name) {
+  if (!name || !name.trim()) return false;
+  const norm = normalizeForProfanityCheck(name);
+  if (!norm) return false;
+  return getArcadeBlocklist().has(norm);
+}
+// Combined check: catches both the long substring patterns (e.g. "FAG",
+// "KKK") AND the short exact-match arcade blocklist above (e.g. "ASS",
+// "OWO"). Used by the arcade-mode input validation.
+function isProfaneArcadeName(name) {
+  return isProfaneName(name) || isArcadeNameBlocked(name);
+}
+
+// ---------- arcade-name helpers ----------
+// Normalize a raw user-supplied or legacy database name into the
+// 3-character ALL-CAPS arcade form. Strips anything non-alphanumeric and
+// truncates. Returns '' for empty / unusable input.
+function arcadeName(raw) {
+  return String(raw || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, 3);
+}
 function makeEntryId() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
   return 'id-' + Math.random().toString(36).slice(2) + '-' + Date.now().toString(36);
@@ -435,6 +499,27 @@ function renderLeaderboardPreview(entry) {
     const rank = slot.rank;
     const isUser = (e.id === entry.id);
     const name = leaderboardDisplayName(e);
+    // === ARCADE NAMING input (3-char ALL-CAPS, alphanumeric only). ===
+    // The input's value, placeholder, maxlength, and styling all enforce
+    // the 3-char tag convention. To revert to the freeform 32-char input,
+    // comment this branch out and uncomment the legacy branch below it.
+    const inputHtml = isUser
+      ? `<span class="lb-name-cell">
+           <input class="lb-name-input lb-name-input-arcade" type="text"
+                  maxlength="3"
+                  size="3"
+                  placeholder="AAA"
+                  pattern="[A-Z0-9]{3}"
+                  inputmode="text"
+                  autocapitalize="characters"
+                  autocomplete="off"
+                  spellcheck="false"
+                  value="${escapeHtml(arcadeName(entry.name))}"
+                  aria-label="Enter your 3-character arcade tag">
+           <span class="lb-save-status" aria-live="polite"></span>
+         </span>`
+      : `<span class="lb-name">${escapeHtml(name)}</span>`;
+    /* === OLD NAMING input (freeform up to 32 chars). Uncomment to revert.
     const inputHtml = isUser
       ? `<span class="lb-name-cell">
            <input class="lb-name-input" type="text" maxlength="32"
@@ -444,6 +529,7 @@ function renderLeaderboardPreview(entry) {
            <span class="lb-save-status" aria-live="polite"></span>
          </span>`
       : `<span class="lb-name">${escapeHtml(name)}</span>`;
+    */
     return `
       <div class="lb-row${isUser ? ' lb-row-user' : ''}">
         <span class="lb-rank">#${rank}</span>
@@ -899,13 +985,24 @@ function wireLeaderboardPreviewHandlers(entry) {
     // them or navigates away (in which case the entry falls back to the
     // last clean name → anonymous animal).
     input.addEventListener('input', () => {
+      // === ARCADE NAMING: enforce 3-char ALL-CAPS alphanumeric live as
+      // the user types. Any disallowed character is dropped silently;
+      // the rest auto-uppercase. ===
+      const before = input.value;
+      const cleaned = before.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3);
+      if (cleaned !== before) {
+        input.value = cleaned;
+        // Place caret at end so consecutive keystrokes continue past the
+        // last char rather than getting stuck mid-string.
+        try { input.setSelectionRange(cleaned.length, cleaned.length); } catch (_) {}
+      }
       // Reset feedback when the user resumes typing after a rejection.
       if (warnEl && !warnEl.classList.contains('hidden')) {
         warnEl.classList.add('hidden');
         input.classList.remove('lb-name-input-error');
       }
       const v = input.value;
-      if (!isProfaneName(v)) {
+      if (!isProfaneArcadeName(v)) {
         updateLeaderboardEntryName(entry, v);
       }
       if (!entry._remoteKey) showPending();
@@ -913,7 +1010,7 @@ function wireLeaderboardPreviewHandlers(entry) {
 
     const commitOrReject = () => {
       const v = input.value;
-      if (isProfaneName(v)) {
+      if (isProfaneArcadeName(v)) {
         if (warnEl) {
           warnEl.textContent = 'sorry, profanity checker flagged this one, please use another name';
           warnEl.classList.remove('hidden');
@@ -1700,8 +1797,9 @@ function showSummary() {
     if (!entry || entry._remoteKey) return;
     // Defensive: if the stored name somehow became profane (shouldn't happen
     // with the current input handler, but belt-and-braces), strip it before
-    // pushing so the global leaderboard never sees profanity.
-    if (isProfaneName(entry.name)) updateLeaderboardEntryName(entry, '');
+    // pushing so the global leaderboard never sees profanity. Use the
+    // arcade-aware check so short-form rude tags are also caught.
+    if (isProfaneArcadeName(entry.name)) updateLeaderboardEntryName(entry, '');
     commitEntryToRemote(entry);
   }
   document.getElementById('play-again').addEventListener('click', () => {

@@ -1321,6 +1321,21 @@ html[data-theme="dark"] .tutorial-tooltip {
   width: 100%;
   min-width: 0;
 }
+/* === ARCADE NAMING input — monospaced 3-char tag, fixed width so it
+   doesn't claim the whole row. The wider letter-spacing gives it the
+   coin-op cabinet look. To revert, remove this rule and the
+   .lb-name-input-arcade class from the input element. === */
+.leaderboard-preview .lb-row .lb-name-input.lb-name-input-arcade {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  text-align: center;
+  width: 5.5ch;       /* room for 3 letter cells + padding */
+  flex: 0 0 auto;     /* don't stretch inside the name cell */
+  padding: 4px 6px;
+}
 .leaderboard-preview .lb-row .lb-name-input:focus { outline: none; background: var(--accent-soft); }
 .leaderboard-preview .lb-row .lb-name-input-error,
 .leaderboard-preview .lb-row .lb-name-input.lb-name-input-error {
@@ -1343,6 +1358,11 @@ html[data-theme="dark"] .tutorial-tooltip {
   min-width: 0;
 }
 .leaderboard-preview .lb-name-cell .lb-name-input { flex: 1; min-width: 0; }
+/* Arcade variant overrides the flex:1 above so the input keeps its
+   fixed 3-char width rather than stretching to fill the row. */
+.leaderboard-preview .lb-name-cell .lb-name-input.lb-name-input-arcade {
+  flex: 0 0 auto;
+}
 .leaderboard-preview .lb-save-status {
   font-size: 10px;
   letter-spacing: 0.04em;
