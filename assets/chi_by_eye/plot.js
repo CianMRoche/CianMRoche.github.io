@@ -63,6 +63,7 @@ export class Plot {
 
   destroy() {
     this.stopAnimation();
+    this.setInteractive(null); // detach any drag handlers
     window.removeEventListener('resize', this._onResize);
     if (this._resizeObserver) this._resizeObserver.disconnect();
   }
@@ -112,6 +113,217 @@ export class Plot {
   setChi2LabelsVisible(show) {
     this._showChi2Labels = !!show;
     this.render();
+  }
+
+  // Sandbox mode override. In this mode the renderer bypasses the
+  // game-difficulty branches (sampled-only, rotating bars) and instead
+  // honours the two explicit flags below directly. Clouds and the central
+  // marker are always drawn together when requested — there's no "reveal"
+  // transition. This is what lets the sandbox toggle "error bars" and
+  // "cloud samples" independently.
+  setSandboxMode(flags = {}) {
+    this._sandboxMode = true;
+    if (flags.barsVisible   !== undefined) this._barsVisible   = !!flags.barsVisible;
+    if (flags.cloudsVisible !== undefined) this._cloudsVisible = !!flags.cloudsVisible;
+    // Cloud sampling needs the RAF loop running to top up / age out
+    // particles. Otherwise it can stay paused.
+    this._needsAnim = !!this._cloudsVisible;
+    if (this._needsAnim) this.startAnimation();
+    else this.stopAnimation();
+    this.render();
+  }
+
+  // Enable click-and-drag editing of points (sandbox mode).
+  //
+  // opts.onChange(idx, kind) is called whenever a point is mutated. `kind`
+  // is 'point' (centre dot was dragged), 'errUp' or 'errDn' (an error-bar
+  // cap was dragged). Callers should treat the round.points as mutable.
+  //
+  // Passing null disables interaction.
+  setInteractive(opts) {
+    // Tear down any existing handlers first so this is idempotent.
+    if (this._interactiveHandlers) {
+      const { down, move, up, leave } = this._interactiveHandlers;
+      this.canvas.removeEventListener('pointerdown',   down);
+      this.canvas.removeEventListener('pointermove',   move);
+      this.canvas.removeEventListener('pointerup',     up);
+      this.canvas.removeEventListener('pointercancel', up);
+      this.canvas.removeEventListener('pointerleave',  leave);
+      this._interactiveHandlers = null;
+    }
+    this._interactiveOpts = null;
+    this._dragState = null;
+    this.canvas.style.cursor = '';
+    this.canvas.style.touchAction = '';
+    if (!opts) return;
+
+    this._interactiveOpts = opts;
+    // Disable the browser's default touch gestures on the canvas so that
+    // dragging a point on mobile doesn't scroll the page.
+    this.canvas.style.touchAction = 'none';
+
+    const down  = (e) => this._onPointerDown(e);
+    const move  = (e) => this._onPointerMove(e);
+    const up    = (e) => this._onPointerUp(e);
+    const leave = ()  => { if (!this._dragState) this.canvas.style.cursor = ''; };
+    this.canvas.addEventListener('pointerdown',   down);
+    this.canvas.addEventListener('pointermove',   move);
+    this.canvas.addEventListener('pointerup',     up);
+    this.canvas.addEventListener('pointercancel', up);
+    this.canvas.addEventListener('pointerleave',  leave);
+    this._interactiveHandlers = { down, move, up, leave };
+  }
+
+  // --- internal: pointer position → canvas-internal pixels ---
+  _eventToCanvasPx(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    const cssX = e.clientX - rect.left;
+    const cssY = e.clientY - rect.top;
+    return { px: cssX * this._dpr, py: cssY * this._dpr };
+  }
+
+  // Hit test: returns the nearest interactable element under the cursor
+  // (or null). Returns { kind: 'point' | 'errUp' | 'errDn', idx } and the
+  // distance for use by the caller.
+  _hitTest(px, py) {
+    if (!this.round || !this.round.points) return null;
+    const R = this._plotRect();
+    const dpr = this._dpr;
+    // Tap targets — generous on touch, tight enough to disambiguate points.
+    const POINT_R = 14 * dpr;
+    const CAP_R   = 12 * dpr;
+    let best = null;
+    for (let i = 0; i < this.round.points.length; i++) {
+      const p = this.round.points[i];
+      const cx = this._xToPx(p.x, R);
+      const cy = this._yToPx(p.yObs, R);
+      const dCenter = Math.hypot(px - cx, py - cy);
+      if (dCenter <= POINT_R && (!best || dCenter < best.dist)) {
+        best = { kind: 'point', idx: i, dist: dCenter };
+      }
+      // Cap hit tests: only when error-bar visuals exist (vertical bars).
+      const { upPx, dnPx } = this._dyToPxAt(p.yObs, p.err, R);
+      const dUp = Math.hypot(px - cx, py - upPx);
+      const dDn = Math.hypot(px - cx, py - dnPx);
+      // Caps only count if pointer is clearly nearer the cap than the center
+      // (so the center grabs first when the bar is short).
+      if (dUp <= CAP_R && dUp < dCenter && (!best || dUp < best.dist)) {
+        best = { kind: 'errUp', idx: i, dist: dUp };
+      }
+      if (dDn <= CAP_R && dDn < dCenter && (!best || dDn < best.dist)) {
+        best = { kind: 'errDn', idx: i, dist: dDn };
+      }
+    }
+    return best;
+  }
+
+  _onPointerDown(e) {
+    if (!this._interactiveOpts) return;
+    const { px, py } = this._eventToCanvasPx(e);
+    const hit = this._hitTest(px, py);
+    if (hit) {
+      // Begin a drag of an existing point / error-bar cap.
+      e.preventDefault();
+      this._dragState = hit;
+      // Resize cursor for cap drags, grabbing for whole-point moves.
+      this.canvas.style.cursor =
+        (hit.kind === 'errUp' || hit.kind === 'errDn') ? 'ns-resize' : 'grabbing';
+      try { this.canvas.setPointerCapture(e.pointerId); } catch (_) {}
+      return;
+    }
+    // Not over any interactable element — record a candidate click so
+    // pointerup can decide whether it was a click-to-add or just a
+    // missed press / scroll attempt. Only count if the press lands inside
+    // the plot rect (so margin / axis presses don't create points).
+    const R = this._plotRect();
+    const insidePlot = (px >= R.x0 && px <= R.x1 && py >= R.y0 && py <= R.y1);
+    if (insidePlot && this._interactiveOpts.onClickEmpty) {
+      e.preventDefault();
+      this._pendingClick = { px, py, pointerId: e.pointerId };
+      try { this.canvas.setPointerCapture(e.pointerId); } catch (_) {}
+    }
+  }
+
+  _onPointerMove(e) {
+    if (!this._interactiveOpts) return;
+    if (this._dragState) {
+      const { px, py } = this._eventToCanvasPx(e);
+      const R = this._plotRect();
+      // Clamp into plot rect so dragged values stay on-axis.
+      const cx = Math.max(R.x0, Math.min(R.x1, px));
+      const cy = Math.max(R.y0, Math.min(R.y1, py));
+      const wx = this._pxToX(cx, R);
+      const wy = this._pxToY(cy, R);
+      const p = this.round.points[this._dragState.idx];
+      if (this._dragState.kind === 'point') {
+        // Move both x and y. Clamp x into [0,1] so it stays on axis. The
+        // caller's onChange handler is responsible for re-deriving yTrue
+        // = f(p.x) from the new x.
+        p.x    = Math.max(0, Math.min(1, wx));
+        p.yObs = wy;
+      } else if (this._dragState.kind === 'errUp') {
+        // Upper cap follows the cursor; err is its distance above yObs.
+        const newErr = Math.max(1e-6, wy - p.yObs);
+        p.err = newErr;
+      } else if (this._dragState.kind === 'errDn') {
+        const newErr = Math.max(1e-6, p.yObs - wy);
+        p.err = newErr;
+      }
+      this.render();
+      if (this._interactiveOpts.onChange) {
+        this._interactiveOpts.onChange(this._dragState.idx, this._dragState.kind);
+      }
+      return;
+    }
+    // No active drag — if a click is pending, cancel it once the pointer
+    // moves more than a small threshold (interpret as scroll attempt).
+    if (this._pendingClick) {
+      const { px, py } = this._eventToCanvasPx(e);
+      const dx = px - this._pendingClick.px;
+      const dy = py - this._pendingClick.py;
+      if (Math.hypot(dx, dy) > 6 * this._dpr) {
+        try { this.canvas.releasePointerCapture(this._pendingClick.pointerId); } catch (_) {}
+        this._pendingClick = null;
+      }
+    } else {
+      // Otherwise: update the hover cursor based on what's under the
+      // pointer right now. ns-resize advertises "drag this cap to change
+      // the error-bar length"; grab advertises "drag this point"; copy
+      // advertises "click to add a new point here".
+      const { px, py } = this._eventToCanvasPx(e);
+      const hit = this._hitTest(px, py);
+      let cursor = '';
+      if (hit) {
+        cursor = (hit.kind === 'errUp' || hit.kind === 'errDn') ? 'ns-resize' : 'grab';
+      } else if (this._interactiveOpts.onClickEmpty) {
+        cursor = 'copy';
+      }
+      this.canvas.style.cursor = cursor;
+    }
+  }
+
+  _onPointerUp(e) {
+    // End-of-drag cleanup, if applicable.
+    if (this._dragState) {
+      this._dragState = null;
+      this.canvas.style.cursor = '';
+      try { this.canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+      if (this._interactiveOpts && this._interactiveOpts.onRelease) {
+        this._interactiveOpts.onRelease();
+      }
+      return;
+    }
+    // Click-to-add: pointer was pressed inside the plot rect and didn't
+    // move beyond the click threshold. Convert to world coords and fire
+    // the callback.
+    if (this._pendingClick && this._interactiveOpts && this._interactiveOpts.onClickEmpty) {
+      const R = this._plotRect();
+      const wx = this._pxToX(this._pendingClick.px, R);
+      const wy = this._pxToY(this._pendingClick.py, R);
+      try { this.canvas.releasePointerCapture(this._pendingClick.pointerId); } catch (_) {}
+      this._pendingClick = null;
+      this._interactiveOpts.onClickEmpty(wx, wy);
+    }
   }
 
   _resize() {
@@ -167,6 +379,21 @@ export class Plot {
     }
     const t = (y - r.yMin) / (r.yMax - r.yMin);
     return R.y1 - t * R.h;
+  }
+  // Inverse coordinate transforms — pixel → world. Used by the sandbox
+  // drag handlers. Pixel inputs are canvas-internal pixels (DPI-scaled),
+  // the same units _xToPx / _yToPx return.
+  _pxToX(px, R) {
+    return (px - R.x0) / R.w;
+  }
+  _pxToY(py, R) {
+    const r = this.round;
+    const t = (R.y1 - py) / R.h;
+    if (r.logY) {
+      const a = Math.log10(r.yMin), b = Math.log10(r.yMax);
+      return Math.pow(10, a + t * (b - a));
+    }
+    return r.yMin + t * (r.yMax - r.yMin);
   }
   // Returns the pixel y positions of the upper and lower edges of an error
   // bar centered at yWorld with linear half-width errWorld. The error is
@@ -341,19 +568,27 @@ export class Plot {
       const px = this._xToPx(p.x, R);
       const py = this._yToPx(p.yObs, R);
 
-      // Compute χ² contribution if revealed.
+      // Compute χ² contribution if revealed (or always, in sandbox mode —
+      // where coloring gives live feedback as the user drags points around).
       // Both linear-y and log-y rounds now use linear residuals (matching the
       // chi² computation in round.js); the only difference is how the point is
       // *displayed*, not how its contribution is measured.
+      const showContrib = this.revealed || this._sandboxMode;
       let contrib = null;
       let pointColor = S.point;
-      if (this.revealed) {
+      if (showContrib) {
         const resid = p.yObs - p.yTrue;
         contrib = (resid / p.err) ** 2;
         pointColor = this._chi2ContribColor(contrib);
       }
 
-      if (this._sampled && !this.revealed) {
+      if (this._sandboxMode) {
+        // Sandbox: explicit toggle for the bar, central point always shown.
+        if (this._barsVisible) {
+          this._drawVerticalErrorbar(px, py, p, R, pointColor);
+        }
+        this._drawPoint(px, py, pointColor);
+      } else if (this._sampled && !this.revealed) {
         // Impossible mode: do NOT draw the central point. Just the gaussian
         // cloud, drawn by _drawClouds(). Show nothing here.
       } else if (this._rotRates[i] !== 0 && !this.revealed) {
@@ -427,7 +662,13 @@ export class Plot {
       }
     }
 
-    if (this._sampled && !this.revealed) this._drawClouds(R);
+    // Clouds: game-mode (Impossible while unrevealed) or sandbox-mode
+    // explicit toggle. Both paths share the same _drawClouds renderer.
+    if (this._sandboxMode && this._cloudsVisible) {
+      this._drawClouds(R);
+    } else if (this._sampled && !this.revealed) {
+      this._drawClouds(R);
+    }
   }
 
   _drawVerticalErrorbar(px, py, p, R, color) {
@@ -543,8 +784,13 @@ export class Plot {
     for (let i = 0; i < this._rotRates.length; i++) {
       if (this._rotRates[i] !== 0) this._rotations[i] += this._rotRates[i] * dt;
     }
-    // Update clouds: top up to target count, expire old samples
-    if (this._sampled && this.round && !this.revealed) {
+    // Update clouds: top up to target count, expire old samples. Trigger
+    // either by game-mode (Impossible unrevealed) OR sandbox-mode toggle.
+    const cloudsActive = this.round && (
+      (this._sampled && !this.revealed) ||
+      (this._sandboxMode && this._cloudsVisible)
+    );
+    if (cloudsActive) {
       for (let i = 0; i < this.round.points.length; i++) {
         const p = this.round.points[i];
         const arr = this._cloud[i];

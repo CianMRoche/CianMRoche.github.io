@@ -1182,24 +1182,61 @@ html[data-theme="dark"] .tutorial-tooltip {
   align-items: center;
   margin-bottom: 8px;
 }
-/* Subtle text-link styling so it sits clearly below the primary Start
-   button without competing for attention. */
-.menu .leaderboard-btn {
-  font-size: 12.5px;
-  letter-spacing: 0.05em;
+/* Row holding the two secondary actions (Leaderboards / Sandbox) below
+   the primary Start button. They render side-by-side on wider menus and
+   stack on phones (handled in the responsive section). */
+.menu .menu-secondary {
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+  width: 100%;
+  max-width: 360px;
+  justify-content: center;
+}
+/* Ghost-button base shared by the two secondary actions: thin colored
+   border, transparent fill, colored label + glyph; hover fills the
+   border color (à la the difficulty buttons). Each button supplies its
+   own --secondary-color so a single base rule themes both. */
+.menu .leaderboard-btn,
+.menu .sandbox-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  font-family: inherit;
+  font-size: 12px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  padding: 6px 4px;
-  border: none;
+  padding: 10px 14px;
+  border: 1.5px solid var(--secondary-color, var(--muted));
+  border-radius: 6px;
   background: transparent;
-  color: var(--muted);
+  color: var(--secondary-color, var(--muted));
   cursor: pointer;
-  transition: color 0.12s ease;
+  transition: background 0.15s ease, color 0.15s ease,
+              transform 0.08s ease, box-shadow 0.15s ease;
 }
-.menu .leaderboard-btn::after {
-  content: ' \2192';
-  opacity: 0.6;
+.menu .leaderboard-btn { --secondary-color: var(--accent); }
+.menu .sandbox-btn     { --secondary-color: var(--truth);  }
+.menu .leaderboard-btn .msb-glyph,
+.menu .sandbox-btn     .msb-glyph {
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.85;
+  transition: transform 0.25s ease;
 }
-.menu .leaderboard-btn:hover { color: var(--accent); }
+.menu .leaderboard-btn:hover,
+.menu .sandbox-btn:hover {
+  background: var(--secondary-color);
+  color: var(--bg);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--secondary-color) 28%, transparent);
+}
+/* A small flourish on hover so the glyph reads as alive — the trophy
+   spins slightly, the target nudges. */
+.menu .leaderboard-btn:hover .msb-glyph { transform: rotate(-8deg) scale(1.1); }
+.menu .sandbox-btn:hover     .msb-glyph { transform: scale(1.15); }
 
 /* ============================================================ */
 /*  Leaderboard preview (lives inside the summary screen)        */
@@ -1574,7 +1611,221 @@ html[data-theme="dark"] .tutorial-tooltip {
   .leaderboard-view .lbf-list-head .lbf-date,
   .leaderboard-view .lbf-row .lbf-date { display: none; }
   .menu-buttons { gap: 10px; }
-  .menu .leaderboard-btn { font-size: 12px; }
+  /* On phones the two ghost buttons get tighter padding and the row
+     widens to the full menu width. */
+  .menu .menu-secondary { gap: 8px; max-width: 100%; }
+  .menu .leaderboard-btn,
+  .menu .sandbox-btn {
+    font-size: 11.5px;
+    padding: 9px 10px;
+    gap: 7px;
+  }
+}
+
+/* ============================================================ */
+/*  Sandbox view                                                  */
+/* ============================================================ */
+.sandbox-view {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 28px 22px;
+  overflow: auto;
+  gap: 14px;
+}
+.sandbox-view .sb-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+}
+.sandbox-view h2 {
+  font-size: 28px;
+  font-weight: 300;
+  letter-spacing: -0.005em;
+}
+/* Reuse the leaderboard back-button look. */
+.sandbox-view .lbf-back {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--hairline);
+  border-radius: 5px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+.sandbox-view .lbf-back:hover { color: var(--fg); border-color: var(--fg); }
+
+.sandbox-view .sb-intro {
+  margin: -4px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+/* Plot row: plot on the left, live-stats sidebar on the right (when wide);
+   stack on narrow viewports — handled in the @media block below.
+   `align-items: start` keeps the stats panel at its natural height instead
+   of stretching it to match the plot's tall 16:9 box. */
+.sandbox-view .sb-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 22px;
+  align-items: start;
+}
+.sandbox-view .sb-plot-wrap {
+  position: relative;
+  width: 100%;
+  /* Hold a sensible aspect ratio so the canvas keeps a stable shape
+     regardless of viewport width. */
+  aspect-ratio: 16 / 9;
+  min-height: 260px;
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.sandbox-view #sb-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* "click to add points" prompt — fades in only when the plot has zero
+   data points (toggled via the .hidden util by updateSandboxStats). */
+.sandbox-view .sb-placeholder {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--muted);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.75;
+  pointer-events: none;          /* never block the click that creates a point */
+  user-select: none;
+  text-align: center;
+  padding: 6px 14px;
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  border-radius: 4px;
+}
+
+.sandbox-view .sb-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.sandbox-view .sb-controls-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.sandbox-view .sb-btn {
+  font-size: 12.5px;
+  letter-spacing: 0.03em;
+  padding: 8px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--fg);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.sandbox-view .sb-btn:hover {
+  background: var(--bg-soft);
+  border-color: var(--fg);
+}
+.sandbox-view .sb-btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+.sandbox-view .sb-btn.primary:hover {
+  filter: brightness(1.08);
+  background: var(--accent);
+}
+.sandbox-view .sb-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.sandbox-view .sb-field input[type="number"] {
+  width: 64px;
+  padding: 5px 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+}
+.sandbox-view .sb-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.sandbox-view .sb-checkbox input { accent-color: var(--accent); }
+.sandbox-view .sb-checkbox:hover { color: var(--fg); }
+
+.sandbox-view .sb-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px 10px;       /* hug the four mini-stats so the box is
+                                    only as tall as its content */
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-soft) 70%, transparent);
+}
+/* Sandbox plot HUD — N counter in the top-left of the plot rect.
+   Plot rect top = plot-wrap padding-top (0) + canvas internal PAD.t (32px)
+   = 32. Subtract the HUD's own padding-top (5) so the text top aligns with
+   the plot rect's top edge. Left position clears the y-axis tick labels
+   (canvas PAD.l = 44). The N=value is rendered as a single token so we
+   strip the default 5px gap between the label and the value. */
+.sandbox-view .sb-hud {
+  top: 27px;
+  left: 56px;
+}
+.sandbox-view .sb-hud .hud-item { gap: 0; }
+/* Reuse the mini-stat layout. The .readonly variant just blocks pointer
+   interaction (there's nothing to interact with anyway, but it stops a
+   stray click from highlighting the fill bar). */
+.sandbox-view .mini-stat {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.sandbox-view .mini-stat.readonly { pointer-events: none; }
+.sandbox-view .mini-stat .ms-fill { transition: width 0.12s linear; }
+
+/* ============================================================ */
+/*  Phone tweaks for sandbox                                      */
+/* ============================================================ */
+@media (max-aspect-ratio: 1/1), (max-width: 720px) {
+  .sandbox-view { padding: 18px 14px; }
+  .sandbox-view .sb-plot-wrap {
+    aspect-ratio: 4 / 3;
+    min-height: 220px;
+  }
+  /* Stack plot above stats on narrow viewports. */
+  .sandbox-view .sb-main {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+  .sandbox-view .sb-controls-row { gap: 8px; }
+  .sandbox-view .sb-btn { padding: 8px 11px; font-size: 12px; }
 }
 
 /* ---------- small util ---------- */

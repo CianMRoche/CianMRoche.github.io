@@ -151,7 +151,7 @@ function makeRawCurve() {
 }
 
 // Returns a curve f and its observed yMin/yMax over [0,1] sampled finely.
-function makeCurve(logY) {
+export function makeCurve(logY) {
   // Try a few until we get something with reasonable range and (if logY)
   // strictly positive values after shifting.
   for (let attempt = 0; attempt < 20; attempt++) {

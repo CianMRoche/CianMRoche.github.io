@@ -3,6 +3,10 @@
 import { sigmaToChi2, chi2ToSigma, normCDF } from './stats.js';
 import { DIFFICULTIES, makeRound } from './round.js';
 import { Plot } from './plot.js';
+import {
+  makeSandbox, regenerateModel, setLogY, addPointAt, removeLastPoint,
+  clearPoints, refreshYTrue, computeStats, asRound,
+} from './sandbox.js';
 
 // ---------- theme: keep in sync with the rest of the site ----------
 (function () {
@@ -507,6 +511,241 @@ function closeLeaderboardView() {
   attachMenuHandlers();
 }
 
+// ---------- sandbox view ----------
+// Free-form playground: no rounds, no scoring. User builds up a dataset,
+// drags points / error bars, watches the χ² readouts respond. State lives
+// in sandboxState (sandbox.js); rendering uses a dedicated Plot instance
+// in interactive (drag-enabled) mode.
+function openSandboxView() {
+  menuEl.classList.add('hidden');
+  summaryEl.classList.add('hidden');
+  topbarEl.classList.add('hidden');
+  controlsEl.classList.add('hidden');
+  hudTlEl.classList.add('hidden');
+  revealBannerEl.classList.add('hidden');
+  document.getElementById('reveal-restore').classList.add('hidden');
+  document.getElementById('slider-truth').classList.add('hidden');
+  if (leaderboardViewEl) leaderboardViewEl.classList.add('hidden');
+  game.state = State.SANDBOX;
+
+  if (!sandboxState) sandboxState = makeSandbox();
+  // Make the view visible BEFORE constructing the Plot. The Plot
+  // constructor reads the canvas's bounding rect to size its drawing
+  // buffer; if the parent is still display:none that returns 0×0 and
+  // the first render comes out collapsed.
+  sandboxViewEl.classList.remove('hidden');
+  // Build the view's DOM + plot on first open; reuse on subsequent opens.
+  if (!sandboxPlot) {
+    sandboxViewEl.innerHTML = sandboxViewMarkup();
+    attachSandboxHandlers();
+    const canvas = document.getElementById('sb-canvas');
+    sandboxPlot = new Plot(canvas);
+    sandboxPlot.setInteractive({
+      onChange: (idx, kind) => {
+        // If a point's x changed, its yTrue moves too. err / yObs alone
+        // don't affect yTrue. Recompute stats either way.
+        if (kind === 'point') refreshYTrue(sandboxState);
+        updateSandboxStats();
+      },
+      // On release, refit the y-axis range so a point dragged off-axis
+      // becomes visible again — and so the axis doesn't keep jittering
+      // mid-drag.
+      onRelease: () => applySandboxToPlot(),
+      // Click in empty plot space drops a new point there with a random
+      // error bar. The user can immediately drag it to refine.
+      onClickEmpty: (wx, wy) => {
+        addPointAt(sandboxState, wx, wy);
+        applySandboxToPlot();
+      },
+    });
+  }
+  applySandboxToPlot();
+}
+
+function closeSandboxView() {
+  // Pause any in-flight RAF (cloud sampling) — we'll restart it next open.
+  if (sandboxPlot) sandboxPlot.stopAnimation();
+  sandboxViewEl.classList.add('hidden');
+  showMenu();
+  menuEl.innerHTML = menuMarkup();
+  attachMenuHandlers();
+}
+
+function sandboxViewMarkup() {
+  const s = sandboxState;
+  return `
+    <div class="sb-top">
+      <h2>Sandbox</h2>
+      <button class="lbf-back" id="sb-back">&larr; Back to menu</button>
+    </div>
+    <p class="sb-intro">
+      Click inside the plot to drop a data point. Drag points (or error-bar
+      tips) to change them and watch &chi;&sup2; respond.
+    </p>
+    <div class="sb-main">
+      <div class="sb-plot-wrap">
+        <canvas id="sb-canvas"></canvas>
+        <div class="plot-hud plot-hud-tl sb-hud" id="sb-hud">
+          <span class="hud-item"><span class="hud-k">N=</span><span class="hud-v" id="sb-hud-N">0</span></span>
+        </div>
+        <div class="sb-placeholder" id="sb-placeholder">click to add points</div>
+      </div>
+      <div class="sb-stats" aria-label="Live statistics for the current dataset">
+        <div class="mini-stat readonly">
+          <span class="ms-label">&chi;&sup2;</span>
+          <div class="ms-bar-wrap"><div class="ms-bar"><div class="ms-fill" id="sb-fill-chi"></div></div></div>
+          <span class="ms-value" id="sb-val-chi">&mdash;</span>
+        </div>
+        <div class="mini-stat readonly">
+          <span class="ms-label">&chi;&sup2;/dof</span>
+          <div class="ms-bar-wrap"><div class="ms-bar"><div class="ms-fill" id="sb-fill-red"></div></div></div>
+          <span class="ms-value" id="sb-val-red">&mdash;</span>
+        </div>
+        <div class="mini-stat readonly with-ticks">
+          <span class="ms-label"><em>p</em></span>
+          <div class="ms-bar-wrap">
+            <div class="ms-bar"><div class="ms-fill" id="sb-fill-p"></div></div>
+            <div class="ms-ticks"><span>0</span><span>1</span></div>
+          </div>
+          <span class="ms-value" id="sb-val-p">&mdash;</span>
+        </div>
+        <div class="mini-stat readonly with-ticks">
+          <span class="ms-label">&sigma;</span>
+          <div class="ms-bar-wrap">
+            <div class="ms-bar"><div class="ms-fill" id="sb-fill-sig"></div></div>
+            <div class="ms-ticks"><span>0</span><span>&ge; ${SIGMA_SLIDER_MAX}</span></div>
+          </div>
+          <span class="ms-value" id="sb-val-sig">&mdash;</span>
+        </div>
+      </div>
+    </div>
+    <div class="sb-controls">
+      <div class="sb-controls-row">
+        <button class="sb-btn" id="sb-remove">&minus; Remove last</button>
+        <button class="sb-btn" id="sb-clear">Clear</button>
+        <button class="sb-btn" id="sb-new-model">&#x21BB; New model</button>
+      </div>
+      <div class="sb-controls-row sb-toggles">
+        <label class="sb-field">
+          <span>dof</span>
+          <input type="number" id="sb-dof" min="1" max="200" value="${s.dof}">
+        </label>
+        <label class="sb-checkbox">
+          <input type="checkbox" id="sb-logy" ${s.logY ? 'checked' : ''}>
+          <span>log y</span>
+        </label>
+        <label class="sb-checkbox">
+          <input type="checkbox" id="sb-bars" ${s.showBars ? 'checked' : ''}>
+          <span>error bars</span>
+        </label>
+        <label class="sb-checkbox">
+          <input type="checkbox" id="sb-clouds" ${s.showClouds ? 'checked' : ''}>
+          <span>cloud samples</span>
+        </label>
+      </div>
+    </div>
+  `;
+}
+
+function attachSandboxHandlers() {
+  document.getElementById('sb-back').addEventListener('click', closeSandboxView);
+  document.getElementById('sb-remove').addEventListener('click', () => {
+    removeLastPoint(sandboxState);
+    applySandboxToPlot();
+  });
+  document.getElementById('sb-clear').addEventListener('click', () => {
+    clearPoints(sandboxState);
+    applySandboxToPlot();
+  });
+  document.getElementById('sb-new-model').addEventListener('click', () => {
+    regenerateModel(sandboxState);
+    applySandboxToPlot();
+  });
+  document.getElementById('sb-dof').addEventListener('input', (e) => {
+    const v = parseInt(e.target.value, 10);
+    if (Number.isFinite(v) && v >= 1) {
+      sandboxState.dof = v;
+      updateSandboxStats();
+    }
+  });
+  document.getElementById('sb-logy').addEventListener('change', (e) => {
+    setLogY(sandboxState, e.target.checked);
+    applySandboxToPlot();
+  });
+  document.getElementById('sb-bars').addEventListener('change', (e) => {
+    sandboxState.showBars = e.target.checked;
+    sandboxPlot.setSandboxMode({ barsVisible: sandboxState.showBars });
+  });
+  document.getElementById('sb-clouds').addEventListener('change', (e) => {
+    sandboxState.showClouds = e.target.checked;
+    sandboxPlot.setSandboxMode({ cloudsVisible: sandboxState.showClouds });
+  });
+}
+
+function syncSandboxInputs() {
+  const dof = document.getElementById('sb-dof');
+  if (dof)  dof.value = String(sandboxState.dof);
+  const lg  = document.getElementById('sb-logy');
+  if (lg)   lg.checked = sandboxState.logY;
+  const br  = document.getElementById('sb-bars');
+  if (br)   br.checked = sandboxState.showBars;
+  const cl  = document.getElementById('sb-clouds');
+  if (cl)   cl.checked = sandboxState.showClouds;
+}
+
+// Push the current sandbox state to the plot. Called after any change that
+// might alter the y-range or invalidate per-point state (add/remove point,
+// new model, log-y toggle, drag release).
+function applySandboxToPlot() {
+  if (!sandboxPlot) return;
+  const round = asRound(sandboxState);
+  sandboxPlot.setRound(round, { rotate: false, sampledErrorbars: false });
+  // Treat sandbox as "revealed" so the chi² contribution coloring kicks in
+  // regardless of which toggles are active.
+  sandboxPlot.setRevealed(true);
+  sandboxPlot.setSandboxMode({
+    barsVisible:   sandboxState.showBars,
+    cloudsVisible: sandboxState.showClouds,
+  });
+  syncSandboxInputs();
+  updateSandboxStats();
+}
+
+function updateSandboxStats() {
+  const st = computeStats(sandboxState);
+  // N is shown in the plot's top-left HUD (matches the game-mode layout).
+  const hudN = document.getElementById('sb-hud-N');
+  if (hudN) hudN.textContent = String(st.N);
+  // Placeholder ("click to add points") shows only while the plot is empty.
+  const ph = document.getElementById('sb-placeholder');
+  if (ph) ph.classList.toggle('hidden', st.N > 0);
+
+  // Scale targets:
+  //   χ²:        value at σ = SIGMA_SLIDER_MAX with the current dof
+  //   χ²/dof:    that value / dof
+  //   p:         0..1
+  //   σ:         0..SIGMA_SLIDER_MAX (≥ max clamps the fill at 100%)
+  const chi2Max    = sigmaToChi2(SIGMA_SLIDER_MAX, st.dof);
+  const redChi2Max = chi2Max / Math.max(1, st.dof);
+  const setFill = (id, frac) => {
+    const el = document.getElementById(id);
+    if (el) el.style.width = (Math.max(0, Math.min(1, frac)) * 100).toFixed(1) + '%';
+  };
+  setFill('sb-fill-chi', chi2Max    > 0 ? st.chi2    / chi2Max    : 0);
+  setFill('sb-fill-red', redChi2Max > 0 ? st.redChi2 / redChi2Max : 0);
+  setFill('sb-fill-p',   st.pValue);
+  setFill('sb-fill-sig', st.sigma / SIGMA_SLIDER_MAX);
+
+  const fmt = (v) => (Math.abs(v) < 10 ? v.toFixed(2) : v.toFixed(1));
+  const empty = st.N === 0;
+  document.getElementById('sb-val-chi').innerHTML = empty ? '&mdash;' : fmt(st.chi2);
+  document.getElementById('sb-val-red').innerHTML = empty ? '&mdash;' : fmt(st.redChi2);
+  document.getElementById('sb-val-p').innerHTML   = empty ? '&mdash;'
+    : (st.pValue < 0.001 ? '&lt; 0.001' : st.pValue.toFixed(3));
+  document.getElementById('sb-val-sig').innerHTML = empty ? '&mdash;'
+    : st.sigma.toFixed(2) + '&sigma;';
+}
+
 function renderLeaderboardView() {
   const diffEntries = Object.entries(DIFFICULTIES);
   const diffBtns = diffEntries.map(([key, d]) => {
@@ -758,6 +997,7 @@ const State = {
   ROUND: 'round',
   REVEAL: 'reveal',
   SUMMARY: 'summary',
+  SANDBOX: 'sandbox',
 };
 
 const game = {
@@ -779,7 +1019,14 @@ const game = {
 // ---------- DOM refs (assigned in init) ----------
 let app, menuEl, topbarEl, stageEl, plotWrapEl, canvasEl, hudTlEl,
     controlsEl, sliderEl, sliderValEl, submitBtn, revealBannerEl,
-    summaryEl, leaderboardViewEl, exitLinkEl, plot;
+    summaryEl, leaderboardViewEl, exitLinkEl, plot,
+    sandboxViewEl;
+
+// Sandbox-mode state. Created lazily on first sandbox open and reused
+// across opens so the layout (points, dof, toggles) persists if the user
+// pops back to the menu and returns.
+let sandboxState = null;
+let sandboxPlot  = null;
 
 // ---------- bootstrap ----------
 window.addEventListener('DOMContentLoaded', init);
@@ -914,6 +1161,7 @@ function buildShell() {
 
       <div class="summary hidden" id="summary"></div>
       <div class="leaderboard-view hidden" id="leaderboard-view"></div>
+      <div class="sandbox-view hidden" id="sandbox-view"></div>
     </div>
   `;
 
@@ -931,6 +1179,7 @@ function buildShell() {
   revealBannerEl = document.getElementById('reveal-banner');
   summaryEl = document.getElementById('summary');
   leaderboardViewEl = document.getElementById('leaderboard-view');
+  sandboxViewEl = document.getElementById('sandbox-view');
   exitLinkEl = document.getElementById('exit-link');
 
   // Slider tick labels. The last tick is marked "Nσ+" because the slider's
@@ -1048,7 +1297,16 @@ function menuMarkup() {
     </div>
     <div class="menu-buttons">
       <button class="primary start-btn" id="start-btn">Start game</button>
-      <button class="leaderboard-btn" id="open-leaderboard">View leaderboards</button>
+      <div class="menu-secondary">
+        <button class="leaderboard-btn" id="open-leaderboard">
+          <span class="msb-glyph" aria-hidden="true">&#x2605;</span>
+          <span class="msb-label">Leaderboards</span>
+        </button>
+        <button class="sandbox-btn" id="open-sandbox">
+          <span class="msb-glyph" aria-hidden="true">&#x25CE;</span>
+          <span class="msb-label">Sandbox</span>
+        </button>
+      </div>
     </div>
     <div class="footer-note">
       Convention: two-sided &sigma; equivalent of the
@@ -1092,6 +1350,9 @@ function attachMenuHandlers() {
   // Leaderboard link
   const lbBtn = document.getElementById('open-leaderboard');
   if (lbBtn) lbBtn.addEventListener('click', openLeaderboardView);
+  // Sandbox link
+  const sbBtn = document.getElementById('open-sandbox');
+  if (sbBtn) sbBtn.addEventListener('click', openSandboxView);
 }
 
 // ---------- state transitions ----------
@@ -1108,6 +1369,7 @@ function showMenu() {
   document.getElementById('slider-truth').classList.add('hidden');
   summaryEl.classList.add('hidden');
   if (leaderboardViewEl) leaderboardViewEl.classList.add('hidden');
+  if (sandboxViewEl)     sandboxViewEl.classList.add('hidden');
   menuEl.classList.remove('hidden');
 }
 
