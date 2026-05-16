@@ -171,13 +171,20 @@ function leaderboardDisplayName(entry) {
   // === ARCADE NAMING (3-char ALL-CAPS) ===
   // For database entries with longer names (legacy from the previous
   // naming scheme), we just take the first 3 alphanumeric characters and
-  // uppercase. If those happen to map to a blocked arcade tag, we fall
-  // back to the animal's first 3 chars.
+  // uppercase. If those map to a blocked arcade tag, OR the entry has no
+  // name at all, we fall back to the arcade default "AAA" (matching the
+  // input placeholder).
   let n = arcadeName(entry.name);
   if (n && isProfaneArcadeName(n)) n = '';
   if (n) return n;
-  const a = arcadeName(entry.animal);
-  return a || '---';
+  return 'AAA';
+  // The entry.animal field is still generated for every new entry (see
+  // randomAnimal() and the entry constructor below) so that we can switch
+  // back to a per-entry differentiated fallback without changing the data
+  // model. To re-enable the animal fallback, replace the `return 'AAA'`
+  // line above with:
+  //   const a = arcadeName(entry.animal);
+  //   return a || 'AAA';
   // === OLD NAMING (longer names + "Anonymous <animal>" fallback). To
   // revert to the previous scheme, comment out the arcade block above
   // and uncomment the line below: ===
