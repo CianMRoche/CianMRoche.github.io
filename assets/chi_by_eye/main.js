@@ -689,14 +689,14 @@ function openSandboxView() {
       },
     });
   }
-  applySandboxToPlot();
-  // Document-level keys are only listened for while the sandbox view is
-  // open. The handler is idempotent if installed twice, but we still
-  // guard so we don't double up the listener.
+  // Install the document-level keys BEFORE applySandboxToPlot so that
+  // even if some downstream call throws, Esc / Delete / Backspace still
+  // work. Guarded so repeated opens don't stack listeners.
   if (!sandboxKeyListener) {
     sandboxKeyListener = handleSandboxKeydown;
     document.addEventListener('keydown', sandboxKeyListener);
   }
+  applySandboxToPlot();
 }
 
 function closeSandboxView() {
@@ -882,23 +882,30 @@ function deleteSandboxSelection() {
   applySandboxToPlot();
 }
 
-// Document-level keydown handler — only active while the sandbox is open.
-// Ignores keystrokes when the focus is on a form input so typing in the
-// dof box doesn't trigger deletes.
+// Document-level keydown handler — only active while the sandbox view is
+// open. Ignores keystrokes when focus is on a form input so typing in
+// the dof box doesn't trigger deletes. Uses both e.key and e.keyCode so
+// it stays working on the few browsers that report legacy values.
 function handleSandboxKeydown(e) {
-  if (game.state !== State.SANDBOX) return;
+  // Guard on the visible view rather than game.state so the handler is
+  // robust even if game.state has been bumped to some transient value.
+  if (!sandboxViewEl || sandboxViewEl.classList.contains('hidden')) return;
   const tag = (document.activeElement && document.activeElement.tagName) || '';
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-  if (e.key === 'Delete' || e.key === 'Backspace') {
+  const isDelete = e.key === 'Delete' || e.key === 'Backspace' ||
+                   e.keyCode === 46     || e.keyCode === 8;
+  const isEscape = e.key === 'Escape' || e.key === 'Esc' || e.keyCode === 27;
+  if (isDelete) {
     if (sandboxSelection.length) {
       e.preventDefault();
       deleteSandboxSelection();
     }
-  } else if (e.key === 'Escape') {
-    if (sandboxSelection.length) {
-      e.preventDefault();
-      setSandboxSelection([]);
-    }
+  } else if (isEscape) {
+    // Clear unconditionally — both the canonical mirror AND the plot's
+    // own _selection — so even if the two have drifted, hitting Esc
+    // always wipes any visible highlight ring.
+    e.preventDefault();
+    setSandboxSelection([]);
   }
 }
 
