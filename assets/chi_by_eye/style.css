@@ -1688,23 +1688,31 @@ html[data-theme="dark"] .tutorial-tooltip {
   line-height: 1.5;
 }
 
-/* Plot row: plot on the left, live-stats sidebar on the right (when wide);
-   stack on narrow viewports — handled in the @media block below.
-   `align-items: start` keeps the stats panel at its natural height instead
-   of stretching it to match the plot's tall 16:9 box. */
+/* Plot on the left, sidebar on the right (controls box stacked above the
+   stats box). Stacked on narrow viewports — see the @media block below.
+   The sidebar is wider than before (300px) to hold the bigger stat bars
+   and the controls comfortably without wrapping. */
 .sandbox-view .sb-main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 260px;
+  grid-template-columns: minmax(0, 1fr) 300px;
   gap: 22px;
   align-items: start;
+}
+.sandbox-view .sb-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 .sandbox-view .sb-plot-wrap {
   position: relative;
   width: 100%;
-  /* Hold a sensible aspect ratio so the canvas keeps a stable shape
-     regardless of viewport width. */
-  aspect-ratio: 16 / 9;
-  min-height: 260px;
+  /* Slightly less wide-screen than before (3:2 vs 16:9) so the plot
+     doesn't dominate the viewport, and capped at 64vh so it always
+     leaves room for the controls + stats below the fold to be visible
+     without scrolling. */
+  aspect-ratio: 3 / 2;
+  min-height: 280px;
+  max-height: 64vh;
   background: var(--bg);
   border: 1px solid var(--hairline);
   border-radius: 6px;
@@ -1734,10 +1742,16 @@ html[data-theme="dark"] .tutorial-tooltip {
   border-radius: 4px;
 }
 
+/* Controls box: matches the stats box's framing (border + tinted bg) so
+   the two sidebar panels read as a pair. */
 .sandbox-view .sb-controls {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  padding: 12px 14px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-soft) 70%, transparent);
 }
 .sandbox-view .sb-controls-row {
   display: flex;
@@ -1759,6 +1773,18 @@ html[data-theme="dark"] .tutorial-tooltip {
 .sandbox-view .sb-btn:hover {
   background: var(--bg-soft);
   border-color: var(--fg);
+}
+.sandbox-view .sb-btn:disabled,
+.sandbox-view .sb-btn[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: transparent;
+  color: var(--muted);
+  border-color: var(--hairline);
+}
+.sandbox-view .sb-btn:disabled:hover {
+  background: transparent;
+  border-color: var(--hairline);
 }
 .sandbox-view .sb-btn.primary {
   background: var(--accent);
@@ -1801,13 +1827,26 @@ html[data-theme="dark"] .tutorial-tooltip {
 .sandbox-view .sb-stats {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 12px 14px 10px;       /* hug the four mini-stats so the box is
-                                    only as tall as its content */
+  gap: 11px;                     /* roomier than the in-game mini-stats so
+                                    the four readouts read as primary info */
+  padding: 14px 14px 13px;
   border: 1px solid var(--hairline);
   border-radius: 6px;
   background: color-mix(in srgb, var(--bg-soft) 70%, transparent);
 }
+/* Bump the sandbox mini-stats up from the game's compact in-game size:
+   wider label column, taller bars, larger value text. Goal is for the
+   four readouts to read as the primary information on the page. */
+.sandbox-view .mini-stat {
+  grid-template-columns: 52px minmax(0, 1fr) 78px;
+  gap: 10px;
+  font-size: 13px;
+}
+.sandbox-view .mini-stat .ms-label  { font-size: 13px; opacity: 0.95; }
+.sandbox-view .mini-stat .ms-bar    { height: 8px; border-radius: 3px; }
+.sandbox-view .mini-stat .ms-fill   { border-radius: 3px; opacity: 0.85; }
+.sandbox-view .mini-stat .ms-value  { font-size: 14px; opacity: 0.95; }
+.sandbox-view .mini-stat .ms-ticks  { font-size: 10px; opacity: 0.6; }
 /* Sandbox plot HUD — N counter in the top-left of the plot rect.
    Plot rect top = plot-wrap padding-top (0) + canvas internal PAD.t (32px)
    = 32. Subtract the HUD's own padding-top (5) so the text top aligns with
@@ -1838,8 +1877,10 @@ html[data-theme="dark"] .tutorial-tooltip {
   .sandbox-view .sb-plot-wrap {
     aspect-ratio: 4 / 3;
     min-height: 220px;
+    max-height: 56vh;
   }
-  /* Stack plot above stats on narrow viewports. */
+  /* Stack plot above the sidebar; the sidebar's own column (controls then
+     stats) stays intact. */
   .sandbox-view .sb-main {
     grid-template-columns: minmax(0, 1fr);
     gap: 14px;

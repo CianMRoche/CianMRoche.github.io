@@ -4,7 +4,7 @@ import { sigmaToChi2, chi2ToSigma, normCDF } from './stats.js';
 import { DIFFICULTIES, makeRound } from './round.js';
 import { Plot } from './plot.js';
 import {
-  makeSandbox, regenerateModel, setLogY, addPointAt, removeLastPoint,
+  makeSandbox, regenerateModel, setLogY, addPointAt,
   clearPoints, refreshYTrue, computeStats, asRound,
 } from './sandbox.js';
 
@@ -656,9 +656,10 @@ function openSandboxView() {
     sandboxPlot = new Plot(canvas);
     sandboxPlot.setInteractive({
       onChange: (idx, kind) => {
-        // If a point's x changed, its yTrue moves too. err / yObs alone
-        // don't affect yTrue. Recompute stats either way.
-        if (kind === 'point') refreshYTrue(sandboxState);
+        // Any kind that moves a point's x invalidates yTrue. groupMove
+        // moves every selected point's x; 'point' moves one. err / cap
+        // drags don't touch x, so yTrue stays correct.
+        if (kind === 'point' || kind === 'groupMove') refreshYTrue(sandboxState);
         updateSandboxStats();
       },
       // On release, refit the y-axis range so a point dragged off-axis
@@ -666,19 +667,45 @@ function openSandboxView() {
       // mid-drag.
       onRelease: () => applySandboxToPlot(),
       // Click in empty plot space drops a new point there with a random
-      // error bar. The user can immediately drag it to refine.
+      // error bar, and clears any active selection so the new point isn't
+      // visually grouped with the previous box-select.
       onClickEmpty: (wx, wy) => {
+        if (sandboxSelection.length) setSandboxSelection([]);
         addPointAt(sandboxState, wx, wy);
         applySandboxToPlot();
+      },
+      // Drag in empty plot space draws a marquee; on release the indices
+      // of points inside the rect become the new selection (replacing any
+      // previous one). A zero-point release simply deselects.
+      onBoxSelect: (indices) => {
+        setSandboxSelection(indices || []);
+      },
+      // Fired by the plot when it has to clear the selection itself —
+      // e.g. when the user drags an unselected point and the previous
+      // selection should be dropped.
+      onSelectionChange: (indices) => {
+        sandboxSelection = [...indices];
+        updateSandboxDeleteButton();
       },
     });
   }
   applySandboxToPlot();
+  // Document-level keys are only listened for while the sandbox view is
+  // open. The handler is idempotent if installed twice, but we still
+  // guard so we don't double up the listener.
+  if (!sandboxKeyListener) {
+    sandboxKeyListener = handleSandboxKeydown;
+    document.addEventListener('keydown', sandboxKeyListener);
+  }
 }
 
 function closeSandboxView() {
   // Pause any in-flight RAF (cloud sampling) — we'll restart it next open.
   if (sandboxPlot) sandboxPlot.stopAnimation();
+  if (sandboxKeyListener) {
+    document.removeEventListener('keydown', sandboxKeyListener);
+    sandboxKeyListener = null;
+  }
   sandboxViewEl.classList.add('hidden');
   showMenu();
   menuEl.innerHTML = menuMarkup();
@@ -693,8 +720,9 @@ function sandboxViewMarkup() {
       <button class="lbf-back" id="sb-back">&larr; Back to menu</button>
     </div>
     <p class="sb-intro">
-      Click inside the plot to drop a data point. Drag points (or error-bar
-      tips) to change them and watch &chi;&sup2; respond.
+      Click to drop a point. Drag in empty space to box-select; selected
+      points move together, and one error-bar drag resizes them all. Use
+      Delete (or the button) to remove selected points; Esc to deselect.
     </p>
     <div class="sb-main">
       <div class="sb-plot-wrap">
@@ -704,58 +732,60 @@ function sandboxViewMarkup() {
         </div>
         <div class="sb-placeholder" id="sb-placeholder">click to add points</div>
       </div>
-      <div class="sb-stats" aria-label="Live statistics for the current dataset">
-        <div class="mini-stat readonly">
-          <span class="ms-label">&chi;&sup2;</span>
-          <div class="ms-bar-wrap"><div class="ms-bar"><div class="ms-fill" id="sb-fill-chi"></div></div></div>
-          <span class="ms-value" id="sb-val-chi">&mdash;</span>
-        </div>
-        <div class="mini-stat readonly">
-          <span class="ms-label">&chi;&sup2;/dof</span>
-          <div class="ms-bar-wrap"><div class="ms-bar"><div class="ms-fill" id="sb-fill-red"></div></div></div>
-          <span class="ms-value" id="sb-val-red">&mdash;</span>
-        </div>
-        <div class="mini-stat readonly with-ticks">
-          <span class="ms-label"><em>p</em></span>
-          <div class="ms-bar-wrap">
-            <div class="ms-bar"><div class="ms-fill" id="sb-fill-p"></div></div>
-            <div class="ms-ticks"><span>0</span><span>1</span></div>
+      <div class="sb-sidebar">
+        <div class="sb-controls">
+          <div class="sb-controls-row">
+            <button class="sb-btn" id="sb-delete-selected" disabled>Delete selected</button>
+            <button class="sb-btn" id="sb-clear">Clear all</button>
+            <button class="sb-btn" id="sb-new-model">&#x21BB; New model</button>
           </div>
-          <span class="ms-value" id="sb-val-p">&mdash;</span>
-        </div>
-        <div class="mini-stat readonly with-ticks">
-          <span class="ms-label">&sigma;</span>
-          <div class="ms-bar-wrap">
-            <div class="ms-bar"><div class="ms-fill" id="sb-fill-sig"></div></div>
-            <div class="ms-ticks"><span>0</span><span>&ge; ${SIGMA_SLIDER_MAX}</span></div>
+          <div class="sb-controls-row sb-toggles">
+            <label class="sb-field">
+              <span>dof</span>
+              <input type="number" id="sb-dof" min="1" max="200" value="${s.dof}">
+            </label>
+            <label class="sb-checkbox">
+              <input type="checkbox" id="sb-logy" ${s.logY ? 'checked' : ''}>
+              <span>log y</span>
+            </label>
+            <label class="sb-checkbox">
+              <input type="checkbox" id="sb-bars" ${s.showBars ? 'checked' : ''}>
+              <span>error bars</span>
+            </label>
+            <label class="sb-checkbox">
+              <input type="checkbox" id="sb-clouds" ${s.showClouds ? 'checked' : ''}>
+              <span>cloud samples</span>
+            </label>
           </div>
-          <span class="ms-value" id="sb-val-sig">&mdash;</span>
         </div>
-      </div>
-    </div>
-    <div class="sb-controls">
-      <div class="sb-controls-row">
-        <button class="sb-btn" id="sb-remove">&minus; Remove last</button>
-        <button class="sb-btn" id="sb-clear">Clear</button>
-        <button class="sb-btn" id="sb-new-model">&#x21BB; New model</button>
-      </div>
-      <div class="sb-controls-row sb-toggles">
-        <label class="sb-field">
-          <span>dof</span>
-          <input type="number" id="sb-dof" min="1" max="200" value="${s.dof}">
-        </label>
-        <label class="sb-checkbox">
-          <input type="checkbox" id="sb-logy" ${s.logY ? 'checked' : ''}>
-          <span>log y</span>
-        </label>
-        <label class="sb-checkbox">
-          <input type="checkbox" id="sb-bars" ${s.showBars ? 'checked' : ''}>
-          <span>error bars</span>
-        </label>
-        <label class="sb-checkbox">
-          <input type="checkbox" id="sb-clouds" ${s.showClouds ? 'checked' : ''}>
-          <span>cloud samples</span>
-        </label>
+        <div class="sb-stats" aria-label="Live statistics for the current dataset">
+          <div class="mini-stat readonly">
+            <span class="ms-label">&chi;&sup2;</span>
+            <div class="ms-bar-wrap"><div class="ms-bar"><div class="ms-fill" id="sb-fill-chi"></div></div></div>
+            <span class="ms-value" id="sb-val-chi">&mdash;</span>
+          </div>
+          <div class="mini-stat readonly">
+            <span class="ms-label">&chi;&sup2;/dof</span>
+            <div class="ms-bar-wrap"><div class="ms-bar"><div class="ms-fill" id="sb-fill-red"></div></div></div>
+            <span class="ms-value" id="sb-val-red">&mdash;</span>
+          </div>
+          <div class="mini-stat readonly with-ticks">
+            <span class="ms-label"><em>p</em></span>
+            <div class="ms-bar-wrap">
+              <div class="ms-bar"><div class="ms-fill" id="sb-fill-p"></div></div>
+              <div class="ms-ticks"><span>0</span><span>1</span></div>
+            </div>
+            <span class="ms-value" id="sb-val-p">&mdash;</span>
+          </div>
+          <div class="mini-stat readonly with-ticks">
+            <span class="ms-label">&sigma;</span>
+            <div class="ms-bar-wrap">
+              <div class="ms-bar"><div class="ms-fill" id="sb-fill-sig"></div></div>
+              <div class="ms-ticks"><span>0</span><span>&ge; ${SIGMA_SLIDER_MAX}</span></div>
+            </div>
+            <span class="ms-value" id="sb-val-sig">&mdash;</span>
+          </div>
+        </div>
       </div>
     </div>
   `;
@@ -763,16 +793,15 @@ function sandboxViewMarkup() {
 
 function attachSandboxHandlers() {
   document.getElementById('sb-back').addEventListener('click', closeSandboxView);
-  document.getElementById('sb-remove').addEventListener('click', () => {
-    removeLastPoint(sandboxState);
-    applySandboxToPlot();
-  });
+  document.getElementById('sb-delete-selected').addEventListener('click', deleteSandboxSelection);
   document.getElementById('sb-clear').addEventListener('click', () => {
     clearPoints(sandboxState);
+    setSandboxSelection([]);
     applySandboxToPlot();
   });
   document.getElementById('sb-new-model').addEventListener('click', () => {
     regenerateModel(sandboxState);
+    setSandboxSelection([]);
     applySandboxToPlot();
   });
   document.getElementById('sb-dof').addEventListener('input', (e) => {
@@ -823,6 +852,54 @@ function applySandboxToPlot() {
   });
   syncSandboxInputs();
   updateSandboxStats();
+}
+
+// Update the canonical selection state and push it into the plot, then
+// refresh the Delete-button label / disabled state. This is the only
+// way main.js mutates `sandboxSelection` — keeping a single funnel keeps
+// the plot's rendered ring and the button UI in sync.
+function setSandboxSelection(indices) {
+  sandboxSelection = Array.isArray(indices) ? [...indices] : [];
+  if (sandboxPlot) sandboxPlot.setSelection(sandboxSelection);
+  updateSandboxDeleteButton();
+}
+
+function updateSandboxDeleteButton() {
+  const btn = document.getElementById('sb-delete-selected');
+  if (!btn) return;
+  const n = sandboxSelection.length;
+  btn.disabled = n === 0;
+  btn.textContent = n > 0 ? `Delete selected (${n})` : 'Delete selected';
+}
+
+function deleteSandboxSelection() {
+  if (!sandboxSelection.length) return;
+  // Iterate indices in descending order so each splice doesn't shift the
+  // positions of later targets.
+  const sorted = [...sandboxSelection].sort((a, b) => b - a);
+  for (const i of sorted) sandboxState.points.splice(i, 1);
+  setSandboxSelection([]);
+  applySandboxToPlot();
+}
+
+// Document-level keydown handler — only active while the sandbox is open.
+// Ignores keystrokes when the focus is on a form input so typing in the
+// dof box doesn't trigger deletes.
+function handleSandboxKeydown(e) {
+  if (game.state !== State.SANDBOX) return;
+  const tag = (document.activeElement && document.activeElement.tagName) || '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (sandboxSelection.length) {
+      e.preventDefault();
+      deleteSandboxSelection();
+    }
+  } else if (e.key === 'Escape') {
+    if (sandboxSelection.length) {
+      e.preventDefault();
+      setSandboxSelection([]);
+    }
+  }
 }
 
 function updateSandboxStats() {
@@ -1152,6 +1229,13 @@ let app, menuEl, topbarEl, stageEl, plotWrapEl, canvasEl, hudTlEl,
 // pops back to the menu and returns.
 let sandboxState = null;
 let sandboxPlot  = null;
+// Mirror of the plot's current selection (indices into sandboxState.points).
+// Kept here so main.js can drive UI (Delete button enable/count) and
+// handle Delete / Backspace / Escape keys without round-tripping the plot.
+let sandboxSelection = [];
+// Document-level keydown listener installed only while the sandbox view
+// is open, so global keys don't hijack the game / leaderboard / menu.
+let sandboxKeyListener = null;
 
 // ---------- bootstrap ----------
 window.addEventListener('DOMContentLoaded', init);

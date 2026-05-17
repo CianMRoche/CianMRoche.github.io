@@ -115,6 +115,14 @@ export class Plot {
     this.render();
   }
 
+  // Selection (sandbox box-select). The plot owns the rendering of the
+  // highlight ring; the caller owns the canonical state via the
+  // onSelectionChange callback.
+  setSelection(indices) {
+    this._selection = new Set(indices || []);
+    this.render();
+  }
+
   // Sandbox mode override. In this mode the renderer bypasses the
   // game-difficulty branches (sampled-only, rotating bars) and instead
   // honours the two explicit flags below directly. Clouds and the central
@@ -222,13 +230,52 @@ export class Plot {
     const { px, py } = this._eventToCanvasPx(e);
     const hit = this._hitTest(px, py);
     if (hit) {
-      // Begin a drag of an existing point / error-bar cap.
       e.preventDefault();
-      this._dragState = hit;
+      const sel = this._selection || new Set();
+      const hitIsSelected = sel.has(hit.idx);
+      const R = this._plotRect();
+      // If the hit point is part of the current selection, the drag moves
+      // (or resizes) the WHOLE group; otherwise it's a single-point drag
+      // and the selection is cleared first (since the user is "leaving"
+      // it to act on a different point).
+      if (hitIsSelected) {
+        // Snapshot the starting pixel position (or err) of every selected
+        // point so the move/resize can be applied as a uniform delta or a
+        // single shared value at every move event.
+        const initial = [];
+        for (const idx of sel) {
+          const p = this.round.points[idx];
+          initial.push({
+            idx,
+            px: this._xToPx(p.x, R),
+            py: this._yToPx(p.yObs, R),
+            err: p.err,
+          });
+        }
+        this._dragState = {
+          kind: (hit.kind === 'errUp' || hit.kind === 'errDn') ? 'groupErr' : 'groupMove',
+          anchorIdx: hit.idx,
+          anchorKind: hit.kind,           // for groupErr: which cap was grabbed
+          startPx: px, startPy: py,
+          initial,
+        };
+      } else {
+        // Dragging a non-selected point: clear the selection (acts as a
+        // visual confirmation that the user has switched focus to a
+        // different point) and fall back to the single-element drag path.
+        if (sel.size && this._interactiveOpts.onSelectionChange) {
+          this._selection = new Set();
+          this._interactiveOpts.onSelectionChange([]);
+        } else {
+          this._selection = new Set();
+        }
+        this._dragState = hit;
+      }
       // Resize cursor for cap drags, grabbing for whole-point moves.
       this.canvas.style.cursor =
         (hit.kind === 'errUp' || hit.kind === 'errDn') ? 'ns-resize' : 'grabbing';
       try { this.canvas.setPointerCapture(e.pointerId); } catch (_) {}
+      this.render();
       return;
     }
     // Not over any interactable element — record a candidate click so
@@ -249,41 +296,112 @@ export class Plot {
     if (this._dragState) {
       const { px, py } = this._eventToCanvasPx(e);
       const R = this._plotRect();
-      // Clamp into plot rect so dragged values stay on-axis.
+      const kind = this._dragState.kind;
+
+      if (kind === 'groupMove') {
+        // Translate every selected point by the same PIXEL delta. Working
+        // in pixel space (and converting back to world via _pxToX / _pxToY)
+        // means the group moves visually together on both linear and log
+        // axes — a constant log-y shift looks right, even though that's a
+        // multiplicative shift in world units.
+        const dPx = px - this._dragState.startPx;
+        const dPy = py - this._dragState.startPy;
+        for (const ip of this._dragState.initial) {
+          const newPx = ip.px + dPx;
+          const newPy = ip.py + dPy;
+          const cx = Math.max(R.x0, Math.min(R.x1, newPx));
+          const cy = Math.max(R.y0, Math.min(R.y1, newPy));
+          const p = this.round.points[ip.idx];
+          p.x    = Math.max(0, Math.min(1, this._pxToX(cx, R)));
+          p.yObs = this._pxToY(cy, R);
+        }
+        this.render();
+        if (this._interactiveOpts.onChange) {
+          this._interactiveOpts.onChange(this._dragState.anchorIdx, 'groupMove');
+        }
+        return;
+      }
+
+      if (kind === 'groupErr') {
+        // Compute the new err FROM THE ANCHOR POINT (the cap actually
+        // being grabbed) and broadcast that value to every selected point.
+        // This matches the "if one error bar is altered in the selection
+        // then the others all get changed to match" rule.
+        const cy = Math.max(R.y0, Math.min(R.y1, py));
+        const wy = this._pxToY(cy, R);
+        const anchor = this.round.points[this._dragState.anchorIdx];
+        const newErr = Math.max(
+          1e-6,
+          this._dragState.anchorKind === 'errUp'
+            ? (wy - anchor.yObs)
+            : (anchor.yObs - wy)
+        );
+        for (const ip of this._dragState.initial) {
+          this.round.points[ip.idx].err = newErr;
+        }
+        this.render();
+        if (this._interactiveOpts.onChange) {
+          this._interactiveOpts.onChange(this._dragState.anchorIdx, 'groupErr');
+        }
+        return;
+      }
+
+      // Single-point drag (point center or one error-bar cap).
       const cx = Math.max(R.x0, Math.min(R.x1, px));
       const cy = Math.max(R.y0, Math.min(R.y1, py));
       const wx = this._pxToX(cx, R);
       const wy = this._pxToY(cy, R);
       const p = this.round.points[this._dragState.idx];
-      if (this._dragState.kind === 'point') {
-        // Move both x and y. Clamp x into [0,1] so it stays on axis. The
-        // caller's onChange handler is responsible for re-deriving yTrue
-        // = f(p.x) from the new x.
+      if (kind === 'point') {
         p.x    = Math.max(0, Math.min(1, wx));
         p.yObs = wy;
-      } else if (this._dragState.kind === 'errUp') {
-        // Upper cap follows the cursor; err is its distance above yObs.
+      } else if (kind === 'errUp') {
         const newErr = Math.max(1e-6, wy - p.yObs);
         p.err = newErr;
-      } else if (this._dragState.kind === 'errDn') {
+      } else if (kind === 'errDn') {
         const newErr = Math.max(1e-6, p.yObs - wy);
         p.err = newErr;
       }
       this.render();
       if (this._interactiveOpts.onChange) {
-        this._interactiveOpts.onChange(this._dragState.idx, this._dragState.kind);
+        this._interactiveOpts.onChange(this._dragState.idx, kind);
       }
       return;
     }
-    // No active drag — if a click is pending, cancel it once the pointer
-    // moves more than a small threshold (interpret as scroll attempt).
+    // Active marquee box-select drag (started from a pending click that
+    // moved past the threshold). Update the rectangle's "current" corner.
+    if (this._boxSelect) {
+      const { px, py } = this._eventToCanvasPx(e);
+      this._boxSelect.currentPx = px;
+      this._boxSelect.currentPy = py;
+      this.canvas.style.cursor = 'crosshair';
+      this.render();
+      return;
+    }
+    // No active drag — a pending click that moves past the threshold
+    // transitions into a marquee box-select (if the caller registered an
+    // onBoxSelect handler); otherwise it's cancelled (treated as a
+    // scroll attempt or missed press).
     if (this._pendingClick) {
       const { px, py } = this._eventToCanvasPx(e);
       const dx = px - this._pendingClick.px;
       const dy = py - this._pendingClick.py;
       if (Math.hypot(dx, dy) > 6 * this._dpr) {
-        try { this.canvas.releasePointerCapture(this._pendingClick.pointerId); } catch (_) {}
-        this._pendingClick = null;
+        if (this._interactiveOpts.onBoxSelect) {
+          this._boxSelect = {
+            startPx:   this._pendingClick.px,
+            startPy:   this._pendingClick.py,
+            currentPx: px,
+            currentPy: py,
+            pointerId: this._pendingClick.pointerId,
+          };
+          this._pendingClick = null;
+          this.canvas.style.cursor = 'crosshair';
+          this.render();
+        } else {
+          try { this.canvas.releasePointerCapture(this._pendingClick.pointerId); } catch (_) {}
+          this._pendingClick = null;
+        }
       }
     } else {
       // Otherwise: update the hover cursor based on what's under the
@@ -311,6 +429,37 @@ export class Plot {
       if (this._interactiveOpts && this._interactiveOpts.onRelease) {
         this._interactiveOpts.onRelease();
       }
+      return;
+    }
+    // End of marquee box-select. Collect the indices of all points whose
+    // CENTRES sit inside the rect (in pixel space, regardless of axis
+    // transform) and hand them off to the caller. The renderer's
+    // selection-rectangle overlay clears on the next render.
+    if (this._boxSelect && this._interactiveOpts && this._interactiveOpts.onBoxSelect) {
+      const R = this._plotRect();
+      const { startPx, startPy, currentPx, currentPy, pointerId } = this._boxSelect;
+      const xMin = Math.min(startPx, currentPx);
+      const xMax = Math.max(startPx, currentPx);
+      const yMin = Math.min(startPy, currentPy);
+      const yMax = Math.max(startPy, currentPy);
+      const indices = [];
+      if (this.round && this.round.points) {
+        for (let i = 0; i < this.round.points.length; i++) {
+          const p = this.round.points[i];
+          const cx = this._xToPx(p.x, R);
+          const cy = this._yToPx(p.yObs, R);
+          if (cx >= xMin && cx <= xMax && cy >= yMin && cy <= yMax) {
+            indices.push(i);
+          }
+        }
+      }
+      try { this.canvas.releasePointerCapture(pointerId); } catch (_) {}
+      this._boxSelect = null;
+      this.canvas.style.cursor = '';
+      this._interactiveOpts.onBoxSelect(indices);
+      // Don't return — fall through to a final render so the rectangle
+      // disappears even if the callback didn't trigger one itself.
+      this.render();
       return;
     }
     // Click-to-add: pointer was pressed inside the plot rect and didn't
@@ -439,6 +588,30 @@ export class Plot {
     this._drawAxes(R);
     if (this._showCurve) this._drawCurve(R);
     if (this._showData)  this._drawData(R);
+    if (this._boxSelect) this._drawSelectionRect(R);
+  }
+
+  _drawSelectionRect(R) {
+    const ctx = this.ctx;
+    const dpr = this._dpr;
+    const S = this._style;
+    const { startPx, startPy, currentPx, currentPy } = this._boxSelect;
+    const x = Math.min(startPx, currentPx);
+    const y = Math.min(startPy, currentPy);
+    const w = Math.abs(currentPx - startPx);
+    const h = Math.abs(currentPy - startPy);
+    // Translucent red fill + dashed red border so it reads as "these will
+    // be deleted on release", aligning with the chi² high-contribution
+    // colour used elsewhere in the plot.
+    ctx.save();
+    ctx.fillStyle = 'rgba(239, 68, 68, 0.10)';
+    ctx.strokeStyle = S.badHi || '#ef4444';
+    ctx.lineWidth = 1.5 * dpr;
+    ctx.setLineDash([6 * dpr, 4 * dpr]);
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeRect(x, y, w, h);
+    ctx.setLineDash([]);
+    ctx.restore();
   }
 
   _drawAxes(R) {
@@ -588,6 +761,11 @@ export class Plot {
           this._drawVerticalErrorbar(px, py, p, R, pointColor);
         }
         this._drawPoint(px, py, pointColor);
+        // Highlight ring for selected points (drawn AFTER the point so it
+        // sits on top of the bar caps as well).
+        if (this._selection && this._selection.has(i)) {
+          this._drawSelectionRing(px, py);
+        }
       } else if (this._sampled && !this.revealed) {
         // Impossible mode: do NOT draw the central point. Just the gaussian
         // cloud, drawn by _drawClouds(). Show nothing here.
@@ -730,6 +908,23 @@ export class Plot {
     ctx.beginPath();
     ctx.arc(px, py, 4 * dpr, 0, Math.PI * 2);
     ctx.fill();
+  }
+
+  // Selection highlight ring around a point. Drawn as a translucent
+  // accent-coloured halo so it's clearly distinct from the chi²
+  // contribution colour underneath but doesn't completely hide it.
+  _drawSelectionRing(px, py) {
+    const ctx = this.ctx;
+    const dpr = this._dpr;
+    const S = this._style;
+    ctx.save();
+    ctx.strokeStyle = S.curve || '#2563eb';   // accent colour
+    ctx.globalAlpha = 0.9;
+    ctx.lineWidth = 2 * dpr;
+    ctx.beginPath();
+    ctx.arc(px, py, 8 * dpr, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
   }
 
   _drawClouds(R) {
