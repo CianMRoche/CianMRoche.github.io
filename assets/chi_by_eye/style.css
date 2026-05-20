@@ -384,6 +384,12 @@ html[data-theme="dark"] .hud-popover { box-shadow: 0 6px 24px rgba(0,0,0,0.5); }
   font-size: 11px;
 }
 .mini-stat.with-ticks { align-items: start; }
+/* The with-ticks row uses align-items: start, so its bar sits at the very
+   top of the row instead of being centered. When a plain (centered) row
+   precedes it, the bar-to-bar visual gap is smaller than between two plain
+   rows. Add margin-top to compensate for that offset. */
+.mini-stat:not(.with-ticks) + .mini-stat.with-ticks { margin-top: 5px; }
+.sandbox-view .mini-stat:not(.with-ticks) + .mini-stat.with-ticks { margin-top: 7px; }
 .mini-stat .ms-label {
   text-align: right;
   font-size: 11px;
@@ -2036,7 +2042,7 @@ html[data-theme="dark"] .tutorial-tooltip {
   .controls > button.primary {
     width: 100%;
     padding: 12px;
-    margin-top: 14px;
+    margin-top: 22px;
   }
   /* Mini-stats: take full width, sit between σ value and slider. Rows are
      still horizontal (label/bar/value). */

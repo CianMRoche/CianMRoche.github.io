@@ -1372,7 +1372,7 @@ function buildShell() {
             <span class="ms-value" id="ms-value-p">—</span>
           </div>
         </div>
-        <button class="primary" id="submit-btn">Submit<span class="submit-sigma-label"> &mdash; <span id="submit-sigma-val">1.00&sigma;</span></span></button>
+        <button class="primary" id="submit-btn">Submit<span class="submit-sigma-label"> <span id="submit-sigma-val">1.00&sigma;</span></span></button>
       </div>
 
       <div class="menu" id="menu">
