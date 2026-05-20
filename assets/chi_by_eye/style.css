@@ -92,8 +92,26 @@ body {
 #app {
   position: fixed;
   inset: 0;
+  overflow: hidden;
+}
+
+/* Inner wrapper that holds the full shell. On desktop, scaled up ~30% via
+   transform so everything appears larger without changing CSS px values or
+   breaking canvas sizing (getBoundingClientRect returns post-transform
+   dimensions, so the canvas auto-sizes correctly at the zoomed resolution). */
+.app-inner {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  height: 100%;
+}
+@media (min-width: 721px) and (min-aspect-ratio: 1) {
+  .app-inner {
+    width: calc(100% / 1.3);
+    height: calc(100% / 1.3);
+    transform: scale(1.3);
+    transform-origin: top left;
+  }
 }
 
 /* ---------- top bar ---------- */
@@ -549,6 +567,10 @@ button.subtle {
 }
 button.subtle:hover { color: var(--fg); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
+/* Sigma reading injected into the submit button on narrow screens.
+   Hidden by default; mobile media query shows it and hides the standalone
+   .controls .value display instead. */
+.submit-sigma-label { display: none; }
 
 /* ---------- menu overlay ---------- */
 .menu {
@@ -1990,8 +2012,10 @@ html[data-theme="dark"] .tutorial-tooltip {
     order: -1;          /* show σ value above the slider */
     align-self: center;
   }
-  /* Hide the bare "tension" label on portrait — the big σ value carries it. */
+  /* On portrait the standalone sigma value moves into the submit button. */
   .controls .label { display: none; }
+  .controls .value { display: none; }
+  .submit-sigma-label { display: inline; }
   .controls .slider-with-ticks { width: 100%; }
   .controls input[type="range"].sigma { height: 8px; }
   .controls input[type="range"].sigma::-webkit-slider-thumb { width: 26px; height: 26px; }

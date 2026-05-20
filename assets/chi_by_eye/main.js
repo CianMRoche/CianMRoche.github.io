@@ -666,11 +666,13 @@ function openSandboxView() {
       // becomes visible again — and so the axis doesn't keep jittering
       // mid-drag.
       onRelease: () => applySandboxToPlot(),
-      // Click in empty plot space drops a new point there with a random
-      // error bar, and clears any active selection so the new point isn't
-      // visually grouped with the previous box-select.
+      // Click in empty plot space: if something is selected, deselect it;
+      // otherwise drop a new point there with a random error bar.
       onClickEmpty: (wx, wy) => {
-        if (sandboxSelection.length) setSandboxSelection([]);
+        if (sandboxSelection.length) {
+          setSandboxSelection([]);
+          return;
+        }
         addPointAt(sandboxState, wx, wy);
         applySandboxToPlot();
       },
@@ -720,9 +722,10 @@ function sandboxViewMarkup() {
       <button class="lbf-back" id="sb-back">&larr; Back to menu</button>
     </div>
     <p class="sb-intro">
-      Click to drop a point. Drag in empty space to box-select; selected
-      points move together, and one error-bar drag resizes them all. Use
-      Delete (or the button) to remove selected points; Esc to deselect.
+      Click empty space to drop a point (or deselect if points are selected).
+      Drag in empty space to box-select; selected points move together, and
+      one error-bar drag resizes them all. Delete (or the button) removes
+      selected points; Esc also deselects.
     </p>
     <div class="sb-main">
       <div class="sb-plot-wrap">
@@ -1257,6 +1260,7 @@ function init() {
 // the state machine moves around.
 function buildShell() {
   app.innerHTML = `
+    <div class="app-inner">
     <div class="topbar hidden" id="topbar">
       <div class="left">
         <button class="title" id="title-quit" type="button" title="Quit current game"><span style="font-family:'Times New Roman',serif;font-style:italic;">&chi;</span> by eye</button>
@@ -1368,7 +1372,7 @@ function buildShell() {
             <span class="ms-value" id="ms-value-p">—</span>
           </div>
         </div>
-        <button class="primary" id="submit-btn">Submit</button>
+        <button class="primary" id="submit-btn">Submit<span class="submit-sigma-label"> &mdash; <span id="submit-sigma-val">1.00&sigma;</span></span></button>
       </div>
 
       <div class="menu" id="menu">
@@ -1378,6 +1382,7 @@ function buildShell() {
       <div class="summary hidden" id="summary"></div>
       <div class="leaderboard-view hidden" id="leaderboard-view"></div>
       <div class="sandbox-view hidden" id="sandbox-view"></div>
+    </div>
     </div>
   `;
 
@@ -1658,6 +1663,8 @@ function updateSliderDisplay() {
   const atMax = sigma >= SIGMA_SLIDER_MAX - 1e-6;
   const sigmaText = `${sigma.toFixed(2)}&sigma;${atMax ? '+' : ''}`;
   sliderValEl.innerHTML = sigmaText;
+  const submitSigmaValEl = document.getElementById('submit-sigma-val');
+  if (submitSigmaValEl) submitSigmaValEl.innerHTML = sigmaText;
   const r = game.rounds[game.roundIndex];
   if (!r) return;
   const chi2 = sigmaToChi2(sigma, r.dof);
