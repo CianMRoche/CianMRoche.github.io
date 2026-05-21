@@ -499,7 +499,9 @@ function crownSvg(size, ariaLabel = 'High score') {
 }
 function crownIfQualified(score, difficulty, size = 14) {
   if (score < CROWN_THRESHOLD * maxScoreForDifficulty(difficulty)) return '';
-  return crownSvg(size, 'High score').trim().replace(/class="crown"/, 'class="crown crown-inline"');
+  const isMax = score >= maxScoreForDifficulty(difficulty);
+  const cls = isMax ? 'crown crown-inline crown-max' : 'crown crown-inline';
+  return crownSvg(size, 'High score').trim().replace(/class="crown"/, `class="${cls}"`);
 }
 
 // Render a 7-row leaderboard window centered on the player's entry. The
@@ -1829,7 +1831,10 @@ function showSummary() {
   // Crown for ≥ 90% of the max — same threshold used inline next to
   // qualifying scores in the leaderboard preview / view.
   const earnedCrown = total >= CROWN_THRESHOLD * maxTotal;
-  const summaryCrownSvg = earnedCrown ? crownSvg(28) : '';
+  const isMaxScore = total >= maxTotal;
+  const summaryCrownSvg = earnedCrown
+    ? crownSvg(28).trim().replace(/class="crown"/, `class="crown${isMaxScore ? ' crown-max' : ''}"`)
+    : '';
 
   function formatP(sig) {
     const pv = 2 * (1 - normCDF(Math.min(sig, 37)));

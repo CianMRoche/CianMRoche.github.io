@@ -28,6 +28,10 @@
      than reading as a "warning". */
   --truth:             #c2871a;
 
+  /* Crown / high-score platinum — a cool steel-blue-grey that reads as
+     "premium tier above gold" on both light and dark backgrounds. */
+  --crown-platinum:    #6988a4;
+
   /* Plot colors — read by plot.js via getComputedStyle */
   --plot-bg:      #ffffff;
   --plot-fg:      #1f2937;
@@ -63,6 +67,7 @@ html[data-theme="dark"] {
   --good:         #4ade80;
   --warn:         #fbbf24;
   --bad:          #f87171;
+  --crown-platinum: #a8c4dc;
 
   --plot-bg:      #0d1117;
   --plot-fg:      #e6edf3;
@@ -930,15 +935,24 @@ html[data-theme="dark"] .reveal-restore { box-shadow: 0 3px 12px rgba(0,0,0,0.4)
   flex-shrink: 0;
   filter: drop-shadow(0 1px 2px rgba(0,0,0,0.10));
 }
+.summary .total .crown.crown-max {
+  color: var(--crown-platinum);
+}
 /* Inline crown shown next to qualifying scores in leaderboard rows. */
 .crown.crown-inline {
-  color: var(--warn);          /* gold-ish so it visibly stands out */
+  color: var(--warn);
   vertical-align: -2px;        /* baseline-align with the score number */
   margin-right: 4px;
   flex-shrink: 0;
 }
+.crown.crown-inline.crown-max {
+  color: var(--crown-platinum);
+}
 html[data-theme="dark"] .summary .total .crown {
   filter: drop-shadow(0 1px 4px rgba(123,191,204,0.25));
+}
+html[data-theme="dark"] .summary .total .crown.crown-max {
+  filter: drop-shadow(0 1px 4px rgba(168,196,220,0.30));
 }
 .summary .grid {
   display: grid;
