@@ -45,7 +45,7 @@ export function makeSandbox(opts = {}) {
     logY,
     showBars:   true,    // error-bar visuals
     showClouds: false,   // sampled-cloud visuals (like Impossible)
-    dof: 5,              // user-controlled, independent of N
+    k: 0,               // model parameters; dof = N − k
   };
 }
 
@@ -146,13 +146,14 @@ export function refreshYTrue(state) {
 }
 
 // Compute the chi² statistics for the current state. dof is taken from
-// state.dof (not N-k); this matches the sandbox-mode contract that dof is
-// a free knob. Returns nulls when there are no points or dof < 1.
+// dof is derived as N − k (state.k). Returns zeros when there are no points.
 export function computeStats(state) {
   const N = state.points.length;
-  const dof = Math.max(1, state.dof | 0);
+  // k is clamped to [0, N-1] so dof = N-k is always >= 1 when N > 0.
+  const k   = N > 0 ? Math.max(0, Math.min(state.k | 0, N - 1)) : 0;
+  const dof = N - k;
   if (N === 0) {
-    return { N, dof, chi2: 0, redChi2: 0, pValue: 1, sigma: 0 };
+    return { N, k, dof: 0, chi2: 0, redChi2: 0, pValue: 1, sigma: 0 };
   }
   let chi2 = 0;
   for (const p of state.points) {
@@ -160,11 +161,10 @@ export function computeStats(state) {
     chi2 += (residual / p.err) ** 2;
   }
   const redChi2 = chi2 / dof;
-  // p = upper-tail probability of chi² with `dof` degrees of freedom
-  // (numerically stable form for large chi²).
+  // p = upper-tail probability of chi² with `dof` degrees of freedom.
   const pValue = Math.max(Math.min(chi2SF(chi2, dof), 1), 0);
   const sigma  = chi2ToSigma(chi2, dof);
-  return { N, dof, chi2, redChi2, pValue, sigma };
+  return { N, k, dof, chi2, redChi2, pValue, sigma };
 }
 
 // Compute the y-range to use for plotting. Tight by design: the data
@@ -215,12 +215,14 @@ export function computeDisplayYRange(state) {
 // reflected here immediately without another setRound call.
 export function asRound(state) {
   const { yMin, yMax } = computeDisplayYRange(state);
+  const N = state.points.length;
+  const k = N > 0 ? Math.max(0, Math.min(state.k | 0, N - 1)) : 0;
   return {
     f: state.f,
     points: state.points,
-    N: state.points.length,
-    k: 0,                       // not used by the renderer
-    dof: state.dof,
+    N,
+    k,
+    dof: Math.max(1, N - k),
     logY: state.logY,
     yMin, yMax,
     curveYMin: state.curveYMin,

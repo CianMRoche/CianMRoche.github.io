@@ -742,11 +742,14 @@ function sandboxViewMarkup() {
             <button class="sb-btn" id="sb-clear">Clear all</button>
             <button class="sb-btn" id="sb-new-model">&#x21BB; New model</button>
           </div>
-          <div class="sb-controls-row sb-toggles">
+          <div class="sb-controls-row">
             <label class="sb-field">
-              <span>dof</span>
-              <input type="number" id="sb-dof" min="1" max="200" value="${s.dof}">
+              <span>Model parameters</span>
+              <input type="number" id="sb-k" min="0" max="${Math.max(0, s.points.length - 1)}" value="${s.k}">
             </label>
+            <span class="sb-dof-display">dof&thinsp;=&thinsp;<span id="sb-dof-val">${s.points.length === 0 ? '&mdash;' : s.points.length - s.k}</span></span>
+          </div>
+          <div class="sb-controls-row sb-toggles">
             <label class="sb-checkbox">
               <input type="checkbox" id="sb-logy" ${s.logY ? 'checked' : ''}>
               <span>log y</span>
@@ -807,12 +810,15 @@ function attachSandboxHandlers() {
     setSandboxSelection([]);
     applySandboxToPlot();
   });
-  document.getElementById('sb-dof').addEventListener('input', (e) => {
-    const v = parseInt(e.target.value, 10);
-    if (Number.isFinite(v) && v >= 1) {
-      sandboxState.dof = v;
-      updateSandboxStats();
-    }
+  document.getElementById('sb-k').addEventListener('input', (e) => {
+    const N = sandboxState.points.length;
+    const max = Math.max(0, N - 1);
+    let v = parseInt(e.target.value, 10);
+    if (!Number.isFinite(v) || v < 0) v = 0;
+    v = Math.min(v, max);
+    e.target.value = String(v);
+    sandboxState.k = v;
+    updateSandboxStats();
   });
   document.getElementById('sb-logy').addEventListener('change', (e) => {
     setLogY(sandboxState, e.target.checked);
@@ -829,8 +835,8 @@ function attachSandboxHandlers() {
 }
 
 function syncSandboxInputs() {
-  const dof = document.getElementById('sb-dof');
-  if (dof)  dof.value = String(sandboxState.dof);
+  const kInput = document.getElementById('sb-k');
+  if (kInput) kInput.value = String(sandboxState.k);
   const lg  = document.getElementById('sb-logy');
   if (lg)   lg.checked = sandboxState.logY;
   const br  = document.getElementById('sb-bars');
@@ -913,7 +919,23 @@ function handleSandboxKeydown(e) {
 }
 
 function updateSandboxStats() {
+  // Clamp k to < N whenever N has changed (e.g. after deleting points).
+  const N = sandboxState.points.length;
+  const kMax = Math.max(0, N - 1);
+  if (sandboxState.k > kMax) sandboxState.k = kMax;
+  const kInput = document.getElementById('sb-k');
+  if (kInput) {
+    kInput.max = String(kMax);
+    kInput.value = String(sandboxState.k);
+    kInput.disabled = N === 0;
+  }
+
   const st = computeStats(sandboxState);
+
+  // Update the dof readout beside the k control.
+  const dofVal = document.getElementById('sb-dof-val');
+  if (dofVal) dofVal.innerHTML = st.N === 0 ? '&mdash;' : String(st.dof);
+
   // N is shown in the plot's top-left HUD (matches the game-mode layout).
   const hudN = document.getElementById('sb-hud-N');
   if (hudN) hudN.textContent = String(st.N);
@@ -926,7 +948,7 @@ function updateSandboxStats() {
   //   χ²/dof:    that value / dof
   //   p:         0..1
   //   σ:         0..SIGMA_SLIDER_MAX (≥ max clamps the fill at 100%)
-  const chi2Max    = sigmaToChi2(SIGMA_SLIDER_MAX, st.dof);
+  const chi2Max    = sigmaToChi2(SIGMA_SLIDER_MAX, Math.max(1, st.dof));
   const redChi2Max = chi2Max / Math.max(1, st.dof);
   const setFill = (id, frac) => {
     const el = document.getElementById(id);
