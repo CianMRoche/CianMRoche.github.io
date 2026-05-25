@@ -723,12 +723,6 @@ function sandboxViewMarkup() {
       <h2>Sandbox</h2>
       <button class="lbf-back" id="sb-back">&larr; Back to menu</button>
     </div>
-    <p class="sb-intro">
-      Click empty space to drop a point (or deselect if points are selected).
-      Drag in empty space to box-select; selected points move together, and
-      one error-bar drag resizes them all. Delete (or the button) removes
-      selected points; Esc also deselects.
-    </p>
     <div class="sb-main">
       <div class="sb-plot-wrap">
         <canvas id="sb-canvas"></canvas>
@@ -750,6 +744,12 @@ function sandboxViewMarkup() {
               <input type="number" id="sb-k" min="0" max="${Math.max(0, s.points.length - 1)}" value="${s.k}">
             </label>
             <span class="sb-dof-display">dof&thinsp;=&thinsp;<span id="sb-dof-val">${s.points.length === 0 ? '&mdash;' : s.points.length - s.k}</span></span>
+          </div>
+          <div class="sb-controls-row sb-toggles">
+            <label class="sb-checkbox">
+              <input type="checkbox" id="sb-chi2labels" ${s.showChi2Labels ? 'checked' : ''}>
+              <span>show &chi;&sup2; contributions</span>
+            </label>
           </div>
           <div class="sb-controls-row sb-toggles">
             <label class="sb-checkbox">
@@ -794,6 +794,17 @@ function sandboxViewMarkup() {
             <span class="ms-value" id="sb-val-sig">&mdash;</span>
           </div>
         </div>
+        <details class="sb-intro">
+          <summary>Controls</summary>
+          <ul>
+            <li>Click to add a point, or deselect the selection</li>
+            <li>Drag on empty space to box-select</li>
+            <li>Drag any selected point to move all selected</li>
+            <li>Drag a selected error bar to resize all selected bars</li>
+            <li>Delete key or backspace removes selected points</li>
+            <li>Esc clears the selection</li>
+          </ul>
+        </details>
       </div>
     </div>
   `;
@@ -812,7 +823,8 @@ function attachSandboxHandlers() {
     setSandboxSelection([]);
     applySandboxToPlot();
   });
-  document.getElementById('sb-k').addEventListener('input', (e) => {
+  const kEl = document.getElementById('sb-k');
+  kEl.addEventListener('input', (e) => {
     const N = sandboxState.points.length;
     const max = Math.max(0, N - 1);
     let v = parseInt(e.target.value, 10);
@@ -821,6 +833,14 @@ function attachSandboxHandlers() {
     e.target.value = String(v);
     sandboxState.k = v;
     updateSandboxStats();
+  });
+  kEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') e.target.blur();
+  });
+  kEl.addEventListener('change', (e) => { e.target.blur(); });
+  document.getElementById('sb-chi2labels').addEventListener('change', (e) => {
+    sandboxState.showChi2Labels = e.target.checked;
+    sandboxPlot.setChi2LabelsVisible(sandboxState.showChi2Labels);
   });
   document.getElementById('sb-logy').addEventListener('change', (e) => {
     setLogY(sandboxState, e.target.checked);
@@ -845,6 +865,8 @@ function syncSandboxInputs() {
   if (br)   br.checked = sandboxState.showBars;
   const cl  = document.getElementById('sb-clouds');
   if (cl)   cl.checked = sandboxState.showClouds;
+  const ch  = document.getElementById('sb-chi2labels');
+  if (ch)   ch.checked = sandboxState.showChi2Labels;
 }
 
 // Push the current sandbox state to the plot. Called after any change that
@@ -857,6 +879,7 @@ function applySandboxToPlot() {
   // Treat sandbox as "revealed" so the chi² contribution coloring kicks in
   // regardless of which toggles are active.
   sandboxPlot.setRevealed(true);
+  sandboxPlot.setChi2LabelsVisible(sandboxState.showChi2Labels);
   sandboxPlot.setSandboxMode({
     barsVisible:   sandboxState.showBars,
     cloudsVisible: sandboxState.showClouds,
@@ -901,8 +924,10 @@ function handleSandboxKeydown(e) {
   // Guard on the visible view rather than game.state so the handler is
   // robust even if game.state has been bumped to some transient value.
   if (!sandboxViewEl || sandboxViewEl.classList.contains('hidden')) return;
-  const tag = (document.activeElement && document.activeElement.tagName) || '';
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  const el   = document.activeElement;
+  const tag  = (el && el.tagName)  || '';
+  const type = (el && el.type)     || '';
+  if ((tag === 'INPUT' && type !== 'checkbox') || tag === 'TEXTAREA' || tag === 'SELECT') return;
   const isDelete = e.key === 'Delete' || e.key === 'Backspace' ||
                    e.keyCode === 46     || e.keyCode === 8;
   const isEscape = e.key === 'Escape' || e.key === 'Esc' || e.keyCode === 27;

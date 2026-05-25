@@ -1724,10 +1724,26 @@ html[data-theme="dark"] .tutorial-tooltip {
 .sandbox-view .lbf-back:hover { color: var(--fg); border-color: var(--fg); }
 
 .sandbox-view .sb-intro {
-  margin: -4px 0 0;
-  font-size: 13px;
+  font-size: 12.5px;
   color: var(--muted);
   line-height: 1.5;
+}
+.sandbox-view .sb-intro summary {
+  cursor: pointer;
+  user-select: none;
+  list-style: revert;
+  color: var(--fg-soft);
+}
+.sandbox-view .sb-intro summary:hover { color: var(--fg); }
+.sandbox-view .sb-intro ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.sandbox-view #sb-chi2labels + span {
+  font-size: 15px;
 }
 
 /* Plot on the left, sidebar on the right (controls box stacked above the

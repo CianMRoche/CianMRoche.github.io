@@ -43,9 +43,10 @@ export function makeSandbox(opts = {}) {
     curveYMax: yMax,
     points: [],          // [{ x, yObs, yTrue, err }]
     logY,
-    showBars:   true,    // error-bar visuals
-    showClouds: false,   // sampled-cloud visuals (like Impossible)
-    k: 0,               // model parameters; dof = N − k
+    showBars:       true,   // error-bar visuals
+    showClouds:     false,  // sampled-cloud visuals (like Impossible)
+    showChi2Labels: false,  // per-point χ² contribution labels
+    k: 0,                  // model parameters; dof = N − k
   };
 }
 
