@@ -120,7 +120,8 @@ html[data-theme="dark"] .research-card img.img-dark  { display: block; }
       <h3>Light Cone Strong Gravitational Lensing in Cosmological Simulations</h3>
       <p>Generating strong gravitational lensing images directly from cosmological simulation data is incredibly difficult due to the mismatched geometry of the lensing problem (a long, thin cone) and simulaiton boxes (cubes). We establish a methodology for generating images of strong lenses from full light cones in cosmological simualtions, for which the lens, sources and all intervening matter are drawn consistently from the parent simulation. Supervised by Prof. Michael McDonald and Prof. Mark Vogelsberger.</p>
       <div class="research-card-footer">
-        <span class="badge badge-prep">In preparation</span>
+        <span class="badge badge-pub">Published (preprint)</span>
+        <a class="research-link" href="https://arxiv.org/pdf/2605.30433" target="_blank">arXiv →</a>
       </div>
     </div>
   </div>
