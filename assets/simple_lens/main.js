@@ -91,6 +91,8 @@ let activeTab = 'settings'; // 'settings' | 'recording'
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 let renderer = null, glCanvas = null, overlayCtx = null;
 let axisCanvas = null, planesEl = null, sidebarEl = null;
+let _planeLevels      = new Map();  // plane.id → bump level, kept in sync with drawAxisCanvas
+let _draggingPlaneId  = null;       // id of the plane currently being axis-dragged
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', init);
@@ -279,7 +281,7 @@ function attachHandlers() {
     }
     if (e.key === 'Escape') {
       state.selectedObjId = null;
-      renderSidebar(); rebuildPlaneBoxes();
+      renderSidebar(); rebuildPlaneBoxes(); redraw();
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
       const pl = selectedPlane();
       if (!pl) return;
@@ -303,10 +305,31 @@ function axisXToZ(x, Wl) {
 function attachAxisHandlers() {
   let dragPlane = null, didDrag = false;
 
-  function nearestMarker(clientX) {
-    const r  = axisCanvas.getBoundingClientRect();
-    const x  = clientX - r.left;
-    return state.planes.find(p => Math.abs(axisZToX(p.z, r.width) - x) < AXIS_HIT_PX) ?? null;
+  function nearestMarker(clientX, clientY) {
+    const r   = axisCanvas.getBoundingClientRect();
+    const mx  = clientX - r.left;
+    const my  = clientY - r.top;
+    const Wl  = r.width;
+    const Hl  = r.height;
+    const axisY = Hl * 0.55;
+    const BUMP_STEP = 28;
+    const HIT = 14;  // px radius around diamond centre
+    let best = null, bestDist = Infinity;
+    for (const p of state.planes) {
+      const px  = axisZToX(p.z, Wl);
+      const lv  = _planeLevels.get(p.id) || 0;
+      const py  = axisY - 12 - lv * BUMP_STEP;  // diamond centre-ish
+      const d   = Math.hypot(mx - px, my - py);
+      if (d < HIT && d < bestDist) { bestDist = d; best = p; }
+    }
+    // Fallback: x-only hit near the axis tick (for when markers haven't been drawn yet)
+    if (!best) {
+      for (const p of state.planes) {
+        const dx = Math.abs(axisZToX(p.z, Wl) - mx);
+        if (dx < AXIS_HIT_PX && dx < bestDist) { bestDist = dx; best = p; }
+      }
+    }
+    return best;
   }
 
   axisCanvas.addEventListener('pointermove', e => {
@@ -321,17 +344,19 @@ function attachAxisHandlers() {
       invalidateDistances();
       rebuildPlaneBoxes(); drawAxisCanvas(); redraw();
     } else {
-      axisCanvas.style.cursor = nearestMarker(e.clientX) ? 'grab' : 'crosshair';
+      axisCanvas.style.cursor = nearestMarker(e.clientX, e.clientY) ? 'grab' : 'crosshair';
     }
   });
 
   axisCanvas.addEventListener('pointerleave', () => { axisCanvas.style.cursor = 'crosshair'; });
 
   axisCanvas.addEventListener('pointerdown', e => {
+    if (dragPlane) return;  // never re-target while a drag is already active
     axisCanvas.setPointerCapture(e.pointerId);
     didDrag = false;
-    dragPlane = nearestMarker(e.clientX);
+    dragPlane = nearestMarker(e.clientX, e.clientY);
     if (dragPlane) {
+      _draggingPlaneId = dragPlane.id;
       axisCanvas.style.cursor = 'grabbing';
       state.selectedPlaneId = dragPlane.id;
       state.selectedObjId   = dragPlane.objects[0]?.id ?? null;
@@ -351,7 +376,9 @@ function attachAxisHandlers() {
       rebuildPlaneBoxes(); renderSidebar(); redraw();
     }
     dragPlane = null;
-    axisCanvas.style.cursor = nearestMarker(e.clientX) ? 'grab' : 'crosshair';
+    _draggingPlaneId = null;
+    drawAxisCanvas();  // recalculate settled levels immediately on release
+    axisCanvas.style.cursor = nearestMarker(e.clientX, e.clientY) ? 'grab' : 'crosshair';
   });
 }
 
@@ -840,20 +867,70 @@ function drawAxisCanvas() {
     ctx.fillText(String(z), x, axisY + 15);
   }
 
+  // Assign vertical levels so close markers bump up instead of overlapping.
+  const BUMP_STEP = 28;   // px per level (taller bump for clear separation)
+  const MIN_SEP   = 26;   // min px between markers on the same level
+  // Assign levels to all non-dragged planes first, then pin the dragged plane
+  // above everything so it never flips under a neighbour mid-drag.
+  const sorted = [...state.planes]
+    .filter(p => p.id !== _draggingPlaneId)
+    .sort((a, b) => a.z - b.z);
+  const planeLevel = new Map();
+  const levelMaxX  = [];
+  for (const plane of sorted) {
+    const x = axisZToX(plane.z, Wl);
+    let lv = 0;
+    while (true) {
+      if (levelMaxX[lv] === undefined || x - levelMaxX[lv] >= MIN_SEP) {
+        levelMaxX[lv] = x; planeLevel.set(plane.id, lv); break;
+      }
+      lv++;
+    }
+  }
+  if (_draggingPlaneId) {
+    const topLevel = levelMaxX.length; // one above the current highest
+    planeLevel.set(_draggingPlaneId, topLevel);
+  }
+  _planeLevels = planeLevel;  // share with hit-testing
+
   for (const plane of state.planes) {
     const x    = axisZToX(plane.z, Wl);
     const col  = typeColorHex(plane.type);
     const sel  = plane.id === state.selectedPlaneId;
+    const lv   = planeLevel.get(plane.id) || 0;
+    const dy   = lv * BUMP_STEP;   // extra upward shift
+
+    // Connecting line from axis up to diamond base when bumped
+    ctx.strokeStyle = col;
+    ctx.lineWidth   = sel ? 2 : 1.5;
+    if (lv > 0) {
+      ctx.save();
+      ctx.globalAlpha = 0.45;
+      ctx.setLineDash([2, 3]);
+      ctx.beginPath(); ctx.moveTo(x, axisY - 4); ctx.lineTo(x, axisY - 6 - dy); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+
+    // Short axis tick
     ctx.strokeStyle = col; ctx.lineWidth = sel ? 2 : 1.5;
-    ctx.beginPath(); ctx.moveTo(x, axisY-12); ctx.lineTo(x, axisY+4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x, axisY - 4); ctx.lineTo(x, axisY + 4); ctx.stroke();
+
+    // Diamond
     ctx.fillStyle = col;
-    ctx.beginPath(); ctx.moveTo(x, axisY-18); ctx.lineTo(x+5, axisY-12);
-    ctx.lineTo(x, axisY-6); ctx.lineTo(x-5, axisY-12); ctx.closePath(); ctx.fill();
+    const dTop = axisY - 18 - dy, dMid = axisY - 12 - dy, dBot = axisY - 6 - dy;
+    ctx.beginPath();
+    ctx.moveTo(x, dTop); ctx.lineTo(x+5, dMid); ctx.lineTo(x, dBot); ctx.lineTo(x-5, dMid);
+    ctx.closePath(); ctx.fill();
+
+    // z label above diamond
     ctx.font = '9.5px system-ui, sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText(plane.z.toFixed(2), x, axisY-22);
+    ctx.fillText(plane.z.toFixed(2), x, dTop - 3);
+
+    // L/S tag below axis
     ctx.fillStyle = dark ? '#8b949e' : '#6b7280';
     ctx.font = '9px system-ui, sans-serif';
-    ctx.fillText(plane.type === 'lens' ? 'L' : 'S', x, axisY+26);
+    ctx.fillText(plane.type === 'lens' ? 'L' : 'S', x, axisY + 26);
   }
 
   // Hint text — bottom centre of the axis strip.
