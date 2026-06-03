@@ -32,6 +32,7 @@ const state = {
   showCritCurves:  false,
   showCaustics:    false,
   showMarkers:     false,
+  showLegend:      true,
   critGridN:       512,
   critZs:          null,  // null = auto (highest-z source plane)
   dist:            null,
@@ -75,6 +76,7 @@ function selectedObj() {
 }
 
 // Pasted images are stored per-object on obj.pasteCanvas (HTMLCanvasElement|null).
+let activeTab = 'settings'; // 'settings' | 'recording'
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 let renderer = null, glCanvas = null, overlayCtx = null;
@@ -154,8 +156,12 @@ function buildDOM() {
             <div class="sl-rec-dot" id="sl-rec-dot" style="display:none"></div>
           </div>
           <div class="sl-sidebar">
-            <div class="sl-params-col"   id="sl-params-col"></div>
-            <div class="sl-settings-col" id="sl-settings-col"></div>
+            <div class="sl-tabs" id="sl-tabs">
+              <button class="sl-tab-btn active" data-tab="settings">Settings</button>
+              <button class="sl-tab-btn" data-tab="recording">Recording</button>
+            </div>
+            <div class="sl-tab-content" id="sl-tab-settings"></div>
+            <div class="sl-tab-content" id="sl-tab-recording" style="display:none"></div>
           </div>
         </div>
         <div class="sl-timeline">
@@ -164,6 +170,7 @@ function buildDOM() {
             <canvas class="sl-axis-canvas" id="sl-axis-canvas"></canvas>
           </div>
           <div class="sl-planes" id="sl-planes"></div>
+          <div class="sl-obj-panel" id="sl-obj-panel"></div>
         </div>
       </div>
     </div>`;
@@ -186,7 +193,15 @@ function attachHandlers() {
   });
   applyThemeIcons(document.documentElement.getAttribute('data-theme') || 'dark');
 
-  // Critical curve toggles are wired inside renderSidebar.
+  // Tab switching — static buttons, wired once.
+  document.getElementById('sl-tabs').addEventListener('click', e => {
+    const btn = e.target.closest('.sl-tab-btn');
+    if (!btn) return;
+    activeTab = btn.dataset.tab;
+    document.querySelectorAll('.sl-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === activeTab));
+    document.getElementById('sl-tab-settings').style.display  = activeTab === 'settings'  ? '' : 'none';
+    document.getElementById('sl-tab-recording').style.display = activeTab === 'recording' ? '' : 'none';
+  });
 
   attachAxisHandlers();
 
@@ -224,6 +239,17 @@ function attachHandlers() {
     const tag  = (document.activeElement?.tagName) || '';
     const type = (document.activeElement?.type)    || '';
     if ((tag === 'INPUT' && type !== 'checkbox') || tag === 'TEXTAREA') return;
+    if (e.key === 'r' || e.key === 'R') {
+      recState.active ? stopRecording() : startRecording();
+      return;
+    }
+    if (e.key === 'c' || e.key === 'C') {
+      const either = state.showCritCurves || state.showCaustics;
+      state.showCritCurves = !either;
+      state.showCaustics   = !either;
+      renderSidebar(); redraw();
+      return;
+    }
     if (e.key === 'Escape') {
       state.selectedObjId = null;
       renderSidebar(); rebuildPlaneBoxes();
@@ -395,6 +421,11 @@ function attachPlaneCanvasHandlers(canvas, plane) {
       hitObj.cx = pStart.cx + dx;
       hitObj.cy = pStart.cy + dy;
       redrawPlaneCanvas(plane); redraw();
+      // Keep the "Initial pos (current)" display in sync without a full sidebar rebuild.
+      if (!recState.progInitialPos && hitObj.id === state.selectedObjId) {
+        const el = document.getElementById('sl-prog-init-val');
+        if (el) el.innerHTML = `(${hitObj.cx.toFixed(2)}, ${hitObj.cy.toFixed(2)}) <span class="sl-muted-note">(current)</span>`;
+      }
     }
   });
 
@@ -528,9 +559,10 @@ function renderSidebar() {
   const obj = selectedObj(), pl = selectedPlane();
   const ezs = effectiveCritZs();
 
-  const globalPanel = `
+  // ── Settings tab ─────────────────────────────────────────────────────────────
+  const settingsContent = `
     <div class="sl-panel">
-      <div class="sl-panel-title">Global Settings</div>
+      <div class="sl-panel-title">Settings</div>
       <div class="sl-global-input">
         <label>Field of view</label>
         <input type="number" id="sl-fov" min="0.5" max="20" step="0.5" value="${state.fov}">
@@ -542,71 +574,11 @@ function renderSidebar() {
       </div>
       <div class="sl-checkbox-row">
         <label><input type="checkbox" id="sl-show-markers" ${state.showMarkers?'checked':''}> Show source/lens positions</label>
-      </div>
-    </div>`;
-
-  // Programmatic recording: info about the currently selected object and stored final position.
-  const selObj = selectedObj(), selPl = selectedPlane();
-  const selLabel = (selObj && selPl)
-    ? `z=${selPl.z.toFixed(2)}, (${selObj.cx.toFixed(2)}, ${selObj.cy.toFixed(2)})`
-    : '<span style="color:var(--muted);font-style:italic">select an object below</span>';
-  const finalLabel = recState.progFinalPos
-    ? `${recState.progFinalPos.label}`
-    : '<span style="color:var(--muted);font-style:italic">not set</span>';
-
-  const recordingPanel = `
-    <div class="sl-panel">
-      <div class="sl-panel-title">Recording</div>
-
-      <div class="sl-rec-subsection-label">Manual</div>
-      <div class="sl-capture-row">
-        <button class="sl-capture-btn" id="sl-snapshot-btn" title="Save PNG snapshot">📷 Save PNG</button>
-        <button class="sl-capture-btn ${recState.active ? 'recording' : ''}" id="sl-rec-btn"
-                title="Record to WebM video or GIF">${recState.active ? '⏹ Stop' : '⏺ Record'}</button>
-      </div>
-      <div class="sl-capture-row">
-        <select id="sl-rec-fps" class="sl-capture-fps">
-          <option value="5"  ${recState.fps===5  ?'selected':''}>5 fps</option>
-          <option value="10" ${recState.fps===10 ?'selected':''}>10 fps</option>
-          <option value="15" ${recState.fps===15 ?'selected':''}>15 fps</option>
-          <option value="24" ${recState.fps===24 ?'selected':''}>24 fps</option>
-          <option value="30" ${recState.fps===30 ?'selected':''}>30 fps</option>
-        </select>
-        <label class="sl-gif-label" title="GIF is slower to encode than WebM">
-          <input type="checkbox" id="sl-rec-gif" ${recState.useGif?'checked':''}> GIF (slower)
-        </label>
+        <label><input type="checkbox" id="sl-show-legend"  ${state.showLegend ?'checked':''}> Show legend</label>
       </div>
 
-      <div class="sl-rec-subsection-label">Programmatic</div>
-      <div class="sl-rec-prog-row">
-        <span class="sl-rec-prog-key">Selected</span>
-        <span class="sl-rec-prog-val" id="sl-prog-sel">${selLabel}</span>
-      </div>
-      <div class="sl-rec-prog-row">
-        <span class="sl-rec-prog-key">Final pos</span>
-        <span class="sl-rec-prog-val" id="sl-prog-final">${finalLabel}</span>
-      </div>
-      <div class="sl-capture-row" style="margin-top:6px">
-        <button class="sl-capture-btn" id="sl-prog-set-final"
-                title="Store current selected object position as the endpoint">Set final pos</button>
-      </div>
-      <div class="sl-rec-prog-row" style="margin-top:4px">
-        <span class="sl-rec-prog-key">Duration</span>
-        <input type="number" id="sl-prog-duration" min="0.5" max="60" step="0.5"
-               value="${recState.progDuration}"
-               style="width:52px;padding:3px 5px;border:1px solid var(--hairline);border-radius:4px;background:var(--bg);color:var(--fg);font-size:12px">
-        <span style="font-size:11.5px;color:var(--muted)">s</span>
-      </div>
-      <div class="sl-capture-row" style="margin-top:6px">
-        <button class="sl-capture-btn" id="sl-prog-record"
-                title="Move object from current position to the stored final position and record">⏺ Record program</button>
-      </div>
-    </div>`;
-
-  const critPanel = `
-    <div class="sl-panel">
-      <div class="sl-panel-title">Critical Curves</div>
-      <p class="sl-perf-note">(Can be slow at high resolutions)</p>
+      <div class="sl-subsection-header">Critical Curves <kbd>C</kbd></div>
+      <p class="sl-perf-note">(Can be slow at high resolutions. GIF recording includes them; WebM does not.)</p>
       <div class="sl-checkbox-row">
         <label><input type="checkbox" id="sl-show-crit" ${state.showCritCurves?'checked':''}> Show critical curves</label>
         <label><input type="checkbox" id="sl-show-caus" ${state.showCaustics   ?'checked':''}> Show caustics</label>
@@ -625,6 +597,81 @@ function renderSidebar() {
         <input type="number" id="sl-crit-zs" min="0.1" max="15" step="0.1" value="${ezs.toFixed(2)}">
       </div>
     </div>`;
+
+  // Programmatic recording display values.
+  const selObj = selectedObj(), selPl = selectedPlane();
+  const zLine = (selObj && selPl)
+    ? `${selPl.type === 'lens' ? 'Lens' : 'Source'} z:&nbsp;&nbsp;${selPl.z.toFixed(2)}`
+    : null;
+  const initLabel = recState.progInitialPos
+    ? `(${recState.progInitialPos.cx.toFixed(2)}, ${recState.progInitialPos.cy.toFixed(2)}) <span style="color:var(--muted)">(locked)</span>`
+    : selObj
+      ? `(${selObj.cx.toFixed(2)}, ${selObj.cy.toFixed(2)}) <span style="color:var(--muted)">(current)</span>`
+      : '<span style="color:var(--muted);font-style:italic">select an object below</span>';
+  const finalLabel = recState.progFinalPos
+    ? recState.progFinalPos.label
+    : '<span style="color:var(--muted);font-style:italic">not set</span>';
+
+  const recordingPanel = `
+    <div class="sl-panel">
+      <div class="sl-panel-title-row">
+        <span class="sl-panel-title">Recording</span>
+        ${infoSection('sl-rec-info', `
+          <b>WebM</b> — fast, browser-native. Critical curves are hidden during programmatic recording to keep frame timing correct.<br><br>
+          <b>GIF</b> — auto-looping, universally shareable. Slower to encode, 256 colors. GIF programmatic recording includes critical curves at full resolution.`)}
+      </div>
+
+      <div class="sl-rec-setting-row">
+        <span class="sl-rec-setting-label">Format</span>
+        <select id="sl-rec-format" class="sl-capture-fps">
+          <option value="webm" ${!recState.useGif?'selected':''}>WebM</option>
+          <option value="gif"  ${recState.useGif ?'selected':''}>GIF (slower)</option>
+        </select>
+      </div>
+      <div class="sl-rec-setting-row">
+        <span class="sl-rec-setting-label">Frame rate</span>
+        <select id="sl-rec-fps" class="sl-capture-fps">
+          <option value="5"  ${recState.fps===5  ?'selected':''}>5 fps</option>
+          <option value="10" ${recState.fps===10 ?'selected':''}>10 fps</option>
+          <option value="15" ${recState.fps===15 ?'selected':''}>15 fps</option>
+          <option value="24" ${recState.fps===24 ?'selected':''}>24 fps</option>
+          <option value="30" ${recState.fps===30 ?'selected':''}>30 fps</option>
+        </select>
+      </div>
+      <div class="sl-capture-row" style="margin-top:8px">
+        <button class="sl-capture-btn" id="sl-snapshot-btn">📷 Save PNG</button>
+        <button class="sl-capture-btn ${recState.active ? 'recording' : ''}" id="sl-rec-btn"
+                title="Shortcut: R">${recState.active ? '⏹ Stop [R]' : '⏺ Record [R]'}</button>
+      </div>
+
+      <div class="sl-rec-subsection-label">Programmatic</div>
+      ${zLine ? `<div class="sl-rec-prog-z">${zLine}</div>` : ''}
+
+      <div class="sl-rec-prog-field">
+        <span class="sl-rec-prog-key">Initial</span>
+        <span class="sl-rec-prog-val" id="sl-prog-init-val">${initLabel}</span>
+        <button class="sl-rec-mini-btn" id="sl-prog-set-init" title="Lock current position as start">Set</button>
+        ${recState.progInitialPos ? `<button class="sl-rec-mini-btn sl-rec-mini-clear" id="sl-prog-clear-init" title="Revert to using current position">✕</button>` : ''}
+      </div>
+
+      <div class="sl-rec-prog-field" style="margin-top:5px">
+        <span class="sl-rec-prog-key">Final</span>
+        <span class="sl-rec-prog-val">${finalLabel}</span>
+        <button class="sl-rec-mini-btn" id="sl-prog-set-final" title="Store current position as end">Set</button>
+      </div>
+
+      <div class="sl-rec-prog-field" style="margin-top:5px">
+        <span class="sl-rec-prog-key">Duration</span>
+        <input type="number" id="sl-prog-duration" min="0.5" max="60" step="0.5" value="${recState.progDuration}"
+               class="sl-prog-dur-input">
+        <span class="sl-muted-note">s</span>
+      </div>
+
+      <div class="sl-capture-row" style="margin-top:8px">
+        <button class="sl-capture-btn" id="sl-prog-record">⏺ Record program</button>
+      </div>
+    </div>`;
+
 
   let paramsPanel = '';
   if (obj && pl) {
@@ -654,18 +701,21 @@ function renderSidebar() {
     paramsPanel = `<div class="sl-panel"><div class="sl-empty-msg">Click an object in a plane box to edit its parameters.</div></div>`;
   }
 
-  // Params column: context-sensitive (nearest the image).
-  document.getElementById('sl-params-col').innerHTML = paramsPanel;
-  // Settings column: global controls + critical curves (less frequently changed).
-  document.getElementById('sl-settings-col').innerHTML = globalPanel + recordingPanel + critPanel;
+  // Populate the three containers.
+  document.getElementById('sl-tab-settings').innerHTML  = settingsContent;
+  document.getElementById('sl-tab-recording').innerHTML = recordingPanel;
+  document.getElementById('sl-obj-panel').innerHTML     = paramsPanel;
 
-  document.getElementById('sl-fov')?.addEventListener('change',      e => { const v = parseFloat(e.target.value); if (v > 0) { state.fov  = v; redraw(); } });
-  document.getElementById('sl-zmax')?.addEventListener('change',     e => { const v = parseFloat(e.target.value); if (v > 0) { state.zMax = v; drawAxisCanvas(); } });
-  document.getElementById('sl-show-markers')?.addEventListener('change', e => { state.showMarkers = e.target.checked; redraw(); });
+  document.getElementById('sl-fov')?.addEventListener('change',         e => { const v = parseFloat(e.target.value); if (v > 0) { state.fov  = v; redraw(); } });
+  document.getElementById('sl-zmax')?.addEventListener('change',        e => { const v = parseFloat(e.target.value); if (v > 0) { state.zMax = v; drawAxisCanvas(); } });
+  document.getElementById('sl-show-markers')?.addEventListener('change',e => { state.showMarkers = e.target.checked; redraw(); });
+  document.getElementById('sl-show-legend')?.addEventListener('change', e => { state.showLegend  = e.target.checked; redraw(); });
   document.getElementById('sl-snapshot-btn')?.addEventListener('click', captureSnapshot);
   document.getElementById('sl-rec-btn')?.addEventListener('click', () => { recState.active ? stopRecording() : startRecording(); });
   document.getElementById('sl-rec-fps')?.addEventListener('change', e => { recState.fps = parseInt(e.target.value, 10); });
-  document.getElementById('sl-rec-gif')?.addEventListener('change', e => { recState.useGif = e.target.checked; });
+  document.getElementById('sl-rec-format')?.addEventListener('change', e => { recState.useGif = e.target.value === 'gif'; });
+  document.getElementById('sl-prog-set-init')?.addEventListener('click', setProgInitialPosition);
+  document.getElementById('sl-prog-clear-init')?.addEventListener('click', clearProgInitialPos);
   document.getElementById('sl-prog-set-final')?.addEventListener('click', setProgFinalPosition);
   document.getElementById('sl-prog-duration')?.addEventListener('change', e => { recState.progDuration = parseFloat(e.target.value) || 3; });
   document.getElementById('sl-prog-record')?.addEventListener('click', startProgrammaticRecording);
@@ -679,7 +729,7 @@ function renderSidebar() {
       obj.model = e.target.value; obj.params = defaultParams(obj.model);
       renderSidebar(); redraw();
     });
-    document.getElementById('sl-params-col').querySelectorAll('input[type="range"][data-param]').forEach(inp => {
+    document.getElementById('sl-obj-panel').querySelectorAll('input[type="range"][data-param]').forEach(inp => {
       const valEl = inp.parentElement.querySelector('.sl-param-val');
       inp.addEventListener('input', () => {
         obj.params[inp.dataset.param] = parseFloat(inp.value);
@@ -885,7 +935,7 @@ function drawOverlay() {
   if (state.showMarkers && state.planes.some(p => p.type === 'source'))
     legendItems.push({ color: typeColorHex('source'), label: 'Source position', isDot: true });
 
-  if (legendItems.length > 0) {
+  if (state.showLegend && legendItems.length > 0) {
     const lx = 8, ly = 8;
     const lineH = 28, padV = 11, padH = 14;
     const boxW  = 220, boxH = legendItems.length * lineH + 2 * padV;
@@ -967,15 +1017,25 @@ function captureSnapshot() {
   buildCompositeCanvas().toBlob(blob => downloadBlob(blob, 'simplelens.png'), 'image/png');
 }
 
-// Store the current selected object's position as the programmatic endpoint.
+function setProgInitialPosition() {
+  const obj = selectedObj();
+  if (!obj) return;
+  recState.progInitialPos = { cx: obj.cx, cy: obj.cy };
+  renderSidebar();
+}
+
+function clearProgInitialPos() {
+  recState.progInitialPos = null;
+  renderSidebar();
+}
+
 function setProgFinalPosition() {
   const obj = selectedObj();
   const pl  = selectedPlane();
   if (!obj || !pl) return;
   recState.progFinalPos = {
-    cx: obj.cx,
-    cy: obj.cy,
-    label: `z=${pl.z.toFixed(2)}, (${obj.cx.toFixed(2)}, ${obj.cy.toFixed(2)})`,
+    cx: obj.cx, cy: obj.cy,
+    label: `(${obj.cx.toFixed(2)}, ${obj.cy.toFixed(2)})`,
   };
   renderSidebar();
 }
@@ -993,7 +1053,9 @@ function startProgrammaticRecording() {
   const totalFrames = Math.max(2, Math.round(recState.progDuration * fps));
   const frameDelayMs = 1000 / fps;
 
-  const startCx = obj.cx, startCy = obj.cy;
+  // Use the locked initial position if set, otherwise use the object's current position.
+  const startCx = recState.progInitialPos?.cx ?? obj.cx;
+  const startCy = recState.progInitialPos?.cy ?? obj.cy;
   const { cx: endCx, cy: endCy } = recState.progFinalPos;
 
   // Live canvas for both WebM and GIF.
@@ -1019,10 +1081,17 @@ function startProgrammaticRecording() {
     obj.cy = startCy + (endCy - startCy) * t;
 
     // Force a synchronous render.
+    // GIF: frames are timestamped in metadata so slow computation doesn't
+    //      affect playback speed — critical curves render correctly.
+    // WebM: captureStream samples at real time; slow computation causes frame
+    //       duplication, so critical curves/caustics are suppressed for WebM.
     if (renderer && state.dist) {
       const allPlanes = [...state.planes].sort((a, b) => a.z - b.z);
       renderer.setScene(allPlanes, state.dist, state.fov);
+      const savedCrit = state.showCritCurves, savedCaus = state.showCaustics;
+      if (!recState.useGif) { state.showCritCurves = false; state.showCaustics = false; }
       drawOverlay();
+      state.showCritCurves = savedCrit; state.showCaustics = savedCaus;
     }
     for (const plane of state.planes) redrawPlaneCanvas(plane);
     _compositeToLive();
@@ -1091,8 +1160,9 @@ const recState = {
   frameInterval: null,
   autoStopTimer: null,
   // Programmatic recording
-  progFinalPos:  null,  // { cx, cy, z, label } stored endpoint
-  progDuration:  3.0,   // seconds for the programmatic sweep
+  progInitialPos: null,  // { cx, cy } — null = use current object position at record time
+  progFinalPos:   null,  // { cx, cy, label }
+  progDuration:   3.0,
 };
 
 function updateRecordingIndicator() {
@@ -1100,7 +1170,7 @@ function updateRecordingIndicator() {
   if (dot) dot.style.display = recState.active ? '' : 'none';
   const btn = document.getElementById('sl-rec-btn');
   if (btn) {
-    btn.textContent = recState.active ? '⏹ Stop' : '⏺ Record';
+    btn.textContent = recState.active ? '⏹ Stop [R]' : '⏺ Record [R]';
     btn.classList.toggle('recording', recState.active);
   }
 }
