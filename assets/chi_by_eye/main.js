@@ -10,9 +10,31 @@ import {
 
 // ---------- theme: keep in sync with the rest of the site ----------
 (function () {
-  const t = localStorage.getItem('theme') || 'light';
+  const t = localStorage.getItem('theme') || 'dark';
   document.documentElement.setAttribute('data-theme', t);
 })();
+
+function applyThemeIcons(theme) {
+  document.querySelectorAll('.icon-sun') .forEach(el => { el.style.display = theme === 'dark' ? 'block' : 'none'; });
+  document.querySelectorAll('.icon-moon').forEach(el => { el.style.display = theme === 'dark' ? 'none'  : 'block'; });
+}
+
+function toggleTheme() {
+  const cur  = document.documentElement.getAttribute('data-theme') || 'dark';
+  const next = cur === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('theme', next); } catch {}
+  applyThemeIcons(next);
+}
+
+// Reusable SVG markup for the sun/moon toggle button content.
+const THEME_BTN_INNER = `
+  <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+  </svg>
+  <svg class="icon-moon" xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+  </svg>`;
 
 // ---------- constants ----------
 const ROUNDS_PER_GAME = 5;
@@ -721,7 +743,10 @@ function sandboxViewMarkup() {
   return `
     <div class="sb-top">
       <h2>Sandbox</h2>
-      <button class="lbf-back" id="sb-back">&larr; Back to menu</button>
+      <div class="view-header-actions">
+        <button class="lbf-back" id="sb-back">&larr; Back to menu</button>
+        <button class="dark-toggle" id="sb-theme-btn" title="Toggle dark mode" aria-label="Toggle dark mode">${THEME_BTN_INNER}</button>
+      </div>
     </div>
     <div class="sb-main">
       <div class="sb-plot-wrap">
@@ -812,6 +837,7 @@ function sandboxViewMarkup() {
 
 function attachSandboxHandlers() {
   document.getElementById('sb-back').addEventListener('click', closeSandboxView);
+  document.getElementById('sb-theme-btn').addEventListener('click', toggleTheme);
   document.getElementById('sb-delete-selected').addEventListener('click', deleteSandboxSelection);
   document.getElementById('sb-clear').addEventListener('click', () => {
     clearPoints(sandboxState);
@@ -1049,7 +1075,10 @@ function renderLeaderboardView() {
   leaderboardViewEl.innerHTML = `
     <div class="lbf-top">
       <h2>Leaderboards</h2>
-      <button id="lbf-back" class="lbf-back">&larr; Back to menu</button>
+      <div class="view-header-actions">
+        <button id="lbf-back" class="lbf-back">&larr; Back to menu</button>
+        <button class="dark-toggle" id="lbf-theme-btn" title="Toggle dark mode" aria-label="Toggle dark mode">${THEME_BTN_INNER}</button>
+      </div>
     </div>
     <div class="lbf-filters">
       <div class="lbf-diff-row">${diffBtns}</div>
@@ -1102,6 +1131,7 @@ function renderLeaderboardView() {
     }
   });
   document.getElementById('lbf-back').addEventListener('click', closeLeaderboardView);
+  document.getElementById('lbf-theme-btn').addEventListener('click', toggleTheme);
   // Show more — bring in the next page of entries.
   const showMoreBtn = document.getElementById('lbf-show-more');
   if (showMoreBtn) {
@@ -1320,9 +1350,16 @@ function buildShell() {
         <div class="meta timer hidden" id="timer">Time <b id="timer-val">—</b></div>
         <div class="meta">Score <b id="score-val">0</b></div>
         <a class="exit" href="#" id="exit-link">Quit</a>
+        <button class="dark-toggle" id="theme-toggle" title="Toggle dark mode" aria-label="Toggle dark mode">
+          <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+          </svg>
+          <svg class="icon-moon" xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+        </button>
       </div>
     </div>
-
     <div class="stage" id="stage">
       <div class="plot-wrap" id="plot-wrap">
         <canvas id="plot-canvas"></canvas>
@@ -1470,6 +1507,12 @@ function buildShell() {
   exitLinkEl.addEventListener('click', e => { e.preventDefault(); confirmQuit(); });
   // Clicking the title in the topbar also quits to menu (with confirmation).
   document.getElementById('title-quit').addEventListener('click', confirmQuit);
+
+  // Theme toggles — topbar (in-game) + menu overlay button (event-delegated so it
+  // survives every menuEl.innerHTML re-render) + sandbox/leaderboard header buttons.
+  applyThemeIcons(document.documentElement.getAttribute('data-theme') || 'dark');
+  document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
+  menuEl.addEventListener('click', e => { if (e.target.closest('.menu-theme-btn')) toggleTheme(); });
   // Per-point χ² contribution toggle on the reveal banner
   document.getElementById('rb-labels-toggle').addEventListener('change', e => {
     const v = !!e.target.checked;
@@ -1548,6 +1591,7 @@ function menuMarkup() {
      </div>`;
   }).join('');
   return `
+    <button class="dark-toggle menu-theme-btn" title="Toggle dark mode" aria-label="Toggle dark mode">${THEME_BTN_INNER}</button>
     <h1><span class="chi">&chi;</span> by eye</h1>
     <p class="tagline">
       Estimate the tension between data and model. <br>New to &chi;&sup2;?

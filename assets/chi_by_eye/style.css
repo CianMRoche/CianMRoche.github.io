@@ -181,6 +181,43 @@ body {
   border-color: var(--fg);
   background: var(--bg-soft);
 }
+/* Theme toggle — matches parent site .dark-toggle, used everywhere */
+.dark-toggle {
+  background: none;
+  border: none;
+  padding: 5px;
+  cursor: pointer;
+  color: #7a8288;
+  border-radius: 4px;
+  line-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+/* Icons controlled by data-theme on <html> — no JS needed for initial state */
+.icon-sun  { display: none;  }   /* hidden in light mode (default) */
+.icon-moon { display: block; }   /* shown in light mode */
+html[data-theme="dark"] .icon-sun  { display: block; }
+html[data-theme="dark"] .icon-moon { display: none;  }
+.dark-toggle:hover { color: #313436; background: rgba(0,0,0,0.06); }
+html[data-theme="dark"] .dark-toggle       { color: rgba(255,255,255,0.72); }
+html[data-theme="dark"] .dark-toggle:hover { color: #fff; background: rgba(255,255,255,0.06); }
+
+/* Menu overlay button — positioned at top-right inside the .menu element */
+.menu-theme-btn {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+}
+
+/* Back-button + dark-toggle grouped flush in sandbox/leaderboard headers */
+.view-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
 .topbar .score-denom {
   color: var(--muted);
   font-weight: 400;
@@ -1463,7 +1500,7 @@ html[data-theme="dark"] .tutorial-tooltip {
 }
 .leaderboard-view .lbf-top {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   margin-bottom: 22px;
   gap: 14px;
@@ -1700,7 +1737,7 @@ html[data-theme="dark"] .tutorial-tooltip {
 }
 .sandbox-view .sb-top {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 14px;
 }

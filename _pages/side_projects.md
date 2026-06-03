@@ -51,6 +51,21 @@ html[data-theme="dark"] .sp-launch:hover {
 
 <div style="clear: both;">
   <div class="sp-img-wrap">
+    <img class="img-light" src="/images/simpleLens_light.png" alt="simpleLens logo" width="250" height="250">
+    <img class="img-dark"  src="/images/simpleLens.png" alt="simpleLens logo" width="250" height="250">
+  </div>
+  <div>
+    <h2>simpleLens</h2>
+    <p>An interactive multi-plane gravitational lensing simulator and intuition-builder. Build up lens and source planes by clicking on a redshift axis. Choose from different lens mass and source light profiles. Supports critical curve and caustic overlays.</p>
+    <a class="sp-launch" href="/assets/simple_lens/">Launch simpleLens →</a>
+  </div>
+</div>
+
+<br clear="left"/>
+
+
+<div style="clear: both;">
+  <div class="sp-img-wrap">
     <img class="img-light" src="/images/chi_by_eye_logo.svg" alt="χ by eye logo" width="250" height="250">
     <img class="img-dark"  src="/images/chi_by_eye_logo_inverted.svg" alt="χ by eye logo" width="250" height="250">
   </div>

@@ -1,0 +1,589 @@
+/* simpleLens — styles */
+
+:root {
+  --bg:          #ffffff;
+  --bg-soft:     #f9fafb;
+  --bg-soft2:    #f3f4f6;
+  --fg:          #1f2937;
+  --fg-soft:     #4b5563;
+  --muted:       #6b7280;
+  --hairline:    #e5e7eb;
+  --accent:      #2563eb;
+  --accent-soft: rgba(37, 99, 235, 0.12);
+  --good:        #10b981;
+  --warn:        #f59e0b;
+  --bad:         #ef4444;
+
+  /* Unified type colors: all lens planes share one color, all source planes another. */
+  --lens-color: #2563eb;
+  --src-color:  #f59e0b;
+}
+
+html[data-theme="dark"] {
+  --bg:          #0d1117;
+  --bg-soft:     #161b22;
+  --bg-soft2:    #1c2128;
+  --fg:          #e6edf3;
+  --fg-soft:     #c9d1d9;
+  --muted:       #8b949e;
+  --hairline:    #30363d;
+  --accent:      #7bbfcc;
+  --accent-soft: rgba(123, 191, 204, 0.16);
+  --good:        #4ade80;
+  --warn:        #fbbf24;
+  --bad:         #f87171;
+
+  --lens-color: #7bbfcc;
+  --src-color:  #fbbf24;
+}
+
+/* ── Reset / base ─────────────────────────────────────────────────────────── */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── App shell ────────────────────────────────────────────────────────────── */
+
+#app {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+.app-inner {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+}
+
+/* Desktop 1.3× scale — same technique as chi-by-eye. */
+@media (min-width: 721px) and (min-aspect-ratio: 1) {
+  .app-inner {
+    width: calc(100% / 1.3);
+    height: calc(100% / 1.3);
+    transform: scale(1.3);
+    transform-origin: top left;
+  }
+}
+
+/* ── Topbar ───────────────────────────────────────────────────────────────── */
+
+.sl-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  height: 44px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--bg);
+}
+
+.sl-topbar h1 {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+  flex: 1;
+}
+
+.sl-back-btn {
+  font-size: 12.5px;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 4px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 5px;
+  background: transparent;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s;
+}
+.sl-back-btn:hover { color: var(--fg); border-color: var(--fg-soft); }
+
+/* Theme button — matches parent site .dark-toggle */
+.sl-theme-btn {
+  background: none;
+  border: none;
+  padding: 5px;
+  cursor: pointer;
+  color: #7a8288;
+  border-radius: 4px;
+  line-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Icon visibility driven by CSS, not JS — correct on first paint */
+.icon-sun  { display: none;  }
+.icon-moon { display: block; }
+html[data-theme="dark"] .icon-sun  { display: block; }
+html[data-theme="dark"] .icon-moon { display: none;  }
+.sl-theme-btn:hover { color: #313436; background: rgba(0,0,0,0.06); }
+html[data-theme="dark"] .sl-theme-btn       { color: rgba(255,255,255,0.72); }
+html[data-theme="dark"] .sl-theme-btn:hover { color: #fff; background: rgba(255,255,255,0.06); }
+
+/* ── Body (upper + timeline) ──────────────────────────────────────────────── */
+
+.sl-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── Upper: image panel + sidebar ────────────────────────────────────────── */
+
+.sl-upper {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 270px;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+  padding: 12px 14px 0;
+}
+
+/* ── Image panel ─────────────────────────────────────────────────────────── */
+
+.sl-image-wrap {
+  position: relative;
+  aspect-ratio: 1;
+  max-height: 100%;
+  min-height: 0;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  overflow: hidden;
+  background: #000;
+  align-self: start;
+}
+
+/* WebGL canvas fills the wrapper. */
+.sl-image-wrap canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Overlay canvas for critical curves — sits on top, pointer-events off. */
+.sl-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Empty-state hint shown before any sources are placed. */
+.sl-image-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+/* Critical-curve toggle chip — top-right of the image. */
+.sl-crit-toggle {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--fg-soft);
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  padding: 3px 8px;
+  cursor: pointer;
+  pointer-events: auto;
+  user-select: none;
+  opacity: 0.85;
+}
+.sl-crit-toggle:hover { opacity: 1; }
+.sl-crit-toggle input { accent-color: var(--accent); }
+
+/* ── Right sidebar ────────────────────────────────────────────────────────── */
+
+/* Default (narrow): single column, params first then settings. */
+.sl-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow-y: auto;
+  padding-bottom: 8px;
+}
+
+.sl-params-col,
+.sl-settings-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 12px;
+}
+
+/* Wide desktop: sidebar splits into two columns.
+   Breakpoint at 1300px viewport (app-inner effective ~1000px).
+   Params (sliders) gets more space; settings gets enough for
+   long checkbox labels like "Show source/lens positions". */
+@media (min-width: 1300px) and (min-aspect-ratio: 1) {
+  .sl-upper {
+    grid-template-columns: minmax(0, 1fr) 540px;
+  }
+  .sl-sidebar {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 10px;
+    overflow-y: auto;
+  }
+  .sl-params-col {
+    flex: 4;   /* ~306px — comfortable for sliders and labels */
+    min-width: 0;
+    padding-bottom: 0;
+  }
+  .sl-settings-col {
+    flex: 3;   /* ~224px — enough for all settings text on one line */
+    min-width: 0;
+    padding-bottom: 0;
+  }
+}
+
+.sl-panel {
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-soft) 70%, transparent);
+  padding: 12px;
+}
+
+.sl-panel-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.sl-panel-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  flex: 1;
+}
+
+/* ⓘ info toggle */
+.sl-info-details { position: relative; }
+.sl-info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  /* Hide the native <details> disclosure triangle */
+  list-style: none;
+  user-select: none;
+  /* Custom circle */
+  border-radius: 50%;
+  border: 1px solid var(--muted);
+  background: transparent;
+  color: var(--muted);
+  font-size: 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.sl-info-btn::-webkit-details-marker { display: none; }
+.sl-info-btn::marker              { display: none; }
+.sl-info-btn:hover { color: var(--fg); border-color: var(--fg-soft); }
+.sl-info-details[open] .sl-info-btn { color: var(--accent); border-color: var(--accent); }
+
+.sl-info-content {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  width: 220px;
+  padding: 9px 11px;
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.15);
+  font-size: 11.5px;
+  color: var(--fg-soft);
+  line-height: 1.55;
+}
+
+/* Unit label after number inputs */
+.sl-unit { font-size: 12px; color: var(--muted); }
+
+/* Parameter rows — label (flex:1) | short slider | value */
+.sl-param-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 7px;
+}
+.sl-param-row:last-child { margin-bottom: 0; }
+
+.sl-param-label {
+  font-size: 12px;
+  color: var(--fg-soft);
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.sl-param-row input[type="range"] {
+  /* Shrinks with the panel but never below 40px or above 70px */
+  flex: 0 0 clamp(40px, 22%, 70px);
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.sl-param-val {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  width: 32px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* Checkbox row inside panels */
+.sl-checkbox-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 8px;
+}
+.sl-checkbox-row label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--fg-soft);
+  cursor: pointer;
+}
+.sl-checkbox-row input[type="checkbox"] { accent-color: var(--accent); }
+
+.sl-perf-note {
+  margin-bottom: 8px;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.45;
+  font-style: italic;
+}
+
+.sl-select {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 12.5px;
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+
+/* Empty-selection message in sidebar. */
+.sl-empty-msg {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+/* Global controls (FOV, z_max). */
+.sl-global-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--fg-soft);
+  margin-bottom: 8px;
+}
+.sl-global-input:last-child { margin-bottom: 0; }
+.sl-global-input label { min-width: 62px; flex-shrink: 0; }
+.sl-global-input select {
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 12px;
+  padding: 2px 4px;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+  cursor: pointer;
+}
+.sl-global-input input[type="number"] {
+  width: 72px;
+  padding: 4px 7px;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 12.5px;
+}
+
+/* ── Timeline panel ───────────────────────────────────────────────────────── */
+
+.sl-timeline {
+  display: flex;
+  flex-direction: row;
+  flex-shrink: 0;
+  height: 190px;
+  border-top: 1px solid var(--hairline);
+  margin-top: 10px;
+  background: var(--bg-soft);
+  overflow: hidden;
+}
+
+/* Clickable z-axis strip. */
+.sl-axis-wrap {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 220px;
+  border-right: 1px solid var(--hairline);
+  padding: 8px 0 0;
+  position: relative;
+  background: var(--bg);
+}
+
+.sl-axis-label {
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+  margin-bottom: 4px;
+  letter-spacing: 0.05em;
+}
+
+.sl-axis-canvas {
+  flex: 1;
+  width: 100%;
+  cursor: crosshair;
+  display: block;
+}
+
+/* Scrollable plane-box area. */
+.sl-planes {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 8px 12px;
+}
+
+/* Individual plane box. */
+.sl-plane-box {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 152px;
+  border: 2px solid var(--plane-color, var(--hairline));
+  border-radius: 6px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.sl-plane-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--bg-soft);
+}
+
+/* Compact z label in plane header */
+.sl-plane-z {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--fg-soft);
+  flex: 1;
+  white-space: nowrap;
+}
+
+/* Plane type toggle buttons */
+.sl-plane-type-btn {
+  font-size: 10.5px;
+  padding: 1px 6px;
+  border: 1px solid var(--hairline);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+/* Active state uses type-based color from --plane-color set inline */
+.sl-plane-type-btn.active {
+  background: var(--plane-color, var(--accent));
+  border-color: var(--plane-color, var(--accent));
+  color: #fff;
+}
+
+/* Type-based border color on the plane box */
+.sl-plane-box[data-type="lens"]   { border-color: var(--lens-color); }
+.sl-plane-box[data-type="source"] { border-color: var(--src-color);  }
+
+.sl-plane-del {
+  font-size: 13px;
+  line-height: 1;
+  padding: 1px 4px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.sl-plane-del:hover { color: var(--bad); }
+
+.sl-axis-canvas  { cursor: crosshair; }
+.sl-plane-canvas {
+  display: block;
+  width: 148px;
+  height: 148px;
+  cursor: crosshair;
+  cursor: crosshair;
+}
+.sl-plane-canvas.has-selected { cursor: grab; }
+
+/* Empty timeline prompt. */
+.sl-timeline-hint {
+  padding: 8px 16px;
+  font-size: 12.5px;
+  color: var(--muted);
+  align-self: center;
+}
+
+/* ── Mobile ───────────────────────────────────────────────────────────────── */
+
+@media (max-aspect-ratio: 1/1), (max-width: 720px) {
+  .sl-upper {
+    grid-template-columns: 1fr;
+    padding: 10px 10px 0;
+  }
+
+  .sl-timeline {
+    height: 170px;
+  }
+
+  .sl-axis-wrap {
+    width: 160px;
+  }
+}
