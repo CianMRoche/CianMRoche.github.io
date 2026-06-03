@@ -17,6 +17,14 @@ function typeColorHex(type) {
   return dark ? '#fbbf24' : '#f59e0b';
 }
 
+// Invert a 6-digit hex colour (#rrggbb → complement).
+function invertHexColor(hex) {
+  if (!hex || hex.length < 7) return hex;
+  return '#' + [1,3,5].map(i =>
+    (255 - parseInt(hex.slice(i, i+2), 16)).toString(16).padStart(2,'0')
+  ).join('');
+}
+
 // ── Curve colors: not white, not the lens/source type colors ──────────────────
 // Critical curves: hot pink; Caustics: lime green.
 const CRIT_COLOR = 'rgba(248, 113, 196, 0.95)';
@@ -217,7 +225,7 @@ function attachHandlers() {
     document.documentElement.setAttribute('data-theme', next);
     try { localStorage.setItem('theme', next); } catch {}
     applyThemeIcons(next);
-    rebuildPlaneBoxes(); redraw();
+    rebuildPlaneBoxes(); renderSidebar(); redraw();
   });
   applyThemeIcons(document.documentElement.getAttribute('data-theme') || 'dark');
 
@@ -781,7 +789,12 @@ function renderSidebar() {
       renderSidebar(); redraw();
     });
     document.getElementById('sl-obj-panel').querySelectorAll('input[type="color"][data-param-color]').forEach(inp => {
-      inp.addEventListener('input', () => { obj.params.color = inp.value; redraw(); });
+      inp.addEventListener('input', () => {
+        // Picker shows the display colour; store the dark-mode equivalent.
+        const light = document.documentElement.getAttribute('data-theme') !== 'dark';
+        obj.params.color = light ? invertHexColor(inp.value) : inp.value;
+        redraw();
+      });
     });
     document.getElementById('sl-obj-panel').querySelectorAll('input[type="range"][data-param]').forEach(inp => {
       const valEl = inp.parentElement.querySelector('.sl-param-val');
@@ -825,14 +838,18 @@ function sourceParamRows(obj) {
       '<p style="font-size:11px;color:var(--muted);font-style:italic;margin-top:6px">Select this point, then Ctrl+V to paste an image</p>';
     return sliderRow('Brightness', 'amplitude', 0.1, 5.0, 0.1, p.amplitude ?? 1.0) + hint;
   }
-  const colorVal = p.color ?? '#ffffff';
+  // In light mode the canvas is CSS-inverted, so show the complement in the
+  // picker (what actually appears on screen) and invert back on store.
+  const isLight    = document.documentElement.getAttribute('data-theme') !== 'dark';
+  const storedColor = p.color ?? '#ffffff';
+  const displayColor = isLight ? invertHexColor(storedColor) : storedColor;
   return sliderRow('σ (")',   'sigma',     0.005, 0.5, 0.005, p.sigma     ?? 0.06)
        + sliderRow('q',        'q',         0.1,  1.0, 0.05,  p.q         ?? 1.0)
        + sliderRow('φ (rad)',  'phi',        0, Math.PI, 0.05, p.phi       ?? 0)
        + sliderRow('A',        'amplitude',  0.1,  3.0, 0.1,   p.amplitude ?? 1.0)
        + `<div class="sl-param-row">
             <span class="sl-param-label">Color</span>
-            <input type="color" data-param-color="1" value="${colorVal}"
+            <input type="color" data-param-color="1" value="${displayColor}"
                    class="sl-color-input" title="Source light color">
           </div>`;
 }
