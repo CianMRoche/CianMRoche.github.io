@@ -377,8 +377,18 @@ export class Renderer {
         srcParams[si * 4+3] = obj.params.amplitude ?? 1.0;
 
         // Source tint color (analytical sources only).
+        // In light mode the canvas has filter:invert(1), so we pre-invert the
+        // color here — the CSS inversion then cancels it back to the user's
+        // chosen display color.
         if (obj.model !== 'pastedimage') {
-          const hex = obj.params.color ?? '#ffffff';
+          const isLight = document.documentElement.getAttribute('data-theme') !== 'dark';
+          let hex = obj.params.color ?? '#ffffff';
+          if (isLight) {
+            const ri = 255 - parseInt(hex.slice(1,3), 16);
+            const gi = 255 - parseInt(hex.slice(3,5), 16);
+            const bi = 255 - parseInt(hex.slice(5,7), 16);
+            hex = '#' + [ri,gi,bi].map(c => c.toString(16).padStart(2,'0')).join('');
+          }
           srcColor[si*3]   = parseInt(hex.slice(1,3), 16) / 255;
           srcColor[si*3+1] = parseInt(hex.slice(3,5), 16) / 255;
           srcColor[si*3+2] = parseInt(hex.slice(5,7), 16) / 255;
