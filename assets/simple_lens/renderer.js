@@ -64,6 +64,7 @@ uniform int   u_srcPlaneIdx [${MAX_OBJECTS}];
 uniform vec2  u_srcCenter   [${MAX_OBJECTS}];
 uniform vec4  u_srcParams   [${MAX_OBJECTS}]; // [sigma, q, phi, amplitude]
 uniform int   u_srcModel    [${MAX_OBJECTS}]; // 0=gaussian 1=exponential 3=pastedimage
+uniform vec3  u_srcColor    [${MAX_OBJECTS}]; // tint for analytical sources (1,1,1 = white)
 
 // Per-source pasted-image slot (-1 = not a pasted image, 0-3 = texture slot).
 uniform int   u_pastedSlot  [${MAX_OBJECTS}];
@@ -213,7 +214,7 @@ void main() {
     if (u_srcModel[si] == 3) {
       colorOut += samplePasted(si, beta);
     } else {
-      colorOut += vec3(analyticalBrightness(si, beta));
+      colorOut += u_srcColor[si] * analyticalBrightness(si, beta);
     }
   }
 
@@ -354,6 +355,7 @@ export class Renderer {
     const srcPlaneIdx = new Int32Array(MAX_OBJECTS);
     const srcCenter   = new Float32Array(MAX_OBJECTS * 2);
     const srcParams   = new Float32Array(MAX_OBJECTS * 4);
+    const srcColor    = new Float32Array(MAX_OBJECTS * 3).fill(1); // default white
     const pastedSlot  = new Int32Array(MAX_OBJECTS).fill(-1);
     // Texture slots: collect up to MAX_PASTED pasted-image sources.
     const slotEntries = [null, null, null, null]; // { tex, w, h } per slot
@@ -374,6 +376,14 @@ export class Renderer {
         srcParams[si * 4+2] = obj.params.phi       ?? 0.0;
         srcParams[si * 4+3] = obj.params.amplitude ?? 1.0;
 
+        // Source tint color (analytical sources only).
+        if (obj.model !== 'pastedimage') {
+          const hex = obj.params.color ?? '#ffffff';
+          srcColor[si*3]   = parseInt(hex.slice(1,3), 16) / 255;
+          srcColor[si*3+1] = parseInt(hex.slice(3,5), 16) / 255;
+          srcColor[si*3+2] = parseInt(hex.slice(5,7), 16) / 255;
+        }
+
         if (obj.model === 'pastedimage' && pastedCount < MAX_PASTED) {
           const slot = pastedCount++;
           pastedSlot[si]    = slot;
@@ -387,6 +397,7 @@ export class Renderer {
     gl.uniform1iv(_locs.u_srcPlaneIdx,  srcPlaneIdx);
     gl.uniform2fv(_locs.u_srcCenter,    srcCenter);
     gl.uniform4fv(_locs.u_srcParams,    srcParams);
+    gl.uniform3fv(_locs.u_srcColor,     srcColor);
     gl.uniform1iv(_locs.u_pastedSlot,   pastedSlot);
 
     // Bind texture slots 0-3 and set size uniforms.
@@ -471,6 +482,7 @@ export class Renderer {
       u_srcPlaneIdx:  u('u_srcPlaneIdx'),
       u_srcCenter:    u('u_srcCenter'),
       u_srcParams:    u('u_srcParams'),
+      u_srcColor:     u('u_srcColor'),
       u_pastedSlot:   u('u_pastedSlot'),
       u_pastedTex0:   u('u_pastedTex0'),
       u_pastedTex1:   u('u_pastedTex1'),

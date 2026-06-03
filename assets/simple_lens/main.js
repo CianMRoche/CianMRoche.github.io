@@ -42,8 +42,8 @@ function defaultParams(model) {
   if (model === 'pointmass')   return { thetaE: 1.0 };
   if (model === 'sie')         return { b: 1.0, q: 0.75, phi: 0 };
   if (model === 'nfw')         return { kappaS: 0.5, rS: 0.4 };
-  if (model === 'gaussian')    return { sigma: 0.06, q: 1.0,  phi: 0, amplitude: 1.0 };
-  if (model === 'exponential') return { sigma: 0.05, q: 0.40, phi: 0, amplitude: 2.20 };
+  if (model === 'gaussian')    return { sigma: 0.06, q: 1.0,  phi: 0, amplitude: 1.0,  color: '#ffffff' };
+  if (model === 'exponential') return { sigma: 0.05, q: 0.40, phi: 0, amplitude: 2.20, color: '#ffffff' };
   if (model === 'pastedimage') return { amplitude: 1.0 };
   return {};
 }
@@ -122,13 +122,17 @@ function showRendererError(msg) {
 
 function loadDemoState() {
   const lp = addPlane(0.5, 'lens');
+  const smallLens = { id: uid(), model: 'sie', cx: 0.86, cy: 0.71, params: { b: 0.3, q: 0.75, phi: 0 } };
   lp.objects = [
-    { id: uid(), model: 'sie', cx: 0,    cy: 0,    params: { b: 2.3, q: 0.75, phi: 0 } },
-    { id: uid(), model: 'sie', cx: 0.86, cy: 0.71, params: { b: 0.3, q: 0.75, phi: 0 } },
+    { id: uid(), model: 'sie', cx: 0, cy: 0, params: { b: 2.3, q: 0.75, phi: 0 } },
+    smallLens,
   ];
   const sp = addPlane(1.0, 'source');
   sp.objects = [{ id: uid(), model: 'exponential', cx: 0.3, cy: 0.1,
                   params: { sigma: 0.05, q: 0.40, phi: 0, amplitude: 2.20 } }];
+  // Pre-select the small off-axis lens so its params appear on load.
+  state.selectedPlaneId = lp.id;
+  state.selectedObjId   = smallLens.id;
 }
 
 // ── DOM ───────────────────────────────────────────────────────────────────────
@@ -138,6 +142,7 @@ function buildDOM() {
       <div class="sl-topbar">
         <h1>simpleLens</h1>
         <a class="sl-back-btn" href="/side_projects/">← Side projects</a>
+        <button class="sl-demo-btn" id="sl-demo" title="Walk through a tour of the controls">Tour</button>
         <button class="sl-theme-btn" id="sl-theme" title="Toggle dark mode" aria-label="Toggle dark mode">
           <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
@@ -194,6 +199,7 @@ function buildDOM() {
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 function attachHandlers() {
+  document.getElementById('sl-demo').addEventListener('click', startTour);
   document.getElementById('sl-theme').addEventListener('click', () => {
     const next = (document.documentElement.getAttribute('data-theme') || 'dark') === 'dark' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', next);
@@ -736,6 +742,9 @@ function renderSidebar() {
       obj.model = e.target.value; obj.params = defaultParams(obj.model);
       renderSidebar(); redraw();
     });
+    document.getElementById('sl-obj-panel').querySelectorAll('input[type="color"][data-param-color]').forEach(inp => {
+      inp.addEventListener('input', () => { obj.params.color = inp.value; redraw(); });
+    });
     document.getElementById('sl-obj-panel').querySelectorAll('input[type="range"][data-param]').forEach(inp => {
       const valEl = inp.parentElement.querySelector('.sl-param-val');
       inp.addEventListener('input', () => {
@@ -778,10 +787,16 @@ function sourceParamRows(obj) {
       '<p style="font-size:11px;color:var(--muted);font-style:italic;margin-top:6px">Select this point, then Ctrl+V to paste an image</p>';
     return sliderRow('Brightness', 'amplitude', 0.1, 5.0, 0.1, p.amplitude ?? 1.0) + hint;
   }
-  return sliderRow('σ (")',      'sigma',     0.005, 0.5, 0.005, p.sigma   ?? 0.06)
-       + sliderRow('q',          'q',         0.1,  1.0, 0.05, p.q         ?? 1.0)
-       + sliderRow('φ (rad)',    'phi',        0, Math.PI, 0.05, p.phi      ?? 0)
-       + sliderRow('A',         'amplitude',  0.1,  3.0, 0.1,  p.amplitude ?? 1.0);
+  const colorVal = p.color ?? '#ffffff';
+  return sliderRow('σ (")',   'sigma',     0.005, 0.5, 0.005, p.sigma     ?? 0.06)
+       + sliderRow('q',        'q',         0.1,  1.0, 0.05,  p.q         ?? 1.0)
+       + sliderRow('φ (rad)',  'phi',        0, Math.PI, 0.05, p.phi       ?? 0)
+       + sliderRow('A',        'amplitude',  0.1,  3.0, 0.1,   p.amplitude ?? 1.0)
+       + `<div class="sl-param-row">
+            <span class="sl-param-label">Color</span>
+            <input type="color" data-param-color="1" value="${colorVal}"
+                   class="sl-color-input" title="Source light color">
+          </div>`;
 }
 
 // ── Axis canvas ───────────────────────────────────────────────────────────────
@@ -1294,4 +1309,217 @@ function _initGifEncoder(fps, liveCanvas) {
   }, delay);
 
   _compositeToLive();
+}
+
+// ── Tour / tutorial ───────────────────────────────────────────────────────────
+
+const TOUR_STEPS = [
+  {
+    target: '.sl-timeline',
+    arrow: 'above',
+    label: 'Redshift timeline',
+    text: 'The bar at the bottom is the <b>redshift timeline</b>. It represents the line of sight from the observer (left, z = 0) to distant galaxies (right). Click anywhere on the axis to place a new lens or source plane at that redshift.',
+  },
+  {
+    target: '.sl-planes',
+    arrow: 'above',
+    label: 'Plane viewer',
+    text: 'Each plane you add appears here as a small panel. The <b>canvas</b> shows a projected view of that plane. Dots represent lens masses or light sources. Click to select them, drag to move them. Click empty space in a plane to add a new object.',
+  },
+  {
+    target: '.sl-plane-box',
+    arrow: 'above',
+    label: 'Lens / source planes',
+    text: 'Use the <b>Lens / Src</b> buttons at the top of each panel to switch the plane type. A <b>lens plane</b> contains mass that deflects light; a <b>source plane</b> contains light emitting objects. You can have multiple of each at different redshifts.',
+  },
+  {
+    target: '#sl-obj-panel',
+    arrow: 'left',
+    label: 'Plane Controls',
+    text: 'When an object is selected in a plane panel, its parameters appear here. Choose the mass or light profile from the dropdown, then adjust sliders for Einstein radius, axis ratio, position angle, brightness, and more.',
+  },
+  {
+    target: '#sl-image-wrap',
+    arrow: 'right',
+    label: 'Lensed image',
+    text: 'This is the <b>primary image panel</b>, showing what an observer at z = 0 would see. Light from source planes is bent by all intervening lens planes using full multiplane gravitational lensing. The image updates in real time as you move or adjust objects.',
+  },
+  {
+    target: '.sl-tab-btn[data-tab="settings"]',
+    arrow: 'left',
+    label: 'Settings',
+    text: 'The <b>Settings tab</b> controls the field of view and maximum redshift. The Critical Curves section lets you toggle the curves that mark where the number of lensed images changes. Press <kbd>C</kbd> to toggle them.',
+  },
+  {
+    target: '.sl-tab-btn[data-tab="recording"]',
+    arrow: 'left',
+    label: 'Recording',
+    text: 'The <b>Recording tab</b> has two modes. <b>Live</b> recording captures whatever you do — press Record, interact with the simulation, press Stop, and download the result as a WebM video or GIF. <b>Programmatic</b> recording automatically animates a selected object in a straight line between two positions at a chosen speed — set a start, set an end, and hit Record Program.',
+  },
+  {
+    target: null,
+    arrow: null,
+    label: 'Ready to explore',
+    text: 'That\'s the full tour! Try clicking on the redshift axis to add planes, moving the objects in the plane panels, and watching the lensed image update live. :)',
+    final: true,
+  },
+];
+
+function _tourClamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+
+const tour = {
+  active: false, step: 0,
+  backdrop: null, spotlight: null, tooltip: null, quitBtn: null,
+};
+
+function startTour() {
+  if (tour.active) return;
+  tour.active = true;
+  tour.step   = 0;
+
+  tour.backdrop  = document.createElement('div');
+  tour.backdrop.className = 'tutorial-backdrop';
+  tour.spotlight = document.createElement('div');
+  tour.spotlight.className = 'tutorial-spotlight';
+  tour.tooltip   = document.createElement('div');
+  tour.tooltip.className = 'tutorial-tooltip';
+  document.body.appendChild(tour.backdrop);
+  document.body.appendChild(tour.spotlight);
+  document.body.appendChild(tour.tooltip);
+
+  window.addEventListener('resize', repositionTour);
+  showTourStep();
+}
+
+function showTourStep() {
+  const s = TOUR_STEPS[tour.step];
+  if (!s) { endTour(); return; }
+
+  let targetRect = null;
+  if (s.target) {
+    const el = document.querySelector(s.target);
+    if (el) targetRect = el.getBoundingClientRect();
+  }
+
+  if (targetRect && targetRect.width > 0) {
+    tour.spotlight.classList.remove('no-target');
+    const pad = 6;
+    Object.assign(tour.spotlight.style, {
+      left:   `${targetRect.left - pad}px`,
+      top:    `${targetRect.top  - pad}px`,
+      width:  `${targetRect.width  + 2 * pad}px`,
+      height: `${targetRect.height + 2 * pad}px`,
+    });
+  } else {
+    tour.spotlight.classList.add('no-target');
+    Object.assign(tour.spotlight.style, { left: '50%', top: '50%', width: '0', height: '0' });
+  }
+
+  const isFinal = !!s.final;
+  tour.tooltip.innerHTML = `
+    <div class="tt-arrow"></div>
+    <div class="tt-step">Step ${tour.step + 1} / ${TOUR_STEPS.length} · ${s.label || ''}</div>
+    <div class="tt-body">${s.text}</div>
+    <div class="tt-actions">
+      <button class="tt-skip" id="tt-skip">${isFinal ? 'Close' : 'Skip'}</button>
+      <button class="primary tt-next" id="tt-next">${isFinal ? 'Finish' : 'Next →'}</button>
+    </div>`;
+  document.getElementById('tt-next').addEventListener('click', tourNext);
+  document.getElementById('tt-skip').addEventListener('click', endTour);
+
+  positionTourTooltip(targetRect, s.arrow);
+}
+
+function repositionTour() {
+  if (!tour.active) return;
+  const s = TOUR_STEPS[tour.step];
+  if (!s) return;
+  let targetRect = null;
+  if (s.target) {
+    const el = document.querySelector(s.target);
+    if (el) targetRect = el.getBoundingClientRect();
+  }
+  if (targetRect && targetRect.width > 0) {
+    const pad = 6;
+    Object.assign(tour.spotlight.style, {
+      left:   `${targetRect.left - pad}px`,
+      top:    `${targetRect.top  - pad}px`,
+      width:  `${targetRect.width  + 2 * pad}px`,
+      height: `${targetRect.height + 2 * pad}px`,
+    });
+  }
+  positionTourTooltip(targetRect, s.arrow);
+}
+
+function positionTourTooltip(targetRect, preferred) {
+  const tt = tour.tooltip;
+  tt.classList.remove('above', 'below', 'left', 'right');
+  tt.style.visibility = 'hidden';
+  tt.style.left = '0px'; tt.style.top = '0px';
+  const ttRect = tt.getBoundingClientRect();
+  const ttW = ttRect.width, ttH = ttRect.height;
+  const margin = 22;
+  let left, top, side = null;
+
+  if (!targetRect || targetRect.width === 0) {
+    left = (window.innerWidth  - ttW) / 2;
+    top  = (window.innerHeight - ttH) / 2;
+  } else {
+    const cx = targetRect.left + targetRect.width  / 2;
+    const cy = targetRect.top  + targetRect.height / 2;
+    const space = {
+      below: window.innerHeight - targetRect.bottom,
+      above: targetRect.top,
+      right: window.innerWidth  - targetRect.right,
+      left:  targetRect.left,
+    };
+    const need = { below: ttH + margin, above: ttH + margin, right: ttW + margin, left: ttW + margin };
+    const sides = ['below', 'above', 'right', 'left'];
+    let chosen = preferred && space[preferred] >= need[preferred]
+      ? preferred
+      : sides.slice().sort((a, b) => space[b] - space[a])[0];
+    side = chosen;
+    switch (chosen) {
+      case 'below': top  = targetRect.bottom + margin; left = cx - ttW / 2; break;
+      case 'above': top  = targetRect.top - ttH - margin; left = cx - ttW / 2; break;
+      case 'right': left = targetRect.right + margin;  top  = cy - ttH / 2; break;
+      case 'left':  left = targetRect.left  - ttW - margin; top = cy - ttH / 2; break;
+    }
+  }
+  const VP = 12;
+  left = _tourClamp(left, VP, window.innerWidth  - ttW - VP);
+  top  = _tourClamp(top,  VP, window.innerHeight - ttH - VP);
+  tt.style.left = `${left}px`;
+  tt.style.top  = `${top}px`;
+  if (side) tt.classList.add(side);
+
+  const arrow = tt.querySelector('.tt-arrow');
+  if (arrow && targetRect && side) {
+    const cx = targetRect.left + targetRect.width  / 2;
+    const cy = targetRect.top  + targetRect.height / 2;
+    if (side === 'below' || side === 'above') {
+      arrow.style.left = `${_tourClamp(cx - left, 14, ttW - 14) - 6}px`;
+      arrow.style.top  = '';
+    } else {
+      arrow.style.top  = `${_tourClamp(cy - top,  14, ttH - 14) - 6}px`;
+      arrow.style.left = '';
+    }
+  } else if (arrow) {
+    arrow.style.display = 'none';
+  }
+  tt.style.visibility = '';
+}
+
+function tourNext() {
+  tour.step++;
+  if (tour.step >= TOUR_STEPS.length) { endTour(); return; }
+  showTourStep();
+}
+
+function endTour() {
+  if (!tour.active) return;
+  tour.active = false;
+  window.removeEventListener('resize', repositionTour);
+  tour.backdrop?.remove();  tour.spotlight?.remove();  tour.tooltip?.remove();
+  tour.backdrop = tour.spotlight = tour.tooltip = null;
 }
