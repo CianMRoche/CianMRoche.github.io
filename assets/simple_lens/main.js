@@ -157,14 +157,23 @@ function buildDOM() {
             </div>
             <div class="sl-rec-dot" id="sl-rec-dot" style="display:none"></div>
           </div>
-          <div class="sl-sidebar">
-            <div class="sl-tabs" id="sl-tabs">
-              <button class="sl-tab-btn active" data-tab="settings">Settings</button>
-              <button class="sl-tab-btn" data-tab="recording">Recording</button>
+          <!-- Controls group: right-justified, right-grows -->
+          <div class="sl-controls-col">
+            <div class="sl-param-col">
+              <div class="sl-tabs">
+                <div class="sl-param-col-title">Plane Controls</div>
+              </div>
+              <div id="sl-obj-panel"></div>
             </div>
-            <div class="sl-tab-content" id="sl-tab-settings"></div>
-            <div class="sl-tab-content" id="sl-tab-recording" style="display:none"></div>
-          </div>
+            <div class="sl-sidebar">
+              <div class="sl-tabs" id="sl-tabs">
+                <button class="sl-tab-btn active" data-tab="settings">Settings</button>
+                <button class="sl-tab-btn" data-tab="recording">Recording</button>
+              </div>
+              <div class="sl-tab-content" id="sl-tab-settings"></div>
+              <div class="sl-tab-content" id="sl-tab-recording" style="display:none"></div>
+            </div>
+          </div><!-- end sl-controls-col -->
         </div>
         <div class="sl-timeline">
           <div class="sl-axis-wrap">
@@ -172,7 +181,6 @@ function buildDOM() {
             <canvas class="sl-axis-canvas" id="sl-axis-canvas"></canvas>
           </div>
           <div class="sl-planes" id="sl-planes"></div>
-          <div class="sl-obj-panel" id="sl-obj-panel"></div>
         </div>
       </div>
     </div>`;
@@ -551,7 +559,7 @@ const SOURCE_INFO = `
 
 function infoSection(id, html) {
   return `<details class="sl-info-details" id="${id}">
-    <summary class="sl-info-btn">ⓘ</summary>
+    <summary class="sl-info-btn">i</summary>
     <div class="sl-info-content">${html}</div>
   </details>`;
 }
@@ -561,6 +569,32 @@ const SEL = s => `style="font-size:12px;padding:2px 6px;border:1px solid var(--h
 function renderSidebar() {
   const obj = selectedObj(), pl = selectedPlane();
   const ezs = effectiveCritZs();
+
+  // ── Params panel (built first — used in settingsContent below) ──────────────
+  let paramsPanel = '';
+  if (obj && pl) {
+    const isLens = pl.type === 'lens';
+    const modelOptions = isLens
+      ? `<option value="sie"       ${obj.model==='sie'       ?'selected':''}>SIE (Isothermal ellipsoid)</option>
+         <option value="pointmass" ${obj.model==='pointmass' ?'selected':''}>Point mass</option>`
+      : `<option value="gaussian"    ${obj.model==='gaussian'    ?'selected':''}>Gaussian</option>
+         <option value="exponential" ${obj.model==='exponential' ?'selected':''}>Exponential</option>
+         <option value="pastedimage" ${obj.model==='pastedimage' ?'selected':''}>Pasted image</option>`;
+    const infoHtml = isLens
+      ? infoSection('sl-param-info', LENS_INFO[obj.model] ?? '')
+      : infoSection('sl-param-info', SOURCE_INFO);
+    paramsPanel = `
+      <div class="sl-panel">
+        <div class="sl-panel-title-row">
+          <span class="sl-panel-title">${isLens ? 'Lens' : 'Source'} (z=${pl.z.toFixed(2)})</span>
+          ${infoHtml}
+        </div>
+        <select class="sl-select" id="sl-model-select">${modelOptions}</select>
+        ${isLens ? lensParamRows(obj) : sourceParamRows(obj)}
+      </div>`;
+  } else {
+    paramsPanel = `<div class="sl-panel"><div class="sl-empty-msg">Click an object in a plane box to edit its parameters.</div></div>`;
+  }
 
   // ── Settings tab ─────────────────────────────────────────────────────────────
   const settingsContent = `
@@ -675,38 +709,9 @@ function renderSidebar() {
     </div>`;
 
 
-  let paramsPanel = '';
-  if (obj && pl) {
-    const isLens = pl.type === 'lens';
-    // NFW disabled — critical curve computation has known issues with this model.
-    const modelOptions = isLens
-      ? `<option value="sie"       ${obj.model==='sie'       ?'selected':''}>SIE (Isothermal ellipsoid)</option>
-         <option value="pointmass" ${obj.model==='pointmass' ?'selected':''}>Point mass</option>`
-      : `<option value="gaussian"    ${obj.model==='gaussian'    ?'selected':''}>Gaussian</option>
-         <option value="exponential" ${obj.model==='exponential' ?'selected':''}>Exponential</option>
-         <option value="pastedimage" ${obj.model==='pastedimage' ?'selected':''}>Pasted image</option>`;
-
-    const infoHtml = isLens
-      ? infoSection('sl-param-info', LENS_INFO[obj.model] ?? '')
-      : infoSection('sl-param-info', SOURCE_INFO);
-
-    paramsPanel = `
-      <div class="sl-panel">
-        <div class="sl-panel-title-row">
-          <span class="sl-panel-title">${isLens ? 'Lens' : 'Source'} (z=${pl.z.toFixed(2)})</span>
-          ${infoHtml}
-        </div>
-        <select class="sl-select" id="sl-model-select">${modelOptions}</select>
-        ${isLens ? lensParamRows(obj) : sourceParamRows(obj)}
-      </div>`;
-  } else {
-    paramsPanel = `<div class="sl-panel"><div class="sl-empty-msg">Click an object in a plane box to edit its parameters.</div></div>`;
-  }
-
-  // Populate the three containers.
+  document.getElementById('sl-obj-panel').innerHTML     = paramsPanel;
   document.getElementById('sl-tab-settings').innerHTML  = settingsContent;
   document.getElementById('sl-tab-recording').innerHTML = recordingPanel;
-  document.getElementById('sl-obj-panel').innerHTML     = paramsPanel;
 
   document.getElementById('sl-fov')?.addEventListener('change',         e => { const v = parseFloat(e.target.value); if (v > 0) { state.fov  = v; redraw(); } });
   document.getElementById('sl-zmax')?.addEventListener('change',        e => { const v = parseFloat(e.target.value); if (v > 0) { state.zMax = v; drawAxisCanvas(); } });

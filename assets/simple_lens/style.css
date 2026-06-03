@@ -143,22 +143,56 @@ html[data-theme="dark"] .sl-theme-btn:hover { color: #fff; background: rgba(255,
 
 /* ── Upper: image panel + sidebar ────────────────────────────────────────── */
 
+/* ── Three-column flex layout — wraps when image would be smaller than min-basis ── */
+/* Wide:         [image 1fr] [plane-controls 270px] [settings 270px]            */
+/* Intermediate: [image full-width]                                              */
+/*               [plane-controls 270px] [settings 270px]                         */
+/* Thin:         [image full-width] [plane-controls] [settings] (all stacked)   */
+
 .sl-upper {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 270px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
   gap: 14px;
   flex: 1;
   min-height: 0;
+  overflow-y: auto;
   padding: 12px 14px 0;
+}
+
+/* Image: tries to fill remaining space but never shrinks below 320px.          */
+/* When sidebars don't fit alongside it the image wraps to its own full row.    */
+/* Controls group: right-justified within its flex area, inner items can grow */
+.sl-upper .sl-controls-col {
+  flex: 1 0 270px;         /* can grow beyond its min; wraps when image needs room */
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;  /* blank space opens on the LEFT */
+  gap: 14px;
+  align-items: flex-start;
+  align-content: flex-start;
+  min-width: 270px;
+}
+
+/* Inner panels: grow from 270px min, capped so they don't become excessively wide */
+.sl-controls-col > .sl-param-col,
+.sl-controls-col > .sl-sidebar {
+  flex: 1 0 270px;
+  max-width: 400px;
+  min-width: 270px;
 }
 
 /* ── Image panel ─────────────────────────────────────────────────────────── */
 
 .sl-image-wrap {
+  flex: 1 1 320px;   /* grow freely, wraps to own row if it would be < 320px */
+  min-width: 0;
+  /* max-width caps the flex main axis so aspect-ratio:1 derives height without overflow.
+     Formula: (viewport_height / 1.3_scale) - topbar(44) - timeline(190) - padding(26)
+     The 780px hard cap prevents excessive size on very tall monitors. */
+  max-width: min(calc(100vh / 1.3 - 260px), 780px);
   position: relative;
   aspect-ratio: 1;
-  max-height: 100%;
-  min-height: 0;
   border: 1px solid var(--hairline);
   border-radius: 6px;
   overflow: hidden;
@@ -288,31 +322,52 @@ html[data-theme="light"] #sl-gl-canvas { filter: invert(1); }
 
 /* ── Object panel (bottom-right, lens/source params) ─────────────────────── */
 
-.sl-obj-panel {
-  width: 250px;
-  flex-shrink: 0;
-  border-left: 1px solid var(--hairline);
-  overflow-y: hidden;
-  background: var(--bg);
+/* Plane Controls column — mirrors the sidebar in size and style */
+.sl-param-col {
   display: flex;
   flex-direction: column;
-  padding: 0;
+  overflow: hidden;
+  gap: 10px;   /* space between the .sl-tabs bar and sl-obj-panel */
 }
 
-/* Panels inside obj-panel: flush, compact padding */
-.sl-obj-panel .sl-panel {
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  padding: 7px 10px 6px;
+#sl-obj-panel {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
 }
-.sl-obj-panel .sl-panel-title-row { margin-bottom: 5px; }
-.sl-obj-panel .sl-select           { margin-bottom: 6px; }
-.sl-obj-panel .sl-param-row        { margin-bottom: 4px; }
 
-/* Very short slider in the compact obj-panel, value narrowed to give labels maximum room */
-.sl-obj-panel input[type="range"] { flex: 0 0 30px; }
-.sl-obj-panel .sl-param-val       { width: 26px; font-size: 11px; }
+/* Static title row for Plane Controls — matches tab row height but neutral */
+.sl-param-col-title {
+  flex: 1;
+  padding: 8px 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg-soft);
+  text-align: center;
+  cursor: default;
+  user-select: none;
+}
+
+/* Shared grid on the panel so ALL rows share the same column widths.
+   max-content on col 1 resolves to the WIDEST label, making all sliders equal length. */
+#sl-obj-panel .sl-panel {
+  display: grid;
+  grid-template-columns: max-content 1fr 28px;
+  column-gap: 8px;
+  row-gap: 6px;
+  align-items: center;
+}
+/* Title row, model select, and empty-msg span all 3 columns. */
+#sl-obj-panel .sl-panel-title-row,
+#sl-obj-panel .sl-select,
+#sl-obj-panel .sl-empty-msg { grid-column: 1 / -1; }
+/* Remove param-row's own box so its three children become direct grid items.
+   Also suppress the margins that the parent row-gap now handles. */
+#sl-obj-panel .sl-param-row { display: contents; }
+#sl-obj-panel .sl-panel-title-row { margin-bottom: 0; }
+#sl-obj-panel .sl-select { margin-bottom: 0; }
+#sl-obj-panel .sl-param-row input[type="range"] { width: 100%; min-width: 0; }
+#sl-obj-panel .sl-param-val { font-size: 11px; text-align: right; }
 
 .sl-panel {
   border: 1px solid var(--hairline);
@@ -354,6 +409,8 @@ html[data-theme="light"] #sl-gl-canvas { filter: invert(1); }
   background: transparent;
   color: var(--muted);
   font-size: 10px;
+  font-style: italic;
+  font-family: 'Times New Roman', serif;
   cursor: pointer;
   flex-shrink: 0;
 }
@@ -634,6 +691,15 @@ html[data-theme="light"] #sl-gl-canvas { filter: invert(1); }
 
 /* ── Timeline panel ───────────────────────────────────────────────────────── */
 
+/* Visual divider inside the sidebar */
+.sl-sidebar-divider {
+  height: 1px;
+  background: var(--hairline);
+  flex-shrink: 0;
+}
+
+/* ── Timeline (bottom bar: z-axis + plane boxes) ─────────────────────────── */
+
 .sl-timeline {
   display: flex;
   flex-direction: row;
@@ -766,19 +832,13 @@ html[data-theme="light"] #sl-gl-canvas { filter: invert(1); }
   align-self: center;
 }
 
-/* ── Mobile ───────────────────────────────────────────────────────────────── */
+/* ── Narrow screens: tighter padding, sidebars wrap to full rows ───────────── */
 
-@media (max-aspect-ratio: 1/1), (max-width: 720px) {
-  .sl-upper {
-    grid-template-columns: 1fr;
-    padding: 10px 10px 0;
-  }
-
-  .sl-timeline {
-    height: 190px;
-  }
-
-  .sl-axis-wrap {
-    width: 160px;
-  }
+@media (max-width: 600px) {
+  .sl-upper { padding: 8px 8px 0; gap: 10px; }
+  .sl-timeline { height: 190px; }
+  /* On very narrow screens controls group fills its row */
+  .sl-upper .sl-controls-col { flex: 1 0 100%; min-width: 0; }
+  .sl-controls-col > .sl-param-col,
+  .sl-controls-col > .sl-sidebar { max-width: 100%; }
 }
