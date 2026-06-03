@@ -226,7 +226,7 @@ void main() {
 export class Renderer {
   constructor(canvas) {
     this.canvas = canvas;
-    const gl = canvas.getContext('webgl2', { antialias: false, depth: false });
+    const gl = canvas.getContext('webgl2', { antialias: false, depth: false, preserveDrawingBuffer: true });
     if (!gl) throw new Error('WebGL2 not available in this browser.');
     this.gl = gl;
 

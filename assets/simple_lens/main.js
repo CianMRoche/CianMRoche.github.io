@@ -151,6 +151,7 @@ function buildDOM() {
             <div class="sl-image-hint" id="sl-image-hint" style="display:none">
               Add a source plane to see lensing
             </div>
+            <div class="sl-rec-dot" id="sl-rec-dot" style="display:none"></div>
           </div>
           <div class="sl-sidebar">
             <div class="sl-params-col"   id="sl-params-col"></div>
@@ -544,6 +545,64 @@ function renderSidebar() {
       </div>
     </div>`;
 
+  // Programmatic recording: info about the currently selected object and stored final position.
+  const selObj = selectedObj(), selPl = selectedPlane();
+  const selLabel = (selObj && selPl)
+    ? `z=${selPl.z.toFixed(2)}, (${selObj.cx.toFixed(2)}, ${selObj.cy.toFixed(2)})`
+    : '<span style="color:var(--muted);font-style:italic">select an object below</span>';
+  const finalLabel = recState.progFinalPos
+    ? `${recState.progFinalPos.label}`
+    : '<span style="color:var(--muted);font-style:italic">not set</span>';
+
+  const recordingPanel = `
+    <div class="sl-panel">
+      <div class="sl-panel-title">Recording</div>
+
+      <div class="sl-rec-subsection-label">Manual</div>
+      <div class="sl-capture-row">
+        <button class="sl-capture-btn" id="sl-snapshot-btn" title="Save PNG snapshot">📷 Save PNG</button>
+        <button class="sl-capture-btn ${recState.active ? 'recording' : ''}" id="sl-rec-btn"
+                title="Record to WebM video or GIF">${recState.active ? '⏹ Stop' : '⏺ Record'}</button>
+      </div>
+      <div class="sl-capture-row">
+        <select id="sl-rec-fps" class="sl-capture-fps">
+          <option value="5"  ${recState.fps===5  ?'selected':''}>5 fps</option>
+          <option value="10" ${recState.fps===10 ?'selected':''}>10 fps</option>
+          <option value="15" ${recState.fps===15 ?'selected':''}>15 fps</option>
+          <option value="24" ${recState.fps===24 ?'selected':''}>24 fps</option>
+          <option value="30" ${recState.fps===30 ?'selected':''}>30 fps</option>
+        </select>
+        <label class="sl-gif-label" title="GIF is slower to encode than WebM">
+          <input type="checkbox" id="sl-rec-gif" ${recState.useGif?'checked':''}> GIF (slower)
+        </label>
+      </div>
+
+      <div class="sl-rec-subsection-label">Programmatic</div>
+      <div class="sl-rec-prog-row">
+        <span class="sl-rec-prog-key">Selected</span>
+        <span class="sl-rec-prog-val" id="sl-prog-sel">${selLabel}</span>
+      </div>
+      <div class="sl-rec-prog-row">
+        <span class="sl-rec-prog-key">Final pos</span>
+        <span class="sl-rec-prog-val" id="sl-prog-final">${finalLabel}</span>
+      </div>
+      <div class="sl-capture-row" style="margin-top:6px">
+        <button class="sl-capture-btn" id="sl-prog-set-final"
+                title="Store current selected object position as the endpoint">Set final pos</button>
+      </div>
+      <div class="sl-rec-prog-row" style="margin-top:4px">
+        <span class="sl-rec-prog-key">Duration</span>
+        <input type="number" id="sl-prog-duration" min="0.5" max="60" step="0.5"
+               value="${recState.progDuration}"
+               style="width:52px;padding:3px 5px;border:1px solid var(--hairline);border-radius:4px;background:var(--bg);color:var(--fg);font-size:12px">
+        <span style="font-size:11.5px;color:var(--muted)">s</span>
+      </div>
+      <div class="sl-capture-row" style="margin-top:6px">
+        <button class="sl-capture-btn" id="sl-prog-record"
+                title="Move object from current position to the stored final position and record">⏺ Record program</button>
+      </div>
+    </div>`;
+
   const critPanel = `
     <div class="sl-panel">
       <div class="sl-panel-title">Critical Curves</div>
@@ -598,11 +657,18 @@ function renderSidebar() {
   // Params column: context-sensitive (nearest the image).
   document.getElementById('sl-params-col').innerHTML = paramsPanel;
   // Settings column: global controls + critical curves (less frequently changed).
-  document.getElementById('sl-settings-col').innerHTML = globalPanel + critPanel;
+  document.getElementById('sl-settings-col').innerHTML = globalPanel + recordingPanel + critPanel;
 
   document.getElementById('sl-fov')?.addEventListener('change',      e => { const v = parseFloat(e.target.value); if (v > 0) { state.fov  = v; redraw(); } });
   document.getElementById('sl-zmax')?.addEventListener('change',     e => { const v = parseFloat(e.target.value); if (v > 0) { state.zMax = v; drawAxisCanvas(); } });
-  document.getElementById('sl-show-markers')?.addEventListener('change', e => { state.showMarkers    = e.target.checked; redraw(); });
+  document.getElementById('sl-show-markers')?.addEventListener('change', e => { state.showMarkers = e.target.checked; redraw(); });
+  document.getElementById('sl-snapshot-btn')?.addEventListener('click', captureSnapshot);
+  document.getElementById('sl-rec-btn')?.addEventListener('click', () => { recState.active ? stopRecording() : startRecording(); });
+  document.getElementById('sl-rec-fps')?.addEventListener('change', e => { recState.fps = parseInt(e.target.value, 10); });
+  document.getElementById('sl-rec-gif')?.addEventListener('change', e => { recState.useGif = e.target.checked; });
+  document.getElementById('sl-prog-set-final')?.addEventListener('click', setProgFinalPosition);
+  document.getElementById('sl-prog-duration')?.addEventListener('change', e => { recState.progDuration = parseFloat(e.target.value) || 3; });
+  document.getElementById('sl-prog-record')?.addEventListener('click', startProgrammaticRecording);
   document.getElementById('sl-crit-res')?.addEventListener('change', e => { state.critGridN = parseInt(e.target.value, 10); redraw(); });
   document.getElementById('sl-crit-zs')?.addEventListener('change',  e => { const v = parseFloat(e.target.value); if (v > 0) { state.critZs = v; redraw(); } });
   document.getElementById('sl-show-crit')?.addEventListener('change', e => { state.showCritCurves = e.target.checked; redraw(); });
@@ -864,4 +930,291 @@ function _doRedraw() {
   for (const plane of state.planes) redrawPlaneCanvas(plane);
   drawAxisCanvas();
   drawOverlay();
+}
+
+// ── Capture & recording ───────────────────────────────────────────────────────
+
+// Composite the WebGL canvas and 2D overlay into an offscreen canvas.
+function buildCompositeCanvas() {
+  const gl  = glCanvas;
+  const ov  = document.getElementById('sl-overlay');
+  const off = document.createElement('canvas');
+  off.width  = gl.width;
+  off.height = gl.height;
+  const ctx  = off.getContext('2d');
+  ctx.drawImage(gl, 0, 0);
+  ctx.drawImage(ov, 0, 0);
+  return off;
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a   = document.createElement('a');
+  a.href    = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+// PNG snapshot.
+function captureSnapshot() {
+  // Ensure the frame is fully drawn first.
+  if (renderer && state.dist) {
+    const allPlanes = [...state.planes].sort((a, b) => a.z - b.z);
+    renderer.setScene(allPlanes, state.dist, state.fov);
+    drawOverlay();
+  }
+  buildCompositeCanvas().toBlob(blob => downloadBlob(blob, 'simplelens.png'), 'image/png');
+}
+
+// Store the current selected object's position as the programmatic endpoint.
+function setProgFinalPosition() {
+  const obj = selectedObj();
+  const pl  = selectedPlane();
+  if (!obj || !pl) return;
+  recState.progFinalPos = {
+    cx: obj.cx,
+    cy: obj.cy,
+    label: `z=${pl.z.toFixed(2)}, (${obj.cx.toFixed(2)}, ${obj.cy.toFixed(2)})`,
+  };
+  renderSidebar();
+}
+
+// Animate the selected object from its current position to progFinalPos,
+// capturing each frame.  For GIF this runs as fast as possible (delay 0 between
+// frames); for WebM it runs in real time so the stream is correctly paced.
+function startProgrammaticRecording() {
+  if (recState.active) return;
+  const obj = selectedObj();
+  if (!obj)                  { return; }
+  if (!recState.progFinalPos){ return; }
+
+  const fps         = recState.fps;
+  const totalFrames = Math.max(2, Math.round(recState.progDuration * fps));
+  const frameDelayMs = 1000 / fps;
+
+  const startCx = obj.cx, startCy = obj.cy;
+  const { cx: endCx, cy: endCy } = recState.progFinalPos;
+
+  // Live canvas for both WebM and GIF.
+  const lc    = document.createElement('canvas');
+  lc.width    = glCanvas.width  || 512;
+  lc.height   = glCanvas.height || 512;
+  recState.liveCanvas = lc;
+  recState.active     = true;
+  recState.chunks     = [];
+  updateRecordingIndicator();
+
+  let frame = 0;
+
+  const doFrame = () => {
+    if (!recState.active && frame < totalFrames) {
+      // Cancelled mid-way — restore start position.
+      obj.cx = startCx; obj.cy = startCy;
+      invalidateDistances(); redraw();
+      return;
+    }
+    const t = totalFrames === 1 ? 1 : frame / (totalFrames - 1);
+    obj.cx = startCx + (endCx - startCx) * t;
+    obj.cy = startCy + (endCy - startCy) * t;
+
+    // Force a synchronous render.
+    if (renderer && state.dist) {
+      const allPlanes = [...state.planes].sort((a, b) => a.z - b.z);
+      renderer.setScene(allPlanes, state.dist, state.fov);
+      drawOverlay();
+    }
+    for (const plane of state.planes) redrawPlaneCanvas(plane);
+    _compositeToLive();
+
+    if (recState.useGif) recState.gifObj?.addFrame(lc, { copy: true, delay: frameDelayMs });
+
+    frame++;
+    if (frame < totalFrames) {
+      // GIF: go as fast as possible; WebM: pace to real time.
+      setTimeout(doFrame, recState.useGif ? 0 : frameDelayMs);
+    } else {
+      // All frames done — finalize.
+      recState.active = false;
+      updateRecordingIndicator();
+      clearTimeout(recState.autoStopTimer);
+      recState.autoStopTimer = null;
+      if (recState.useGif) {
+        recState.gifObj?.render();
+      } else {
+        recState.recorder?.stop();
+      }
+    }
+  };
+
+  if (recState.useGif) {
+    const _run = () => {
+      const gif = new GIF({ workers: 2, quality: 10, workerScript: 'gif.worker.js',
+                            width: lc.width, height: lc.height });
+      recState.gifObj = gif;
+      gif.on('finished', blob => downloadBlob(blob, 'simplelens-prog.gif'));
+      doFrame();
+    };
+    if (!window.GIF) {
+      const s = document.createElement('script');
+      s.src = 'gif.js'; s.onload = _run; document.head.appendChild(s);
+    } else { _run(); }
+  } else {
+    const stream   = lc.captureStream(fps);
+    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+      ? 'video/webm;codecs=vp9' : 'video/webm';
+    const recorder = new MediaRecorder(stream, { mimeType });
+    recState.recorder = recorder;
+    recorder.ondataavailable = e => { if (e.data.size > 0) recState.chunks.push(e.data); };
+    recorder.onstop = () => {
+      downloadBlob(new Blob(recState.chunks, { type: 'video/webm' }), 'simplelens-prog.webm');
+      recState.chunks = [];
+    };
+    recorder.start(200);
+    _compositeToLive();
+    doFrame();
+  }
+}
+
+// ── Video / GIF recording ─────────────────────────────────────────────────────
+
+const recState = {
+  active:    false,
+  fps:       15,
+  useGif:    false,
+  maxSecs:   30,
+  recorder:  null,
+  chunks:    [],
+  gifObj:    null,
+  liveCanvas: null,
+  rafId:     null,
+  frameInterval: null,
+  autoStopTimer: null,
+  // Programmatic recording
+  progFinalPos:  null,  // { cx, cy, z, label } stored endpoint
+  progDuration:  3.0,   // seconds for the programmatic sweep
+};
+
+function updateRecordingIndicator() {
+  const dot = document.getElementById('sl-rec-dot');
+  if (dot) dot.style.display = recState.active ? '' : 'none';
+  const btn = document.getElementById('sl-rec-btn');
+  if (btn) {
+    btn.textContent = recState.active ? '⏹ Stop' : '⏺ Record';
+    btn.classList.toggle('recording', recState.active);
+  }
+}
+
+function startRecording() {
+  if (recState.active) return;
+  const fps = recState.fps;
+
+  // Create the live composite canvas once.
+  const gl = glCanvas;
+  const lc = document.createElement('canvas');
+  lc.width  = gl.width  || 512;
+  lc.height = gl.height || 512;
+  recState.liveCanvas = lc;
+  recState.active     = true;
+  recState.chunks     = [];
+  // Hard cap: auto-stop after maxSecs regardless of user action.
+  recState.autoStopTimer = setTimeout(stopRecording, recState.maxSecs * 1000);
+  updateRecordingIndicator();
+
+  if (recState.useGif) {
+    _startGifRecording(fps, lc);
+  } else {
+    _startWebMRecording(fps, lc);
+  }
+}
+
+function stopRecording() {
+  if (!recState.active) return;
+  recState.active = false;
+  clearTimeout(recState.autoStopTimer);
+  cancelAnimationFrame(recState.rafId);
+  clearInterval(recState.frameInterval);
+  recState.rafId = null;
+  recState.frameInterval = null;
+  recState.autoStopTimer = null;
+  updateRecordingIndicator();
+
+  if (recState.useGif) {
+    recState.gifObj?.render();
+  } else {
+    recState.recorder?.stop();
+  }
+}
+
+function _compositeToLive() {
+  if (!recState.liveCanvas) return;
+  const lc  = recState.liveCanvas;
+  const gl  = glCanvas;
+  const ov  = document.getElementById('sl-overlay');
+  if (lc.width !== gl.width || lc.height !== gl.height) {
+    lc.width  = gl.width;
+    lc.height = gl.height;
+  }
+  const ctx = lc.getContext('2d');
+  ctx.drawImage(gl, 0, 0);
+  ctx.drawImage(ov, 0, 0);
+}
+
+function _startWebMRecording(fps, liveCanvas) {
+  // Drive the live canvas at the chosen FPS.
+  const ms = 1000 / fps;
+  recState.frameInterval = setInterval(() => {
+    if (!recState.active) return;
+    _compositeToLive();
+  }, ms);
+
+  const stream   = liveCanvas.captureStream(fps);
+  const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+    ? 'video/webm;codecs=vp9' : 'video/webm';
+  const recorder = new MediaRecorder(stream, { mimeType });
+  recState.recorder = recorder;
+
+  recorder.ondataavailable = e => { if (e.data.size > 0) recState.chunks.push(e.data); };
+  recorder.onstop = () => {
+    const blob = new Blob(recState.chunks, { type: 'video/webm' });
+    downloadBlob(blob, 'simplelens.webm');
+    recState.chunks = [];
+  };
+  recorder.start(200); // collect data every 200ms
+  // First composite immediately so the stream isn't blank.
+  _compositeToLive();
+}
+
+function _startGifRecording(fps, liveCanvas) {
+  // Lazy-load gif.js from the local copy (avoids cross-origin worker issues).
+  if (!window.GIF) {
+    const script  = document.createElement('script');
+    script.src    = 'gif.js';
+    script.onload = () => _initGifEncoder(fps, liveCanvas);
+    script.onerror = () => console.error('simpleLens: could not load gif.js');
+    document.head.appendChild(script);
+  } else {
+    _initGifEncoder(fps, liveCanvas);
+  }
+}
+
+function _initGifEncoder(fps, liveCanvas) {
+  /* global GIF */
+  const gif = new GIF({
+    workers: 2,
+    quality: 10,
+    workerScript: 'gif.worker.js',   // same-origin — no CSP issues
+  });
+  recState.gifObj = gif;
+
+  gif.on('finished', blob => downloadBlob(blob, 'simplelens.gif'));
+
+  const delay = Math.round(1000 / fps);
+  recState.frameInterval = setInterval(() => {
+    if (!recState.active) return;
+    _compositeToLive();
+    gif.addFrame(liveCanvas, { copy: true, delay });
+  }, delay);
+
+  _compositeToLive();
 }
