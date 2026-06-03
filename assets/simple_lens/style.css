@@ -173,6 +173,9 @@ html[data-theme="dark"] .sl-theme-btn:hover { color: #fff; background: rgba(255,
   height: 100%;
 }
 
+/* In light mode, invert the lensed image so background is bright and arcs are dark. */
+html[data-theme="light"] #sl-gl-canvas { filter: invert(1); }
+
 /* Overlay canvas for critical curves — sits on top, pointer-events off. */
 .sl-overlay {
   position: absolute;
@@ -268,7 +271,7 @@ html[data-theme="dark"] .sl-theme-btn:hover { color: #fff; background: rgba(255,
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--muted);
-  margin: 12px 0 6px;
+  margin: 20px 0 6px;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -436,8 +439,9 @@ html[data-theme="dark"] .sl-theme-btn:hover { color: #fff; background: rgba(255,
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--muted);
-  margin: 12px 0 7px;
+  margin: 20px 0 7px;
 }
+.sl-rec-subsection-label:first-of-type { margin-top: 0; }
 
 /* Format / FPS rows */
 .sl-rec-setting-row {

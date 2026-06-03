@@ -122,8 +122,10 @@ function showRendererError(msg) {
 
 function loadDemoState() {
   const lp = addPlane(0.5, 'lens');
-  lp.objects = [{ id: uid(), model: 'sie', cx: 0, cy: 0,
-                  params: { b: 2.3, q: 0.75, phi: 0 } }];
+  lp.objects = [
+    { id: uid(), model: 'sie', cx: 0,    cy: 0,    params: { b: 2.3, q: 0.75, phi: 0 } },
+    { id: uid(), model: 'sie', cx: 0.86, cy: 0.71, params: { b: 0.3, q: 0.75, phi: 0 } },
+  ];
   const sp = addPlane(1.0, 'source');
   sp.objects = [{ id: uid(), model: 'exponential', cx: 0.3, cy: 0.1,
                   params: { sigma: 0.05, q: 0.40, phi: 0, amplitude: 2.20 } }];
@@ -238,7 +240,8 @@ function attachHandlers() {
   document.addEventListener('keydown', e => {
     const tag  = (document.activeElement?.tagName) || '';
     const type = (document.activeElement?.type)    || '';
-    if ((tag === 'INPUT' && type !== 'checkbox') || tag === 'TEXTAREA') return;
+    // Allow shortcuts when a range slider has focus (range inputs don't consume C/R/etc).
+    if ((tag === 'INPUT' && type !== 'checkbox' && type !== 'range') || tag === 'TEXTAREA') return;
     if (e.key === 'r' || e.key === 'R') {
       recState.active ? stopRecording() : startRecording();
       return;
@@ -562,7 +565,6 @@ function renderSidebar() {
   // ── Settings tab ─────────────────────────────────────────────────────────────
   const settingsContent = `
     <div class="sl-panel">
-      <div class="sl-panel-title">Settings</div>
       <div class="sl-global-input">
         <label>Field of view</label>
         <input type="number" id="sl-fov" min="0.5" max="20" step="0.5" value="${state.fov}">
@@ -615,7 +617,7 @@ function renderSidebar() {
   const recordingPanel = `
     <div class="sl-panel">
       <div class="sl-panel-title-row">
-        <span class="sl-panel-title">Recording</span>
+        <span class="sl-panel-title">LIVE</span>
         ${infoSection('sl-rec-info', `
           <b>WebM</b> — fast, browser-native. Critical curves are hidden during programmatic recording to keep frame timing correct.<br><br>
           <b>GIF</b> — auto-looping, universally shareable. Slower to encode, 256 colors. GIF programmatic recording includes critical curves at full resolution.`)}
