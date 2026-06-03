@@ -69,6 +69,16 @@ function removePlane(id) {
 
 function invalidateDistances() { state.dist = precomputeDistances(state.planes); }
 
+function deleteSelectedObject() {
+  const pl = selectedPlane();
+  if (!pl) return;
+  const toDelete = pl.objects.find(o => o.id === state.selectedObjId);
+  if (toDelete?.model === 'pastedimage') renderer?.clearPastedTexture(toDelete.id);
+  pl.objects = pl.objects.filter(o => o.id !== state.selectedObjId);
+  state.selectedObjId = pl.objects[0]?.id ?? null;
+  renderSidebar(); rebuildPlaneBoxes(); redraw();
+}
+
 function selectedPlane() { return state.planes.find(p => p.id === state.selectedPlaneId) ?? null; }
 function selectedObj() {
   const pl = selectedPlane();
@@ -273,11 +283,7 @@ function attachHandlers() {
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
       const pl = selectedPlane();
       if (!pl) return;
-      const toDelete = pl.objects.find(o => o.id === state.selectedObjId);
-      if (toDelete?.model === 'pastedimage') renderer?.clearPastedTexture(toDelete.id);
-      pl.objects = pl.objects.filter(o => o.id !== state.selectedObjId);
-      state.selectedObjId = pl.objects[0]?.id ?? null;
-      renderSidebar(); rebuildPlaneBoxes(); redraw();
+      deleteSelectedObject();
     }
   });
 }
@@ -458,7 +464,7 @@ function attachPlaneCanvasHandlers(canvas, plane) {
       pStart = { cx: hitObj.cx, cy: hitObj.cy, mx: pos.x, my: pos.y };
       state.selectedPlaneId = plane.id;
       state.selectedObjId   = hitObj.id;
-      redrawPlaneCanvas(plane); renderSidebar();
+      renderSidebar(); redraw();  // redraw() updates all plane canvases, clearing stale rings
     } else {
       istate = 'add-pending';
       pStart = { mx: pos.x, my: pos.y };
@@ -592,8 +598,12 @@ function renderSidebar() {
     paramsPanel = `
       <div class="sl-panel">
         <div class="sl-panel-title-row">
-          <span class="sl-panel-title">${isLens ? 'Lens' : 'Source'} (z=${pl.z.toFixed(2)})</span>
+          <span class="sl-panel-title">Selected: ${isLens ? 'Lens' : 'Source'}</span>
           ${infoHtml}
+        </div>
+        <div class="sl-params-meta-row">
+          <span class="sl-params-z">z = ${pl.z.toFixed(2)}</span>
+          <button class="sl-delete-obj-btn" id="sl-delete-obj">Delete</button>
         </div>
         <select class="sl-select" id="sl-model-select">${modelOptions}</select>
         ${isLens ? lensParamRows(obj) : sourceParamRows(obj)}
@@ -738,6 +748,7 @@ function renderSidebar() {
   document.getElementById('sl-show-caus')?.addEventListener('change', e => { state.showCaustics   = e.target.checked; redraw(); });
 
   if (obj && pl) {
+    document.getElementById('sl-delete-obj')?.addEventListener('click', deleteSelectedObject);
     document.getElementById('sl-model-select')?.addEventListener('change', e => {
       obj.model = e.target.value; obj.params = defaultParams(obj.model);
       renderSidebar(); redraw();

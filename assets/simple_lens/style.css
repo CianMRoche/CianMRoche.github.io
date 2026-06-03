@@ -370,8 +370,9 @@ html[data-theme="light"] #sl-gl-canvas { filter: invert(1); }
   row-gap: 6px;
   align-items: center;
 }
-/* Title row, model select, and empty-msg span all 3 columns. */
+/* Title row, meta row, model select, and empty-msg span all 3 columns. */
 #sl-obj-panel .sl-panel-title-row,
+#sl-obj-panel .sl-params-meta-row,
 #sl-obj-panel .sl-select,
 #sl-obj-panel .sl-empty-msg { grid-column: 1 / -1; }
 /* Remove param-row's own box so its three children become direct grid items.
@@ -387,6 +388,35 @@ html[data-theme="light"] #sl-gl-canvas { filter: invert(1); }
   border-radius: 6px;
   background: color-mix(in srgb, var(--bg-soft) 70%, transparent);
   padding: 12px;
+}
+
+/* z-value + delete button row under the panel title */
+.sl-params-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.sl-params-z {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.sl-delete-obj-btn {
+  font-size: 11px;
+  padding: 2px 9px;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.1s, border-color 0.1s, background 0.1s;
+}
+.sl-delete-obj-btn:hover {
+  color: var(--bad);
+  border-color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 8%, transparent);
 }
 
 .sl-panel-title-row {
