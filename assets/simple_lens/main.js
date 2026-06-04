@@ -57,7 +57,7 @@ function defaultParams(model) {
 }
 
 function makeObject(type, model, cx = 0, cy = 0) {
-  return { id: uid(), model, cx, cy, params: defaultParams(model) };
+  return { id: uid(), model, cx, cy, params: defaultParams(model), showShape: false };
 }
 
 function addPlane(z, type) {
@@ -591,10 +591,10 @@ function drawPlaneCanvas(canvas, plane) {
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 const LENS_INFO = {
-  sie: `<b>b</b> — Einstein radius (arcsec): overall lensing strength.<br>
+  sie: `<b>b</b> — Deflection scale (arcsec), equal to 4πσ<sub>v</sub>²/c². Proportional to the velocity dispersion squared; independent of distances. The Einstein ring appears at roughly b × (D<sub>LS</sub>/D<sub>S</sub>).<br>
         <b>q</b> — Axis ratio: 1 = circular, lower = more elliptical.<br>
         <b>φ</b> — Position angle of the major axis (radians).`,
-  pointmass: `<b>θ<sub>E</sub></b> — Einstein radius (arcsec): angular radius of the Einstein ring for a source directly behind the lens.`,
+  pointmass: `<b>Strength</b> — Mass scale (arcsec): equal to √(4GM / c² D<sub>L</sub>). For a fixed lens redshift, D<sub>L</sub> is constant, so Strength is proportional to √M. The Einstein ring appears at Strength × √(D<sub>LS</sub> / D<sub>S</sub>), so its size also depends on the redshift geometry.`,
   nfw: `<b>κ<sub>s</sub></b> — Central convergence amplitude: sets the overall mass scale.<br>
         <b>r<sub>s</sub></b> — Scale radius (arcsec): where the NFW profile transitions from ρ∝r⁻¹ to ρ∝r⁻³.`,
 };
@@ -784,6 +784,7 @@ function renderSidebar() {
 
   if (obj && pl) {
     document.getElementById('sl-delete-obj')?.addEventListener('click', deleteSelectedObject);
+    document.getElementById('sl-show-shape')?.addEventListener('change', e => { obj.showShape = e.target.checked; redraw(); });
     document.getElementById('sl-model-select')?.addEventListener('change', e => {
       obj.model = e.target.value; obj.params = defaultParams(obj.model);
       renderSidebar(); redraw();
@@ -817,17 +818,27 @@ function sliderRow(label, key, min, max, step, val) {
   </div>`;
 }
 
+function shapeToggle(obj) {
+  return `<label class="sl-shape-toggle">
+    <input type="checkbox" id="sl-show-shape" ${obj.showShape ? 'checked' : ''}>
+    Show shape
+  </label>`;
+}
+
 function lensParamRows(obj) {
   const p = obj.params;
   if (obj.model === 'pointmass')
-    return sliderRow('θ<sub>E</sub> (")', 'thetaE', 0.1, 3.0, 0.05, p.thetaE ?? 1);
+    return sliderRow('Strength (")', 'thetaE', 0.1, 3.0, 0.05, p.thetaE ?? 1)
+         + shapeToggle(obj);
   if (obj.model === 'sie')
     return sliderRow('b (")',          'b',   0.1, 3.0,      0.05, p.b      ?? 1)
          + sliderRow('q',              'q',   0.1, 1.0,      0.05, p.q      ?? 0.75)
-         + sliderRow('φ (rad)',        'phi', 0,   Math.PI,  0.05, p.phi    ?? 0);
+         + sliderRow('φ (rad)',        'phi', 0,   Math.PI,  0.05, p.phi    ?? 0)
+         + shapeToggle(obj);
   if (obj.model === 'nfw')
     return sliderRow('κ<sub>s</sub>',      'kappaS', 0.05, 3.0, 0.05, p.kappaS ?? 0.5)
-         + sliderRow('r<sub>s</sub> (")', 'rS',     0.05, 2.0, 0.05, p.rS     ?? 0.4);
+         + sliderRow('r<sub>s</sub> (")', 'rS',     0.05, 2.0, 0.05, p.rS     ?? 0.4)
+         + shapeToggle(obj);
   return '';
 }
 
@@ -851,7 +862,8 @@ function sourceParamRows(obj) {
             <span class="sl-param-label">Color</span>
             <input type="color" data-param-color="1" value="${displayColor}"
                    class="sl-color-input" title="Source light color">
-          </div>`;
+          </div>`
+       + shapeToggle(obj);
 }
 
 // ── Axis canvas ───────────────────────────────────────────────────────────────
@@ -993,9 +1005,10 @@ function drawOverlay() {
   if (overlay.width !== W || overlay.height !== H) { overlay.width = W; overlay.height = H; }
   overlayCtx.clearRect(0, 0, W, H);
 
-  const hasLens   = state.planes.some(p => p.type === 'lens');
-  const needCurve = (state.showCritCurves || state.showCaustics) && state.dist && hasLens;
-  if (!needCurve && !state.showMarkers) return;
+  const hasLens     = state.planes.some(p => p.type === 'lens');
+  const needCurve   = (state.showCritCurves || state.showCaustics) && state.dist && hasLens;
+  const needEllipse = state.planes.some(pl => pl.objects.some(o => o.showShape));
+  if (!needCurve && !state.showMarkers && !needEllipse) return;
 
   const Wl = W/dpr, Hl = H/dpr;
   overlayCtx.save();
@@ -1003,6 +1016,38 @@ function drawOverlay() {
 
   function toPixel(ax, ay) {
     return [(ax / state.fov + 0.5) * Wl, (-ay / state.fov + 0.5) * Hl];
+  }
+
+  // ── 0. Shape ellipses (drawn first, behind markers) ──────────────────────────
+  if (needEllipse) {
+    overlayCtx.lineWidth   = 1.5;
+    overlayCtx.globalAlpha = 0.6;
+    overlayCtx.setLineDash([5, 4]);
+    for (const plane of state.planes) {
+      const col = typeColorHex(plane.type);
+      for (const obj of plane.objects) {
+        if (!obj.showShape) continue;
+        const [px, py] = toPixel(obj.cx, obj.cy);
+        const p = obj.params;
+        let a_arc = 0, q = 1, phi = 0;
+        if (plane.type === 'lens') {
+          if      (obj.model === 'sie')       { a_arc = p.b ?? 1;      q = p.q ?? 0.75; phi = p.phi ?? 0; }
+          else if (obj.model === 'pointmass') { a_arc = p.thetaE ?? 1; }
+          else if (obj.model === 'nfw')       { a_arc = p.rS ?? 0.4; }
+        } else if (obj.model !== 'pastedimage') {
+          a_arc = 2 * (p.sigma ?? 0.1); q = p.q ?? 1; phi = p.phi ?? 0;
+        }
+        if (a_arc <= 0) continue;
+        const a_px = a_arc / state.fov * Wl;
+        const b_px = a_px * Math.max(q, 0.01);
+        overlayCtx.strokeStyle = col;
+        overlayCtx.beginPath();
+        overlayCtx.ellipse(px, py, a_px, b_px, -phi, 0, Math.PI * 2);
+        overlayCtx.stroke();
+      }
+    }
+    overlayCtx.setLineDash([]);
+    overlayCtx.globalAlpha = 1;
   }
 
   // ── 1. Position markers — same style as the plane-view canvases ─────────────

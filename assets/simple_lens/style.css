@@ -644,6 +644,20 @@ html[data-theme="light"] #sl-gl-canvas { filter: invert(1); }
   color: var(--fg);
   cursor: pointer;
 }
+/* "Show shape" toggle — spans all grid columns */
+.sl-shape-toggle {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  margin-top: 3px;
+}
+.sl-shape-toggle input { accent-color: var(--accent); flex-shrink: 0; }
+.sl-shape-toggle:hover { color: var(--fg-soft); }
+
 /* Color picker in source params — spans slider + value columns */
 .sl-color-input {
   grid-column: 2 / -1;
