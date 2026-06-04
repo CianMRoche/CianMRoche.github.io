@@ -274,6 +274,28 @@ function attachHandlers() {
     const type = (document.activeElement?.type)    || '';
     // Allow shortcuts when a range slider has focus (range inputs don't consume C/R/etc).
     if ((tag === 'INPUT' && type !== 'checkbox' && type !== 'range') || tag === 'TEXTAREA') return;
+    // Arrow keys nudge the selected object; skip if any input has focus
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' ||
+        e.key === 'ArrowUp'   || e.key === 'ArrowDown') {
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      const obj = selectedObj(), pl = selectedPlane();
+      if (!obj || !pl) return;
+      e.preventDefault();
+      const nudge = state.fov / 200;
+      if (e.key === 'ArrowLeft')  obj.cx -= nudge;
+      if (e.key === 'ArrowRight') obj.cx += nudge;
+      if (e.key === 'ArrowUp')    obj.cy += nudge;
+      if (e.key === 'ArrowDown')  obj.cy -= nudge;
+      if (!recState.progInitialPos) {
+        const el = document.getElementById('sl-prog-init-val');
+        if (el) el.innerHTML = `(${obj.cx.toFixed(2)}, ${obj.cy.toFixed(2)}) <span class="sl-muted-note">(current)</span>`;
+      }
+      redrawPlaneCanvas(pl);
+      renderSidebar();
+      redraw();
+      return;
+    }
+
     if (e.key === 'r' || e.key === 'R') {
       recState.active ? stopRecording() : startRecording();
       return;

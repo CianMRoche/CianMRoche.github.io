@@ -147,7 +147,7 @@ $$r = \sqrt{q^2(x_r^2 + s^2) + y_r^2}$$
 
 $$\alpha_{x_r} = A\arctan\!\left(\frac{\sqrt{1-q^2}\cdot x_r}{r + s}\right), \qquad \alpha_{y_r} = A\operatorname{arctanh}\!\left(\frac{\sqrt{1-q^2}\cdot y_r}{r + q^2 s}\right)$$
 
-The arctanh function is absent in GLSL ES, so the shader uses the identity $\operatorname{arctanh}(x) = \tfrac{1}{2}\ln\!\left(\dfrac{1+x}{1-x}\right)$.
+The arctanh function is absent in GLSL ES, so the shader uses the identity $\operatorname{arctanh}(x) = \tfrac{1}{2}\ln\left(\dfrac{1+x}{1-x}\right)$.
 
 **Step 4:** rotate back to the sky frame:
 
@@ -170,7 +170,7 @@ With $x = |\mathbf{u}|/r_s$:
 
 $$h(x) = \begin{cases} \dfrac{\arctan\!\sqrt{(x-1)/(x+1)}}{\sqrt{x^2-1}} & x > 1 \\[8pt] \dfrac{\operatorname{arctanh}\!\sqrt{(1-x)/(x+1)}}{\sqrt{1-x^2}} & x < 1 \\[6pt] 1 & x \approx 1 \end{cases}$$
 
-$$g(x) = \ln\!\frac{x}{2} + h(x)$$
+$$g(x) = \ln\frac{x}{2} + h(x)$$
 
 $$|\hat{\boldsymbol{\alpha}}| = \frac{4\kappa_s r_s\, g(x)}{|\mathbf{u}|}, \qquad \hat{\boldsymbol{\alpha}} = |\hat{\boldsymbol{\alpha}}|\,\hat{\mathbf{u}}$$
 
