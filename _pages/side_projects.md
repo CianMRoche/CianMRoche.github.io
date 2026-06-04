@@ -51,8 +51,8 @@ html[data-theme="dark"] .sp-launch:hover {
 
 <div style="clear: both;">
   <div class="sp-img-wrap">
-    <img class="img-light" src="/images/simpleLens_light.png" alt="simpleLens logo" width="250" height="250">
-    <img class="img-dark"  src="/images/simpleLens.png" alt="simpleLens logo" width="250" height="250">
+    <img class="img-light" src="/images/simplelens-prog-2pointmass-light.gif" alt="simpleLens logo" width="250" height="250">
+    <img class="img-dark"  src="/images/simplelens-prog-2pointmass.gif" alt="simpleLens logo" width="250" height="250">
   </div>
   <div>
     <h2>simpleLens</h2>

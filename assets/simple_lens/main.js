@@ -1526,6 +1526,15 @@ function _compositeToLive() {
   }
   const ctx = lc.getContext('2d');
   ctx.drawImage(gl, 0, 0);
+  // In light mode CSS applies filter:invert(1) to the GL canvas visually, but
+  // drawImage captures raw pixels.  Replicate the inversion in the composite
+  // using difference-blend with white, which is mathematically identical.
+  if (document.documentElement.getAttribute('data-theme') !== 'dark') {
+    ctx.globalCompositeOperation = 'difference';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, lc.width, lc.height);
+    ctx.globalCompositeOperation = 'source-over';
+  }
   ctx.drawImage(ov, 0, 0);
 }
 
