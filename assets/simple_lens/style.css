@@ -119,6 +119,7 @@ html, body {
   cursor: pointer;
   transition: color 0.12s, border-color 0.12s;
   font-family: inherit;
+  text-decoration: none;
 }
 .sl-demo-btn:hover { color: var(--fg); border-color: var(--fg-soft); }
 

@@ -164,6 +164,7 @@ function buildDOM() {
       <div class="sl-topbar">
         <h1>simpleLens</h1>
         <a class="sl-back-btn" href="/side_projects/">← Side projects</a>
+        <a class="sl-demo-btn" href="/simplelens-how-it-works/" target="_blank" rel="noopener">Docs</a>
         <button class="sl-demo-btn" id="sl-demo" title="Walk through a tour of the controls">Tour</button>
         <button class="sl-theme-btn" id="sl-theme" title="Toggle dark mode" aria-label="Toggle dark mode">
           <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -709,7 +710,7 @@ function renderSidebar() {
         <input type="number" id="sl-crit-zs" min="0.1" max="15" step="0.1" value="${ezs.toFixed(2)}">
       </div>
     </div>
-    <a class="sl-how-link" href="/simplelens-how-it-works/" target="_blank" rel="noopener">How does this work? →</a>`;
+    `;
 
   // Programmatic recording display values.
   const selObj = selectedObj(), selPl = selectedPlane();

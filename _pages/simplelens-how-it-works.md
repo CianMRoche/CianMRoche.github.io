@@ -1,11 +1,7 @@
 ---
-layout: single
+layout: doc
 title: "How simpleLens works"
 permalink: /simplelens-how-it-works/
-author_profile: false
-toc: true
-toc_sticky: true
-toc_label: "Contents"
 ---
 
 A description of the gravitational lensing computation behind [simpleLens](/assets/simple_lens/).
