@@ -34,10 +34,8 @@ const EPS      = 1e-12;
 const SIE_SOFT = 0.001;
 
 export function deflectPointMass(ux, uy, thetaE) {
-  const r2 = ux * ux + uy * uy;
-  if (r2 < EPS) return [0, 0];
-  const s = thetaE * thetaE / r2;
-  return [s * ux, s * uy];
+  const r2 = Math.max(ux*ux + uy*uy, SIE_SOFT * SIE_SOFT);
+  return [thetaE * thetaE / r2 * ux, thetaE * thetaE / r2 * uy];
 }
 
 export function deflectSIE(ux, uy, b, q, phi) {

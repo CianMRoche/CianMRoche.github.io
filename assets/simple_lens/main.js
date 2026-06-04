@@ -52,6 +52,7 @@ function defaultParams(model) {
   if (model === 'nfw')         return { kappaS: 0.5, rS: 0.4 };
   if (model === 'gaussian')    return { sigma: 0.06, q: 1.0,  phi: 0, amplitude: 1.0,  color: '#ffffff' };
   if (model === 'exponential') return { sigma: 0.05, q: 0.40, phi: 0, amplitude: 2.20, color: '#ffffff' };
+  if (model === 'point')       return { sigma: 0.08, amplitude: 1.0, color: '#ffffff' };
   if (model === 'pastedimage') return { amplitude: 1.0 };
   return {};
 }
@@ -177,9 +178,6 @@ function buildDOM() {
           <div class="sl-image-wrap" id="sl-image-wrap">
             <canvas id="sl-gl-canvas"></canvas>
             <canvas class="sl-overlay" id="sl-overlay"></canvas>
-            <div class="sl-image-hint" id="sl-image-hint" style="display:none">
-              Add a source plane to see lensing
-            </div>
             <div class="sl-rec-dot" id="sl-rec-dot" style="display:none"></div>
           </div>
           <!-- Controls group: right-justified, right-grows -->
@@ -626,6 +624,7 @@ function renderSidebar() {
          <option value="pointmass" ${obj.model==='pointmass' ?'selected':''}>Point mass</option>`
       : `<option value="gaussian"    ${obj.model==='gaussian'    ?'selected':''}>Gaussian</option>
          <option value="exponential" ${obj.model==='exponential' ?'selected':''}>Exponential</option>
+         <option value="point"       ${obj.model==='point'       ?'selected':''}>Uniform circle</option>
          <option value="pastedimage" ${obj.model==='pastedimage' ?'selected':''}>Pasted image</option>`;
     const infoHtml = isLens
       ? infoSection('sl-param-info', LENS_INFO[obj.model] ?? '')
@@ -683,7 +682,8 @@ function renderSidebar() {
         <label>Source z<sub>s</sub></label>
         <input type="number" id="sl-crit-zs" min="0.1" max="15" step="0.1" value="${ezs.toFixed(2)}">
       </div>
-    </div>`;
+    </div>
+    <a class="sl-how-link" href="/simplelens-how-it-works/" target="_blank" rel="noopener">How does this work? →</a>`;
 
   // Programmatic recording display values.
   const selObj = selectedObj(), selPl = selectedPlane();
@@ -844,6 +844,18 @@ function lensParamRows(obj) {
 
 function sourceParamRows(obj) {
   const p = obj.params;
+  if (obj.model === 'point') {
+    const isLight    = document.documentElement.getAttribute('data-theme') !== 'dark';
+    const storedColor = p.color ?? '#ffffff';
+    const displayColor = isLight ? invertHexColor(storedColor) : storedColor;
+    return sliderRow('r (")', 'sigma', 0.005, 1.0, 0.005, p.sigma ?? 0.08)
+         + `<div class="sl-param-row">
+              <span class="sl-param-label">Color</span>
+              <input type="color" data-param-color="1" value="${displayColor}" class="sl-color-input">
+            </div>`
+         + shapeToggle(obj);
+  }
+
   if (obj.model === 'pastedimage') {
     const hint = obj.pasteCanvas ? '' :
       '<p style="font-size:11px;color:var(--muted);font-style:italic;margin-top:6px">Select this point, then Ctrl+V to paste an image</p>';
@@ -1034,6 +1046,8 @@ function drawOverlay() {
           if      (obj.model === 'sie')       { a_arc = p.b ?? 1;      q = p.q ?? 0.75; phi = p.phi ?? 0; }
           else if (obj.model === 'pointmass') { a_arc = p.thetaE ?? 1; }
           else if (obj.model === 'nfw')       { a_arc = p.rS ?? 0.4; }
+        } else if (obj.model === 'point') {
+          a_arc = p.sigma ?? 0.08; q = 1; phi = 0;  // hard edge — draw at exact radius
         } else if (obj.model !== 'pastedimage') {
           a_arc = 2 * (p.sigma ?? 0.1); q = p.q ?? 1; phi = p.phi ?? 0;
         }
@@ -1078,8 +1092,12 @@ function drawOverlay() {
   // ── 2. Critical curves / caustics ────────────────────────────────────────────
   let critSegs = [], causSegs = [];
   if (needCurve) {
+    // Sample 30% wider than the display FOV so rings near the edge are found in
+    // full rather than cut off at the grid boundary.  The display filter below
+    // still clips what is actually drawn to the visible image area.
+    const samplingFov = state.fov * 1.3;
     const res = computeCritCurvesForZs(
-      state.planes, state.dist, effectiveCritZs(), state.fov, state.critGridN
+      state.planes, state.dist, effectiveCritZs(), samplingFov, state.critGridN
     );
     critSegs = res.critSegments;
     causSegs = res.causticSegments;
@@ -1094,8 +1112,27 @@ function drawOverlay() {
         overlayCtx.stroke();
       }
     }
-    if (state.showCritCurves) drawSegs(critSegs,  CRIT_COLOR);
-    if (state.showCaustics)   drawSegs(causSegs,   CAUS_COLOR);
+
+    const _h = state.fov / 2;
+    const MIN_CRIT_SEGS = 50;
+
+    // Realness check uses the TOTAL segment count (before the display clip) so a
+    // genuine ring near the edge — which has many segments in the wider sample but
+    // few within the visible area — is not incorrectly suppressed.
+    const isRealCurve = critSegs.length >= MIN_CRIT_SEGS;
+
+    // Clip to the visible image area for display.
+    const critFiltered = critSegs.filter(([[x0,y0],[x1,y1]]) =>
+      (Math.abs(x0) <= _h && Math.abs(y0) <= _h) ||
+      (Math.abs(x1) <= _h && Math.abs(y1) <= _h));
+    const causFiltered = causSegs.filter(([[x0,y0],[x1,y1]]) =>
+      Math.abs(x0) < _h*2.5 && Math.abs(y0) < _h*2.5 &&
+      Math.abs(x1) < _h*2.5 && Math.abs(y1) < _h*2.5);
+
+    if (isRealCurve) {
+      if (state.showCritCurves) drawSegs(critFiltered, CRIT_COLOR);
+      if (state.showCaustics)   drawSegs(causFiltered, CAUS_COLOR);
+    }
   }
 
   // ── 3. Legend (top-left) ─────────────────────────────────────────────────────
@@ -1145,8 +1182,6 @@ function redraw() {
 
 function _doRedraw() {
   if (!renderer || !state.dist) return;
-  const hasSource = state.planes.some(p => p.type === 'source');
-  document.getElementById('sl-image-hint').style.display = hasSource ? 'none' : '';
   const allPlanes = [...state.planes].sort((a, b) => a.z - b.z);
   renderer.setScene(allPlanes, state.dist, state.fov);
   for (const plane of state.planes) redrawPlaneCanvas(plane);

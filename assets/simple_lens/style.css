@@ -698,6 +698,16 @@ html[data-theme="light"] #sl-gl-canvas { filter: invert(1); }
   50%       { opacity: 0.3; }
 }
 
+.sl-how-link {
+  display: block;
+  font-size: 11.5px;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 10px 0 4px;
+  text-align: right;
+}
+.sl-how-link:hover { color: var(--accent); }
+
 .sl-perf-note {
   margin-bottom: 8px;
   font-size: 11px;

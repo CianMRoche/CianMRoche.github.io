@@ -87,7 +87,9 @@ float atanh_approx(float x) {
 }
 
 vec2 deflectPointMass(vec2 u, float thetaE) {
-  float r2 = max(dot(u, u), EPS);
+  // Softened point mass: same core radius as SIE to prevent singularity.
+  // Physically negligible at the scales typical in simpleLens.
+  float r2 = max(dot(u, u), SIE_SOFT * SIE_SOFT);
   return (thetaE * thetaE / r2) * u;
 }
 
@@ -167,6 +169,11 @@ float analyticalBrightness(int idx, vec2 beta) {
   float sig = max(p.x, 0.01);
   float amp = p.w;
   if (u_srcModel[idx] == 1) return amp * exp(-sqrt(r2) / sig);
+  if (u_srcModel[idx] == 4) {
+    // Uniform circle: constant brightness inside radius sig, zero outside.
+    // No axis ratio or position angle — r2 uses the isotropic offset already computed.
+    return (sqrt(r2) <= sig) ? amp : 0.0;
+  }
   return amp * exp(-r2 / (2.0 * sig * sig));
 }
 
@@ -370,7 +377,8 @@ export class Renderer {
         srcCenter[si * 2]   = obj.cx;
         srcCenter[si * 2+1] = obj.cy;
         srcModel[si]        = obj.model === 'exponential' ? 1
-                            : obj.model === 'pastedimage' ? 3 : 0;
+                            : obj.model === 'pastedimage' ? 3
+                            : obj.model === 'point'       ? 4 : 0;
         srcParams[si * 4]   = obj.params.sigma     ?? 0.3;
         srcParams[si * 4+1] = obj.params.q         ?? 1.0;
         srcParams[si * 4+2] = obj.params.phi       ?? 0.0;
