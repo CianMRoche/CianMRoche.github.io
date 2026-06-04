@@ -107,17 +107,26 @@ vec2 deflectSIE(vec2 u, float b, float q, float phi) {
   return vec2(cp * ax - sp * ay, sp * ax + cp * ay);
 }
 
-vec2 deflectNFW(vec2 u, float kappaS, float rS) {
-  float r  = length(u);
-  if (r < EPS) return vec2(0.0);
-  float x  = r / max(rS, EPS);
-  float hx;
-  if (abs(x - 1.0) < 1.0e-3) { hx = 1.0; }
-  else if (x > 1.0) { hx = atan(sqrt((x-1.0)/(x+1.0))) / sqrt(x*x-1.0); }
-  else              { hx = atanh_approx(sqrt((1.0-x)/(1.0+x))) / sqrt(1.0-x*x); }
-  float g   = log(0.5 * x) + hx;
-  float mag = 4.0 * kappaS * rS * g / r;
-  return mag * (u / r);
+// EPL — Elliptical Power Law.
+// Computed as SIE deflections scaled by the radial power (m/b)^(2-gamma).
+// At gamma=2 this reduces exactly to the SIE; other values adjust the
+// density slope while preserving the elliptical geometry.
+vec2 deflectEPL(vec2 u, float b, float q, float phi, float gamma) {
+  float cp = cos(phi), sp = sin(phi);
+  float xr =  cp * u.x + sp * u.y;
+  float yr = -sp * u.x + cp * u.y;
+  float qs  = max(q, 0.001);
+  float sqf = sqrt(max(1.0 - qs * qs, EPS));
+  float s   = SIE_SOFT;
+  float m   = sqrt(qs * qs * (xr * xr + s * s) + yr * yr);
+  float A   = b * qs / sqf;
+  float ax_sie = A * atan(sqf * xr / (m + s));
+  float ay_sie = A * atanh_approx(sqf * yr / (m + qs * qs * s));
+  // Power-law scale factor; equals 1 when gamma=2 (pure SIE).
+  float power = 2.0 - gamma;
+  float scale = pow(max(m / max(b, EPS), EPS), power);
+  return vec2(cp * scale*ax_sie - sp * scale*ay_sie,
+              sp * scale*ax_sie + cp * scale*ay_sie);
 }
 
 vec2 lensDeflection(int idx, vec2 pos) {
@@ -126,7 +135,8 @@ vec2 lensDeflection(int idx, vec2 pos) {
   int  m = u_lensModel[idx];
   if (m == 0) return deflectPointMass(u, p.x);
   if (m == 1) return deflectSIE(u, p.x, p.y, p.z);
-  return deflectNFW(u, p.x, p.w);
+  if (m == 2) return deflectEPL(u, p.x, p.y, p.z, p.w);  // p.w = gamma
+  return vec2(0.0);
 }
 
 // ── Pasted image sampling ─────────────────────────────────────────────────────
@@ -511,6 +521,6 @@ function _modelParams(obj) {
   const { model, params } = obj;
   if (model === 'pointmass') return { model:0, p0: params.thetaE??1, p1:0, p2:0, p3:0 };
   if (model === 'sie')       return { model:1, p0: params.b??1, p1: params.q??0.8, p2: params.phi??0, p3:0 };
-  if (model === 'nfw')       return { model:2, p0: params.kappaS??0.5, p1:0, p2:0, p3: params.rS??0.5 };
+  if (model === 'epl')       return { model:2, p0: params.b??1, p1: params.q??0.75, p2: params.phi??0, p3: params.gamma??2 };
   return { model:0, p0:1, p1:0, p2:0, p3:0 };
 }

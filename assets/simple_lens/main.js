@@ -49,6 +49,7 @@ const state = {
 function defaultParams(model) {
   if (model === 'pointmass')   return { thetaE: 1.0 };
   if (model === 'sie')         return { b: 1.0, q: 0.75, phi: 0 };
+  if (model === 'epl')         return { b: 1.0, q: 0.75, phi: 0, gamma: 2.0 };
   if (model === 'nfw')         return { kappaS: 0.5, rS: 0.4 };
   if (model === 'gaussian')    return { sigma: 0.06, q: 1.0,  phi: 0, amplitude: 1.0,  color: '#ffffff' };
   if (model === 'exponential') return { sigma: 0.05, q: 0.40, phi: 0, amplitude: 2.20, color: '#ffffff' };
@@ -615,8 +616,10 @@ const LENS_INFO = {
         <b>q</b> — Axis ratio: 1 = circular, lower = more elliptical.<br>
         <b>φ</b> — Position angle of the major axis (radians).`,
   pointmass: `<b>Strength</b> — Mass scale (arcsec): equal to √(4GM / c² D<sub>L</sub>). For a fixed lens redshift, D<sub>L</sub> is constant, so Strength is proportional to √M. The Einstein ring appears at Strength × √(D<sub>LS</sub> / D<sub>S</sub>), so its size also depends on the redshift geometry.`,
-  nfw: `<b>κ<sub>s</sub></b> — Central convergence amplitude: sets the overall mass scale.<br>
-        <b>r<sub>s</sub></b> — Scale radius (arcsec): where the NFW profile transitions from ρ∝r⁻¹ to ρ∝r⁻³.`,
+  epl: `<b>b</b> — Deflection scale (arcsec). Same meaning as for the SIE; the Einstein ring appears at roughly b × (D<sub>LS</sub>/D<sub>S</sub>).<br>
+        <b>q</b> — Axis ratio: 1 = circular, lower = more elliptical.<br>
+        <b>φ</b> — Position angle of the major axis (radians).<br>
+        <b>γ</b> — Power-law slope. γ = 2 is isothermal (identical to SIE). γ &lt; 2 gives a steeper central density; γ &gt; 2 gives a shallower one. Typical galaxies have γ ≈ 1.9–2.1.`,
 };
 const SOURCE_INFO = `
   <b>σ</b> — Source size (arcsec): 1σ half-width of the brightness profile.<br>
@@ -642,7 +645,8 @@ function renderSidebar() {
   if (obj && pl) {
     const isLens = pl.type === 'lens';
     const modelOptions = isLens
-      ? `<option value="sie"       ${obj.model==='sie'       ?'selected':''}>SIE (Isothermal ellipsoid)</option>
+      ? `<option value="sie"       ${obj.model==='sie'       ?'selected':''}>SIE (Isothermal, γ=2)</option>
+         <option value="epl"       ${obj.model==='epl'       ?'selected':''}>EPL (Power law)</option>
          <option value="pointmass" ${obj.model==='pointmass' ?'selected':''}>Point mass</option>`
       : `<option value="gaussian"    ${obj.model==='gaussian'    ?'selected':''}>Gaussian</option>
          <option value="exponential" ${obj.model==='exponential' ?'selected':''}>Exponential</option>
@@ -853,9 +857,15 @@ function lensParamRows(obj) {
     return sliderRow('Strength (")', 'thetaE', 0.1, 3.0, 0.05, p.thetaE ?? 1)
          + shapeToggle(obj);
   if (obj.model === 'sie')
-    return sliderRow('b (")',          'b',   0.1, 3.0,      0.05, p.b      ?? 1)
-         + sliderRow('q',              'q',   0.1, 1.0,      0.05, p.q      ?? 0.75)
-         + sliderRow('φ (rad)',        'phi', 0,   Math.PI,  0.05, p.phi    ?? 0)
+    return sliderRow('b (")',   'b',   0.1, 3.0,     0.05, p.b   ?? 1)
+         + sliderRow('q',       'q',   0.1, 1.0,     0.05, p.q   ?? 0.75)
+         + sliderRow('φ (rad)', 'phi', 0,   Math.PI, 0.05, p.phi ?? 0)
+         + shapeToggle(obj);
+  if (obj.model === 'epl')
+    return sliderRow('b (")',   'b',     0.1, 3.0,     0.05, p.b     ?? 1)
+         + sliderRow('q',       'q',     0.1, 1.0,     0.05, p.q     ?? 0.75)
+         + sliderRow('φ (rad)', 'phi',   0,   Math.PI, 0.05, p.phi   ?? 0)
+         + sliderRow('γ',       'gamma', 0.5, 3.0,     0.05, p.gamma ?? 2.0)
          + shapeToggle(obj);
   if (obj.model === 'nfw')
     return sliderRow('κ<sub>s</sub>',      'kappaS', 0.05, 3.0, 0.05, p.kappaS ?? 0.5)
@@ -1066,8 +1076,8 @@ function drawOverlay() {
         let a_arc = 0, q = 1, phi = 0;
         if (plane.type === 'lens') {
           if      (obj.model === 'sie')       { a_arc = p.b ?? 1;      q = p.q ?? 0.75; phi = p.phi ?? 0; }
+          else if (obj.model === 'epl')       { a_arc = p.b ?? 1;      q = p.q ?? 0.75; phi = p.phi ?? 0; }
           else if (obj.model === 'pointmass') { a_arc = p.thetaE ?? 1; }
-          else if (obj.model === 'nfw')       { a_arc = p.rS ?? 0.4; }
         } else if (obj.model === 'point') {
           a_arc = p.sigma ?? 0.08; q = 1; phi = 0;  // hard edge — draw at exact radius
         } else if (obj.model !== 'pastedimage') {

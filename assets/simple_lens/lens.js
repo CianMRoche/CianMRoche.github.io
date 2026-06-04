@@ -53,21 +53,22 @@ export function deflectSIE(ux, uy, b, q, phi) {
   return [cp * ax - sp * ay, sp * ax + cp * ay];
 }
 
-export function deflectNFW(ux, uy, kappaS, rS) {
-  const r = Math.sqrt(ux * ux + uy * uy);
-  if (r < EPS) return [0, 0];
-  const x = r / Math.max(rS, EPS);
-  let hx;
-  if (Math.abs(x - 1) < 1e-4) {
-    hx = 1.0;
-  } else if (x > 1) {
-    hx = Math.atan(Math.sqrt((x - 1) / (x + 1))) / Math.sqrt(x * x - 1);
-  } else {
-    hx = Math.atanh(Math.sqrt((1 - x) / (1 + x))) / Math.sqrt(1 - x * x);
-  }
-  const g   = Math.log(0.5 * x) + hx;
-  const mag = 4.0 * kappaS * rS * g / r;
-  return [mag * ux / r, mag * uy / r];
+// EPL — same formulation as the shader: SIE deflections scaled by (m/b)^(2-gamma).
+export function deflectEPL(ux, uy, b, q, phi, gamma) {
+  const cp = Math.cos(phi), sp = Math.sin(phi);
+  const xr =  cp*ux + sp*uy;
+  const yr = -sp*ux + cp*uy;
+  const qs  = Math.max(q, 0.001);
+  const sqf = Math.sqrt(Math.max(1 - qs*qs, EPS));
+  const s   = SIE_SOFT;
+  const m   = Math.sqrt(qs*qs*(xr*xr + s*s) + yr*yr);
+  const A   = b * qs / sqf;
+  const ax_sie = A * Math.atan2(sqf * xr, m + s);
+  const ay_sie = A * 0.5 * Math.log((1 + sqf*yr/(m + qs*qs*s)) /
+                                      Math.max(1 - sqf*yr/(m + qs*qs*s), EPS));
+  const scale = Math.pow(Math.max(m / Math.max(b, EPS), EPS), 2.0 - gamma);
+  const ax = scale * ax_sie, ay = scale * ay_sie;
+  return [cp*ax - sp*ay, sp*ax + cp*ay];
 }
 
 // ── Multiplane ray tracer ──────────────────────────────────────────────────
@@ -88,7 +89,7 @@ function lensDeflection(obj, ux, uy) {
   const { model, params } = obj;
   if (model === 'pointmass') return deflectPointMass(ux, uy, params.thetaE);
   if (model === 'sie')       return deflectSIE(ux, uy, params.b, params.q, params.phi);
-  if (model === 'nfw')       return deflectNFW(ux, uy, params.kappaS, params.rS);
+  if (model === 'epl')       return deflectEPL(ux, uy, params.b, params.q, params.phi, params.gamma ?? 2);
   return [0, 0];
 }
 

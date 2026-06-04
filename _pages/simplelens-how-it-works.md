@@ -156,26 +156,27 @@ $$\alpha_x = \cos\varphi\,\alpha_{x_r} - \sin\varphi\,\alpha_{y_r}, \qquad \alph
 In the circular limit $q\to 1$, $\sqrt{1-q^2}\to 0$ and both arguments vanish.
 L'Hôpital's rule gives $|\hat{\boldsymbol{\alpha}}|\to b$: the constant-magnitude deflection of the SIS.
 
-### Spherical NFW (Wright & Brainerd 2000)
+### EPL — Elliptical Power Law
 
-The NFW profile describes dark-matter halos from N-body simulations.
-Its 3-D density is $\rho \propto r^{-1}$ (inner) transitioning to $\rho \propto r^{-3}$ (outer) at the scale radius $r_s$.
+A generalisation of the SIE in which the density slope is a free parameter.
+The projected surface density follows $\Sigma \propto m^{1-\gamma}$, where $m$ is the elliptical radius and $\gamma$ is the power-law slope.
+For $\gamma = 2$ this reduces exactly to the SIE.
+
+The deflection is computed by scaling the SIE deflection angles by the radial factor $(m/b)^{2-\gamma}$:
+
+$$\hat{\boldsymbol{\alpha}}_\text{EPL}(\mathbf{u}) = \left(\frac{m}{b}\right)^{2-\gamma} \hat{\boldsymbol{\alpha}}_\text{SIE}(\mathbf{u})$$
+
+where $m = \sqrt{q^2(x_r^2 + s^2) + y_r^2}$ is the softened elliptical radius in the principal frame (same as for the SIE), and $\hat{\boldsymbol{\alpha}}_\text{SIE}$ is the SIE deflection at that position.
+For $\gamma = 2$ the scale factor is $(m/b)^0 = 1$ and the SIE result is recovered exactly.
+
+The four parameters are:
 
 | Symbol | Meaning |
 |---|---|
-| $\kappa_s$ | Dimensionless convergence amplitude, sets the overall lensing strength |
-| $r_s$ | Scale radius (arcsec): the spatial extent of the halo, **not** the Einstein ring radius |
-
-With $x = |\mathbf{u}|/r_s$:
-
-$$h(x) = \begin{cases} \dfrac{\arctan\!\sqrt{(x-1)/(x+1)}}{\sqrt{x^2-1}} & x > 1 \\[8pt] \dfrac{\operatorname{arctanh}\!\sqrt{(1-x)/(x+1)}}{\sqrt{1-x^2}} & x < 1 \\[6pt] 1 & x \approx 1 \end{cases}$$
-
-$$g(x) = \ln\frac{x}{2} + h(x)$$
-
-$$|\hat{\boldsymbol{\alpha}}| = \frac{4\kappa_s r_s\, g(x)}{|\mathbf{u}|}, \qquad \hat{\boldsymbol{\alpha}} = |\hat{\boldsymbol{\alpha}}|\,\hat{\mathbf{u}}$$
-
-$g(x)$ encodes the enclosed projected mass as a function of the scaled radius.
-The Einstein ring location depends on both $\kappa_s$ and $r_s$ through this integral and is typically much smaller than $r_s$.
+| $b$ | Deflection scale (arcsec), same role as the SIE parameter |
+| $q$ | Axis ratio $0 \lt q \leq 1$ |
+| $\varphi$ | Position angle of the major axis (radians) |
+| $\gamma$ | Power-law slope: 2 = isothermal, $\gamma \lt 2$ steeper central density, $\gamma \gt 2$ shallower. Observed galaxies typically have $\gamma \approx 1.9$–$2.1$. |
 
 ---
 
@@ -242,5 +243,4 @@ The computation proceeds in four steps:
 
 - Schneider, Ehlers & Falco (1992), *Gravitational Lenses*, Springer. *(Multiplane lensing formalism.)*
 - Kormann, Schneider & Bartelmann (1994), Isothermal ellipsoidal mass distributions in gravitational lensing, A&A 284. *(SIE deflection angles.)*
-- Wright & Brainerd (2000), Gravitational lensing by NFW profiles, ApJ 534. (NFW deflection formula.)*
 - Blandford & Narayan (1986), Fermat surface, caustics, and the time delay between images, ApJ 310. (Early multiplane treatment.)*
