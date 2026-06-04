@@ -13,7 +13,7 @@ function uid() { return _nextId++; }
 // ── Type colors — lens = blue/cyan, source = amber ────────────────────────────
 function typeColorHex(type) {
   const dark = document.documentElement.getAttribute('data-theme') === 'dark';
-  if (type === 'lens') return dark ? '#7bbfcc' : '#2563eb';
+  if (type === 'lens') return dark ? '#7bbfcc' : '#4a7fc8';
   return dark ? '#fbbf24' : '#f59e0b';
 }
 
@@ -103,6 +103,7 @@ let renderer = null, glCanvas = null, overlayCtx = null;
 let axisCanvas = null, planesEl = null, sidebarEl = null;
 let _planeLevels      = new Map();  // plane.id → bump level, kept in sync with drawAxisCanvas
 let _draggingPlaneId  = null;       // id of the plane currently being axis-dragged
+let _arrowKeyStart    = 0;          // timestamp of the first keydown in the current arrow-key hold
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', init);
@@ -283,7 +284,10 @@ function attachHandlers() {
       const obj = selectedObj(), pl = selectedPlane();
       if (!obj || !pl) return;
       e.preventDefault();
-      const nudge = state.fov / 200;
+      // Reset timer on the first press; use elapsed time to pick speed tier.
+      if (!e.repeat) _arrowKeyStart = Date.now();
+      const held = Date.now() - _arrowKeyStart;
+      const nudge = held < 400 ? 0.01 : held < 1200 ? 0.04 : 0.12;
       if (e.key === 'ArrowLeft')  obj.cx -= nudge;
       if (e.key === 'ArrowRight') obj.cx += nudge;
       if (e.key === 'ArrowUp')    obj.cy += nudge;
@@ -502,9 +506,9 @@ function attachPlaneCanvasHandlers(canvas, plane) {
       hitObj.cy = pStart.cy + dy;
       redrawPlaneCanvas(plane); redraw();
       // Keep the "Initial pos (current)" display in sync without a full sidebar rebuild.
-      if (!recState.progInitialPos && hitObj.id === state.selectedObjId) {
-        const el = document.getElementById('sl-prog-init-val');
-        if (el) el.innerHTML = `(${hitObj.cx.toFixed(2)}, ${hitObj.cy.toFixed(2)}) <span class="sl-muted-note">(current)</span>`;
+      if (hitObj.id === state.selectedObjId) {
+        const posEl = document.getElementById('sl-obj-pos');
+        if (posEl) posEl.textContent = `(${hitObj.cx.toFixed(2)}, ${hitObj.cy.toFixed(2)})`;
       }
     }
   });
@@ -664,6 +668,7 @@ function renderSidebar() {
         </div>
         <div class="sl-params-meta-row">
           <span class="sl-params-z">z = ${pl.z.toFixed(2)}</span>
+          <span class="sl-params-pos" id="sl-obj-pos">(${obj.cx.toFixed(2)}, ${obj.cy.toFixed(2)})</span>
           <button class="sl-delete-obj-btn" id="sl-delete-obj">Delete</button>
         </div>
         <select class="sl-select" id="sl-model-select">${modelOptions}</select>
@@ -717,14 +722,11 @@ function renderSidebar() {
   const zLine = (selObj && selPl)
     ? `${selPl.type === 'lens' ? 'Lens' : 'Source'} z:&nbsp;&nbsp;${selPl.z.toFixed(2)}`
     : null;
-  const initLabel = recState.progInitialPos
-    ? `(${recState.progInitialPos.cx.toFixed(2)}, ${recState.progInitialPos.cy.toFixed(2)}) <span style="color:var(--muted)">(locked)</span>`
-    : selObj
-      ? `(${selObj.cx.toFixed(2)}, ${selObj.cy.toFixed(2)}) <span style="color:var(--muted)">(current)</span>`
-      : '<span style="color:var(--muted);font-style:italic">select an object below</span>';
-  const finalLabel = recState.progFinalPos
-    ? recState.progFinalPos.label
-    : '<span style="color:var(--muted);font-style:italic">not set</span>';
+  const _staging  = selObj ? (recState.progStaging.get(selObj.id) || {}) : {};
+  const initLabel = _staging.initialPos?.label
+    ?? '<span style="color:var(--muted);font-style:italic">not set</span>';
+  const finalLabel = _staging.finalPos?.label
+    ?? '<span style="color:var(--muted);font-style:italic">not set</span>';
 
   const recordingPanel = `
     <div class="sl-panel">
@@ -732,7 +734,8 @@ function renderSidebar() {
         <span class="sl-panel-title">LIVE</span>
         ${infoSection('sl-rec-info', `
           <b>WebM</b> — fast, browser-native. Critical curves are hidden during programmatic recording to keep frame timing correct.<br><br>
-          <b>GIF</b> — auto-looping, universally shareable. Slower to encode, 256 colors. GIF programmatic recording includes critical curves at full resolution.`)}
+          <b>GIF</b> — auto-looping, universally shareable. Slower to encode, 256 colors. GIF programmatic recording includes critical curves at full resolution.<br><br>
+          <b>Programmatic:</b> select an object, set its initial and final positions, click Add to program. Repeat for each object. All listed objects animate simultaneously on Record.`)}
       </div>
 
       <div class="sl-rec-setting-row">
@@ -759,13 +762,13 @@ function renderSidebar() {
       </div>
 
       <div class="sl-rec-subsection-label">Programmatic</div>
-      ${zLine ? `<div class="sl-rec-prog-z">${zLine}</div>` : ''}
+
+      ${zLine ? `<div class="sl-rec-prog-z" style="margin-bottom:4px">${zLine}</div>` : ''}
 
       <div class="sl-rec-prog-field">
         <span class="sl-rec-prog-key">Initial</span>
         <span class="sl-rec-prog-val" id="sl-prog-init-val">${initLabel}</span>
-        <button class="sl-rec-mini-btn" id="sl-prog-set-init" title="Lock current position as start">Set</button>
-        ${recState.progInitialPos ? `<button class="sl-rec-mini-btn sl-rec-mini-clear" id="sl-prog-clear-init" title="Revert to using current position">✕</button>` : ''}
+        <button class="sl-rec-mini-btn" id="sl-prog-set-init" title="Store current position as start">Set</button>
       </div>
 
       <div class="sl-rec-prog-field" style="margin-top:5px">
@@ -774,7 +777,26 @@ function renderSidebar() {
         <button class="sl-rec-mini-btn" id="sl-prog-set-final" title="Store current position as end">Set</button>
       </div>
 
-      <div class="sl-rec-prog-field" style="margin-top:5px">
+      <div class="sl-capture-row" style="margin-top:7px">
+        <button class="sl-capture-btn" id="sl-prog-add"
+                ${!_staging.initialPos || !_staging.finalPos ? 'disabled' : ''}
+                title="Commit this object's path to the program list">Add to program ↓</button>
+      </div>
+
+      <div class="sl-prog-list" id="sl-prog-list">
+        ${recState.progObjects.length === 0
+          ? `<div class="sl-prog-empty">No objects added yet</div>`
+          : recState.progObjects.map(e =>
+              `<div class="sl-prog-entry" data-id="${e.objId}">
+                <span class="sl-prog-entry-label">${e.label}</span>
+                <span class="sl-prog-entry-path">${e.initialPos ? `(${e.initialPos.cx.toFixed(2)},${e.initialPos.cy.toFixed(2)})` : 'current'} → (${e.finalPos.cx.toFixed(2)},${e.finalPos.cy.toFixed(2)})</span>
+                <button class="sl-rec-mini-btn sl-rec-mini-clear sl-prog-remove" data-id="${e.objId}">✕</button>
+              </div>`
+            ).join('')
+        }
+      </div>
+
+      <div class="sl-rec-prog-field" style="margin-top:8px">
         <span class="sl-rec-prog-key">Duration</span>
         <input type="number" id="sl-prog-duration" min="0.5" max="60" step="0.5" value="${recState.progDuration}"
                class="sl-prog-dur-input">
@@ -782,7 +804,11 @@ function renderSidebar() {
       </div>
 
       <div class="sl-capture-row" style="margin-top:8px">
-        <button class="sl-capture-btn" id="sl-prog-record">⏺ Record program</button>
+        <button class="sl-capture-btn" id="sl-prog-record"
+                ${recState.progObjects.length === 0 ? 'disabled' : ''}>⏺ Record program</button>
+        ${recState.progObjects.length > 0
+          ? `<button class="sl-rec-mini-btn sl-rec-mini-clear" id="sl-prog-clear-all" title="Clear program list">Clear all</button>`
+          : ''}
       </div>
     </div>`;
 
@@ -800,10 +826,14 @@ function renderSidebar() {
   document.getElementById('sl-rec-fps')?.addEventListener('change', e => { recState.fps = parseInt(e.target.value, 10); });
   document.getElementById('sl-rec-format')?.addEventListener('change', e => { recState.useGif = e.target.value === 'gif'; });
   document.getElementById('sl-prog-set-init')?.addEventListener('click', setProgInitialPosition);
-  document.getElementById('sl-prog-clear-init')?.addEventListener('click', clearProgInitialPos);
   document.getElementById('sl-prog-set-final')?.addEventListener('click', setProgFinalPosition);
+  document.getElementById('sl-prog-add')?.addEventListener('click', addToProgram);
+  document.getElementById('sl-prog-clear-all')?.addEventListener('click', () => { recState.progObjects = []; renderSidebar(); });
   document.getElementById('sl-prog-duration')?.addEventListener('change', e => { recState.progDuration = parseFloat(e.target.value) || 3; });
   document.getElementById('sl-prog-record')?.addEventListener('click', startProgrammaticRecording);
+  document.getElementById('sl-prog-list')?.querySelectorAll('.sl-prog-remove').forEach(btn => {
+    btn.addEventListener('click', () => removeFromProgram(btn.dataset.id));
+  });
   document.getElementById('sl-crit-res')?.addEventListener('change', e => { state.critGridN = parseInt(e.target.value, 10); redraw(); });
   document.getElementById('sl-crit-zs')?.addEventListener('change',  e => { const v = parseFloat(e.target.value); if (v > 0) { state.critZs = v; redraw(); } });
   document.getElementById('sl-show-crit')?.addEventListener('change', e => { state.showCritCurves = e.target.checked; redraw(); });
@@ -1181,7 +1211,8 @@ function drawOverlay() {
     const lx = 8, ly = 8;
     const lineH = 28, padV = 11, padH = 14;
     const boxW  = 220, boxH = legendItems.length * lineH + 2 * padV;
-    overlayCtx.fillStyle = 'rgba(0,0,0,0.58)';
+    const _dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    overlayCtx.fillStyle = _dark ? 'rgba(0,0,0,0.60)' : 'rgba(255,255,255,0.90)';
     overlayCtx.fillRect(lx, ly, boxW, boxH);
 
     overlayCtx.font         = '18px system-ui, -apple-system, sans-serif';
@@ -1198,7 +1229,7 @@ function drawOverlay() {
         overlayCtx.fillStyle = item.color;
         overlayCtx.beginPath(); overlayCtx.arc(ix + 12, iy, 7, 0, Math.PI * 2); overlayCtx.fill();
       }
-      overlayCtx.fillStyle = 'rgba(255,255,255,0.88)';
+      overlayCtx.fillStyle = _dark ? 'rgba(255,255,255,0.88)' : 'rgba(0,0,0,0.75)';
       overlayCtx.fillText(item.label, ix + 33, iy);
     });
   }
@@ -1260,45 +1291,70 @@ function captureSnapshot() {
 function setProgInitialPosition() {
   const obj = selectedObj();
   if (!obj) return;
-  recState.progInitialPos = { cx: obj.cx, cy: obj.cy };
-  renderSidebar();
-}
-
-function clearProgInitialPos() {
-  recState.progInitialPos = null;
+  const s = recState.progStaging.get(obj.id) || {};
+  recState.progStaging.set(obj.id, { ...s, initialPos: { cx: obj.cx, cy: obj.cy, label: `(${obj.cx.toFixed(2)}, ${obj.cy.toFixed(2)})` } });
   renderSidebar();
 }
 
 function setProgFinalPosition() {
   const obj = selectedObj();
-  const pl  = selectedPlane();
-  if (!obj || !pl) return;
-  recState.progFinalPos = {
-    cx: obj.cx, cy: obj.cy,
-    label: `(${obj.cx.toFixed(2)}, ${obj.cy.toFixed(2)})`,
-  };
+  if (!obj) return;
+  const s = recState.progStaging.get(obj.id) || {};
+  recState.progStaging.set(obj.id, { ...s, finalPos: { cx: obj.cx, cy: obj.cy, label: `(${obj.cx.toFixed(2)}, ${obj.cy.toFixed(2)})` } });
   renderSidebar();
 }
 
-// Animate the selected object from its current position to progFinalPos,
-// capturing each frame.  For GIF this runs as fast as possible (delay 0 between
-// frames); for WebM it runs in real time so the stream is correctly paced.
-function startProgrammaticRecording() {
-  if (recState.active) return;
-  const obj = selectedObj();
-  if (!obj)                  { return; }
-  if (!recState.progFinalPos){ return; }
+// Commit the current staging area (selected object + initial/final) to the program list.
+function addToProgram() {
+  const obj = selectedObj(), pl = selectedPlane();
+  const staging = recState.progStaging.get(obj.id) || {};
+  if (!staging.initialPos || !staging.finalPos) return;
+  // Replace any existing entry for this object so duplicates never accumulate.
+  recState.progObjects = recState.progObjects.filter(e => e.objId !== obj.id);
+  recState.progObjects.push({
+    objId:      obj.id,
+    planeId:    pl.id,
+    initialPos: { cx: staging.initialPos.cx, cy: staging.initialPos.cy },
+    finalPos:   { cx: staging.finalPos.cx,   cy: staging.finalPos.cy   },
+    label:      `${pl.type === 'lens' ? 'Lens' : 'Source'} z=${pl.z.toFixed(2)} (${obj.model})`,
+  });
+  // Clear this object's staging after committing.
+  recState.progStaging.delete(obj.id);
+  renderSidebar();
+}
 
-  const fps         = recState.fps;
-  const totalFrames = Math.max(2, Math.round(recState.progDuration * fps));
+function removeFromProgram(objId) {
+  const id = Number(objId);
+  recState.progObjects = recState.progObjects.filter(e => e.objId !== id);
+  renderSidebar();
+}
+
+// Animate all committed objects simultaneously from their initial to final positions.
+// For GIF frames are timestamped in metadata so slow computation doesn't affect
+// playback speed; for WebM critical curves are suppressed to maintain real-time pacing.
+function startProgrammaticRecording() {
+  if (recState.active || recState.progObjects.length === 0) return;
+
+  const fps          = recState.fps;
+  const totalFrames  = Math.max(2, Math.round(recState.progDuration * fps));
   const frameDelayMs = 1000 / fps;
 
-  // Use the locked initial position if set, otherwise use the object's current position.
-  const startCx = recState.progInitialPos?.cx ?? obj.cx;
-  const startCy = recState.progInitialPos?.cy ?? obj.cy;
-  const { cx: endCx, cy: endCy } = recState.progFinalPos;
+  // Build per-object animation data: resolve start positions now.
+  const animations = recState.progObjects.map(entry => {
+    const pl  = state.planes.find(p => p.id === entry.planeId);
+    const obj = pl?.objects.find(o => o.id === entry.objId);
+    if (!obj) return null;
+    return {
+      obj,
+      startCx: entry.initialPos.cx,
+      startCy: entry.initialPos.cy,
+      endCx:   entry.finalPos.cx,
+      endCy:   entry.finalPos.cy,
+    };
+  }).filter(Boolean);
 
-  // Live canvas for both WebM and GIF.
+  if (animations.length === 0) return;
+
   const lc    = document.createElement('canvas');
   lc.width    = glCanvas.width  || 512;
   lc.height   = glCanvas.height || 512;
@@ -1311,14 +1367,16 @@ function startProgrammaticRecording() {
 
   const doFrame = () => {
     if (!recState.active && frame < totalFrames) {
-      // Cancelled mid-way — restore start position.
-      obj.cx = startCx; obj.cy = startCy;
+      // Cancelled — restore all start positions.
+      for (const a of animations) { a.obj.cx = a.startCx; a.obj.cy = a.startCy; }
       invalidateDistances(); redraw();
       return;
     }
     const t = totalFrames === 1 ? 1 : frame / (totalFrames - 1);
-    obj.cx = startCx + (endCx - startCx) * t;
-    obj.cy = startCy + (endCy - startCy) * t;
+    for (const a of animations) {
+      a.obj.cx = a.startCx + (a.endCx - a.startCx) * t;
+      a.obj.cy = a.startCy + (a.endCy - a.startCy) * t;
+    }
 
     // Force a synchronous render.
     // GIF: frames are timestamped in metadata so slow computation doesn't
@@ -1399,9 +1457,10 @@ const recState = {
   rafId:     null,
   frameInterval: null,
   autoStopTimer: null,
-  // Programmatic recording
-  progInitialPos: null,  // { cx, cy } — null = use current object position at record time
-  progFinalPos:   null,  // { cx, cy, label }
+  // Per-object staging: Map<objId, { initialPos, finalPos }> — each object keeps its own values
+  progStaging:    new Map(),
+  // Committed keyframes that will animate simultaneously
+  progObjects:    [],    // [{ objId, planeId, initialPos:{cx,cy}, finalPos:{cx,cy}, label }]
   progDuration:   3.0,
 };
 
