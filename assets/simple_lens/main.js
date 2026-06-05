@@ -13,9 +13,35 @@ function uid() { return _nextId++; }
 // ── Type colors — lens = blue/cyan, source = amber ────────────────────────────
 function typeColorHex(type) {
   const dark = document.documentElement.getAttribute('data-theme') === 'dark';
-  if (type === 'lens') return dark ? '#7bbfcc' : '#4a7fc8';
+  if (type === 'lens')   return dark ? '#7bbfcc' : '#4a7fc8';
+  if (type === 'hybrid') return dark ? '#b09ac8' : '#9b7dd4';
   return dark ? '#fbbf24' : '#f59e0b';
 }
+
+function planeEffectiveType(plane) {
+  const hasLens = plane.objects.some(o => o.type === 'lens');
+  const hasSrc  = plane.objects.some(o => o.type === 'source');
+  if (hasLens && hasSrc) return 'hybrid';
+  if (hasLens) return 'lens';
+  if (hasSrc)  return 'source';
+  // Empty plane: infer from button state
+  if (plane.addLens && plane.addSrc) return 'hybrid';
+  return plane.addLens ? 'lens' : 'source';
+}
+
+// Hybrid objects: a lens + source sharing a hybridId, treated as one in the UI.
+function hybridPartner(plane, obj) {
+  return obj.hybridId ? plane.objects.find(o => o.hybridId === obj.hybridId && o.id !== obj.id) : null;
+}
+// Returns the lens half of a hybrid pair (or the object itself if not hybrid).
+function hybridLensHalf(plane, obj) {
+  if (!obj.hybridId) return obj;
+  return plane.objects.find(o => o.hybridId === obj.hybridId && o.type === 'lens') ?? obj;
+}
+
+// Per-hybrid panel expansion state; reset when a different hybrid is selected.
+let _hybridExpanded = { lens: false, src: false };
+let _lastHybridId   = null;
 
 // Invert a 6-digit hex colour (#rrggbb → complement).
 function invertHexColor(hex) {
@@ -49,6 +75,28 @@ const state = {
   dist:            null,
 };
 
+// Draw a type-specific marker shape centred at (px, py) with circumradius r.
+// type: 'lens' = upward triangle, 'source' = downward triangle, 'hybrid' = diamond.
+const _S3 = Math.sqrt(3);
+function drawShapeMarker(ctx, type, px, py, r) {
+  ctx.beginPath();
+  if (type === 'lens') {
+    ctx.moveTo(px,               py - r);
+    ctx.lineTo(px + r * _S3 / 2, py + r / 2);
+    ctx.lineTo(px - r * _S3 / 2, py + r / 2);
+  } else if (type === 'source') {
+    ctx.moveTo(px,               py + r);
+    ctx.lineTo(px + r * _S3 / 2, py - r / 2);
+    ctx.lineTo(px - r * _S3 / 2, py - r / 2);
+  } else {
+    ctx.moveTo(px,     py - r);
+    ctx.lineTo(px + r, py);
+    ctx.lineTo(px,     py + r);
+    ctx.lineTo(px - r, py);
+  }
+  ctx.closePath();
+}
+
 function defaultParams(model) {
   if (model === 'pointmass')   return { thetaE: 1.0 };
   if (model === 'sie')         return { b: 1.0, q: 0.75, phi: 0 };
@@ -62,7 +110,7 @@ function defaultParams(model) {
 }
 
 function makeObject(type, model, cx = 0, cy = 0) {
-  return { id: uid(), model, cx, cy, params: defaultParams(model), showShape: false, hidden: false };
+  return { id: uid(), type, model, cx, cy, params: defaultParams(model), showShape: false, hidden: false };
 }
 
 function eyeIcon(hidden) {
@@ -79,7 +127,12 @@ function eyeIcon(hidden) {
 
 function addPlane(z, type) {
   const model = type === 'lens' ? 'sie' : 'exponential';
-  const plane = { id: uid(), z, type, objects: [makeObject(type, model)] };
+  const plane = {
+    id: uid(), z,
+    addLens: type !== 'source',
+    addSrc:  type !== 'lens',
+    objects: [makeObject(type, model)],
+  };
   state.planes.push(plane);
   state.planes.sort((a, b) => a.z - b.z);
   invalidateDistances();
@@ -98,8 +151,14 @@ function deleteSelectedObject() {
   const pl = selectedPlane();
   if (!pl) return;
   const toDelete = pl.objects.find(o => o.id === state.selectedObjId);
-  if (toDelete?.model === 'pastedimage') renderer?.clearPastedTexture(toDelete.id);
-  pl.objects = pl.objects.filter(o => o.id !== state.selectedObjId);
+  if (!toDelete) return;
+  // Delete hybrid partner too (both halves always travel together).
+  const removeIds = new Set(pl.objects
+    .filter(o => o.id === toDelete.id || (toDelete.hybridId && o.hybridId === toDelete.hybridId))
+    .map(o => o.id));
+  pl.objects.filter(o => removeIds.has(o.id) && o.model === 'pastedimage')
+            .forEach(o => renderer?.clearPastedTexture(o.id));
+  pl.objects = pl.objects.filter(o => !removeIds.has(o.id));
   state.selectedObjId = pl.objects[0]?.id ?? null;
   renderSidebar(); rebuildPlaneBoxes(); redraw();
 }
@@ -167,14 +226,14 @@ function showRendererError(msg) {
 
 function loadDemoState() {
   const lp = addPlane(0.5, 'lens');
-  const smallLens = { id: uid(), model: 'sie', cx: 0.86, cy: 0.71, params: { b: 0.3, q: 0.75, phi: 0 } };
+  const smallLens = { id: uid(), type: 'lens', model: 'sie', cx: 0.86, cy: 0.71, params: { b: 0.3, q: 0.75, phi: 0 }, showShape: false, hidden: false };
   lp.objects = [
-    { id: uid(), model: 'sie', cx: 0, cy: 0, params: { b: 2.3, q: 0.75, phi: 0 } },
+    { id: uid(), type: 'lens', model: 'sie', cx: 0, cy: 0, params: { b: 2.3, q: 0.75, phi: 0 }, showShape: false, hidden: false },
     smallLens,
   ];
   const sp = addPlane(1.0, 'source');
-  sp.objects = [{ id: uid(), model: 'exponential', cx: 0.3, cy: 0.1,
-                  params: { sigma: 0.05, q: 0.40, phi: 0, amplitude: 2.20 } }];
+  sp.objects = [{ id: uid(), type: 'source', model: 'exponential', cx: 0.3, cy: 0.1,
+                  params: { sigma: 0.05, q: 0.40, phi: 0, amplitude: 2.20 }, showShape: false, hidden: false }];
   // Pre-select the small off-axis lens so its params appear on load.
   state.selectedPlaneId = lp.id;
   state.selectedObjId   = smallLens.id;
@@ -314,6 +373,8 @@ function attachHandlers() {
       if (e.key === 'ArrowRight') obj.cx += nudge;
       if (e.key === 'ArrowUp')    obj.cy += nudge;
       if (e.key === 'ArrowDown')  obj.cy -= nudge;
+      const _kp = hybridPartner(pl, obj);
+      if (_kp) { _kp.cx = obj.cx; _kp.cy = obj.cy; }
       if (!recState.progInitialPos) {
         const el = document.getElementById('sl-prog-init-val');
         if (el) el.innerHTML = `(${obj.cx.toFixed(2)}, ${obj.cy.toFixed(2)}) <span class="sl-muted-note">(current)</span>`;
@@ -399,6 +460,11 @@ function attachAxisHandlers() {
       state.planes.sort((a, b) => a.z - b.z);
       invalidateDistances();
       rebuildPlaneBoxes(); drawAxisCanvas(); redraw();
+      // Update z in the params panel without a full sidebar rebuild.
+      if (dragPlane.id === state.selectedPlaneId) {
+        const zEl = document.querySelector('#sl-obj-panel .sl-params-z');
+        if (zEl) zEl.textContent = `z: ${z.toFixed(2)}`;
+      }
     } else {
       axisCanvas.style.cursor = nearestMarker(e.clientX, e.clientY) ? 'grab' : 'crosshair';
     }
@@ -424,8 +490,9 @@ function attachAxisHandlers() {
     if (!dragPlane && !didDrag) {
       const r    = axisCanvas.getBoundingClientRect();
       const z    = Math.round(axisXToZ(e.clientX - r.left, r.width) * 100) / 100;
-      const type = state.planes.some(p => p.type === 'lens') && !state.planes.some(p => p.type === 'source')
-        ? 'source' : 'lens';
+      const hasLensPlane = state.planes.some(p => { const t = planeEffectiveType(p); return t === 'lens' || t === 'hybrid'; });
+      const hasSrcPlane  = state.planes.some(p => { const t = planeEffectiveType(p); return t === 'source' || t === 'hybrid'; });
+      const type = hasLensPlane && !hasSrcPlane ? 'source' : 'lens';
       const pl = addPlane(z, type);
       state.selectedPlaneId = pl.id;
       state.selectedObjId   = pl.objects[0]?.id ?? null;
@@ -447,36 +514,31 @@ function rebuildPlaneBoxes() {
   }
 
   for (const plane of state.planes) {
-    const color     = typeColorHex(plane.type);
-    const lensAct   = plane.type === 'lens'   ? ' active' : '';
-    const srcAct    = plane.type === 'source' ? ' active' : '';
+    const effType   = planeEffectiveType(plane);
+    const lensAct   = plane.addLens ? ' active' : '';
+    const srcAct    = plane.addSrc  ? ' active' : '';
     const box       = document.createElement('div');
     box.className   = 'sl-plane-box';
-    box.dataset.id  = plane.id;
-    box.dataset.type = plane.type;
-    box.style.setProperty('--plane-color', color);
+    box.dataset.id            = plane.id;
+    box.dataset.effectiveType = effType;
 
     box.innerHTML = `
       <div class="sl-plane-header">
         <span class="sl-plane-z">z = ${plane.z.toFixed(2)}</span>
-        <button class="sl-plane-type-btn${lensAct}" data-type="lens">Lens</button>
-        <button class="sl-plane-type-btn${srcAct}"  data-type="source">Src</button>
+        <button class="sl-plane-type-btn${lensAct}" data-type="lens" title="Next click adds a lens">Lens</button>
+        <button class="sl-plane-type-btn${srcAct}"  data-type="source" title="Next click adds a source">Src</button>
         <button class="sl-plane-del" title="Delete plane">×</button>
       </div>
       <canvas class="sl-plane-canvas" width="148" height="148"></canvas>`;
 
     planesEl.appendChild(box);
 
-    // Type buttons.
+    // Type buttons are independent toggles; both on → next click adds a hybrid object.
     box.querySelectorAll('.sl-plane-type-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        plane.type = btn.dataset.type;
-        const model = plane.type === 'lens' ? 'sie' : 'exponential';
-        plane.objects = [makeObject(plane.type, model)];
-        state.selectedPlaneId = plane.id;
-        state.selectedObjId   = plane.objects[0].id;
-        invalidateDistances();
-        rebuildPlaneBoxes(); renderSidebar(); redraw();
+        if (btn.dataset.type === 'lens')   plane.addLens = !plane.addLens;
+        else                               plane.addSrc  = !plane.addSrc;
+        rebuildPlaneBoxes();
       });
     });
 
@@ -514,23 +576,24 @@ function attachPlaneCanvasHandlers(canvas, plane) {
       istate = 'dragging'; canvas.style.cursor = 'grabbing';
     }
     if (istate === 'add-pending' && Math.hypot(dpx, dy / state.fov * canvas.offsetHeight) > DRAG_THRESH) {
-      const model = plane.type === 'lens' ? 'sie' : 'gaussian';
-      hitObj = makeObject(plane.type, model, pStart.mx, pStart.my);
-      plane.objects.push(hitObj);
+      hitObj = _makeAddObjects(plane, pStart.mx, pStart.my);
       state.selectedPlaneId = plane.id;
       state.selectedObjId   = hitObj.id;
       pStart.cx = pStart.mx; pStart.cy = pStart.my;
       istate = 'add-dragging'; canvas.style.cursor = 'grabbing';
-      renderSidebar();
+      updatePlaneBoxColor(plane); renderSidebar();
     }
     if (istate === 'dragging' || istate === 'add-dragging') {
       hitObj.cx = pStart.cx + dx;
       hitObj.cy = pStart.cy + dy;
+      // Move hybrid partner in sync.
+      const _partner = hybridPartner(plane, hitObj);
+      if (_partner) { _partner.cx = hitObj.cx; _partner.cy = hitObj.cy; }
       redrawPlaneCanvas(plane); redraw();
       // Keep the "Initial pos (current)" display in sync without a full sidebar rebuild.
       if (hitObj.id === state.selectedObjId) {
         const posEl = document.getElementById('sl-obj-pos');
-        if (posEl) posEl.textContent = `Position: (${hitObj.cx.toFixed(2)}, ${hitObj.cy.toFixed(2)})″`;
+        if (posEl) posEl.textContent = `Pos: (${hitObj.cx.toFixed(2)}, ${hitObj.cy.toFixed(2)})`;
       }
     }
   });
@@ -556,20 +619,23 @@ function attachPlaneCanvasHandlers(canvas, plane) {
 
   canvas.addEventListener('pointerup', e => {
     if (istate === 'add-pending') {
-      // Clean click on empty space → add object here.
-      const pos   = canvasToArcsec(canvas, e);
-      const model = plane.type === 'lens' ? 'sie' : 'gaussian';
-      const obj   = makeObject(plane.type, model, pos.x, pos.y);
-      plane.objects.push(obj);
+      // Clean click on empty space → add object(s) here.
+      const pos = canvasToArcsec(canvas, e);
+      const obj = _makeAddObjects(plane, pos.x, pos.y);
       state.selectedPlaneId = plane.id;
       state.selectedObjId   = obj.id;
-      redrawPlaneCanvas(plane); renderSidebar(); redraw();
+      updatePlaneBoxColor(plane); redrawPlaneCanvas(plane); renderSidebar(); redraw();
     } else if (istate === 'dragging' || istate === 'add-dragging') {
       invalidateDistances(); redraw();
     }
     istate = 'idle'; hitObj = null;
     canvas.style.cursor = hitTestPlane(plane, canvas, e) ? 'grab' : 'crosshair';
   });
+}
+
+function updatePlaneBoxColor(plane) {
+  const box = planesEl.querySelector(`.sl-plane-box[data-id="${plane.id}"]`);
+  if (box) box.dataset.effectiveType = planeEffectiveType(plane);
 }
 
 function canvasToArcsec(canvas, e) {
@@ -580,12 +646,39 @@ function canvasToArcsec(canvas, e) {
   };
 }
 
+// Create one or two objects based on the plane's add-button state.
+// Returns the primary object to track as hitObj (lens half for hybrid).
+function _makeAddObjects(plane, cx, cy) {
+  if (plane.addLens && plane.addSrc) {
+    const hybridId = uid();
+    const lensObj = Object.assign(makeObject('lens',   'sie',      cx, cy), { hybridId });
+    const srcObj  = Object.assign(makeObject('source', 'gaussian', cx, cy), { hybridId });
+    plane.objects.push(lensObj, srcObj);
+    return lensObj;
+  } else if (plane.addLens) {
+    const obj = makeObject('lens',   'sie',      cx, cy);
+    plane.objects.push(obj);
+    return obj;
+  } else {
+    const obj = makeObject('source', 'gaussian', cx, cy);
+    plane.objects.push(obj);
+    return obj;
+  }
+}
+
 function hitTestPlane(plane, canvas, e) {
   const r = canvas.getBoundingClientRect();
+  const seenHybrids = new Set();
   for (const obj of plane.objects) {
+    // Test each hybrid pair only once, at the lens half's position.
+    if (obj.hybridId) {
+      if (seenHybrids.has(obj.hybridId)) continue;
+      seenHybrids.add(obj.hybridId);
+    }
     const px = (obj.cx / state.fov + 0.5) * r.width;
     const py = (-obj.cy / state.fov + 0.5) * r.height;
-    if (Math.hypot(e.clientX - r.left - px, e.clientY - r.top - py) < HIT_R) return obj;
+    if (Math.hypot(e.clientX - r.left - px, e.clientY - r.top - py) < HIT_R)
+      return hybridLensHalf(plane, obj);
   }
   return null;
 }
@@ -599,7 +692,7 @@ function drawPlaneCanvas(canvas, plane) {
   const ctx   = canvas.getContext('2d');
   const W = canvas.width, H = canvas.height;
   const dark  = document.documentElement.getAttribute('data-theme') === 'dark';
-  const color = typeColorHex(plane.type);
+  const color = typeColorHex(planeEffectiveType(plane));
 
   ctx.fillStyle = dark ? '#0d1117' : '#f9fafb';
   ctx.fillRect(0, 0, W, H);
@@ -620,20 +713,33 @@ function drawPlaneCanvas(canvas, plane) {
     }
   }
 
+  const drawnHybrids = new Set();
   for (const obj of plane.objects) {
+    // Hybrid pairs share a position — draw only once as a single purple dot.
+    if (obj.hybridId) {
+      if (drawnHybrids.has(obj.hybridId)) continue;
+      drawnHybrids.add(obj.hybridId);
+    }
     const px  = (obj.cx / state.fov + 0.5) * W;
     const py  = (-obj.cy / state.fov + 0.5) * H;
-    const sel = obj.id === state.selectedObjId && plane.id === state.selectedPlaneId;
+    // Selection: true if this obj or its hybrid partner is the selected object.
+    const sel = plane.id === state.selectedPlaneId &&
+      (obj.id === state.selectedObjId ||
+       (obj.hybridId && plane.objects.some(o => o.hybridId === obj.hybridId && o.id === state.selectedObjId)));
+    const isHidden = obj.hidden && (!obj.hybridId || plane.objects.every(o => o.hybridId !== obj.hybridId || o.id === obj.id || o.hidden));
+    const dotType  = obj.hybridId ? 'hybrid' : obj.type;
     const rad = 6;
-    ctx.beginPath(); ctx.arc(px, py, rad, 0, Math.PI * 2);
-    ctx.fillStyle = obj.hidden ? (dark ? '#555' : '#bbb') : color;
-    ctx.globalAlpha = obj.hidden ? 0.4 : (sel ? 1 : 0.7);
+    const objCol = isHidden ? (dark ? '#555' : '#bbb') : typeColorHex(dotType);
+    ctx.fillStyle = objCol;
+    ctx.globalAlpha = isHidden ? 0.4 : (sel ? 1 : 0.7);
+    drawShapeMarker(ctx, dotType, px, py, rad);
     ctx.fill();
     ctx.globalAlpha = 1;
     if (sel) {
-      ctx.beginPath(); ctx.arc(px, py, rad + 3.5, 0, Math.PI * 2);
-      ctx.strokeStyle = obj.hidden ? (dark ? '#666' : '#aaa') : color;
-      ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.strokeStyle = isHidden ? (dark ? '#666' : '#aaa') : objCol;
+      ctx.lineWidth = 1.5;
+      drawShapeMarker(ctx, dotType, px, py, rad + 3.5);
+      ctx.stroke();
     }
   }
 }
@@ -671,32 +777,93 @@ function renderSidebar() {
   // ── Params panel (built first — used in settingsContent below) ──────────────
   let paramsPanel = '';
   if (obj && pl) {
-    const isLens = pl.type === 'lens';
-    const modelOptions = isLens
-      ? `<option value="sie"       ${obj.model==='sie'       ?'selected':''}>SIE (Isothermal, γ=2)</option>
-         <option value="epl"       ${obj.model==='epl'       ?'selected':''}>EPL (Power law)</option>
-         <option value="pointmass" ${obj.model==='pointmass' ?'selected':''}>Point mass</option>`
-      : `<option value="gaussian"    ${obj.model==='gaussian'    ?'selected':''}>Gaussian</option>
-         <option value="exponential" ${obj.model==='exponential' ?'selected':''}>Exponential</option>
-         <option value="point"       ${obj.model==='point'       ?'selected':''}>Uniform circle</option>
-         <option value="pastedimage" ${obj.model==='pastedimage' ?'selected':''}>Pasted image</option>`;
-    const infoHtml = isLens
-      ? infoSection('sl-param-info', LENS_INFO[obj.model] ?? '')
-      : infoSection('sl-param-info', SOURCE_INFO);
-    paramsPanel = `
-      <div class="sl-panel">
-        <div class="sl-panel-title-row">
-          <span class="sl-panel-title">Selected: ${isLens ? 'Lens' : 'Source'} <span class="sl-params-z" style="text-transform:none">(z=${pl.z.toFixed(2)})</span></span>
-          ${infoHtml}
-        </div>
-        <div class="sl-params-meta-row">
-          <span class="sl-params-pos" id="sl-obj-pos">Position: (${obj.cx.toFixed(2)}, ${obj.cy.toFixed(2)})″</span>
-          <button class="sl-obj-vis-btn${obj.hidden ? ' sl-obj-hidden' : ''}" id="sl-toggle-vis" title="${obj.hidden ? 'Show in image' : 'Hide from image'}">${eyeIcon(obj.hidden)}</button>
-          <button class="sl-delete-obj-btn" id="sl-delete-obj">Delete</button>
-        </div>
-        <select class="sl-select" id="sl-model-select">${modelOptions}</select>
-        ${isLens ? lensParamRows(obj) : sourceParamRows(obj)}
-      </div>`;
+    const partner = hybridPartner(pl, obj);
+    const isHybrid = !!partner;
+
+    // Reset expansion state when a different hybrid is selected.
+    if (obj.hybridId !== _lastHybridId) {
+      _hybridExpanded = { lens: false, src: false };
+      _lastHybridId   = obj.hybridId ?? null;
+    }
+
+    if (isHybrid) {
+      // ── Hybrid object: dual collapsible sections ──
+      const lensObj = obj.type === 'lens' ? obj : partner;
+      const srcObj  = obj.type === 'source' ? obj : partner;
+      const bothHidden = lensObj.hidden && srcObj.hidden;
+      const lensExp = _hybridExpanded.lens, srcExp = _hybridExpanded.src;
+
+      const lensModelOpts = `
+        <option value="sie"       ${lensObj.model==='sie'       ?'selected':''}>SIE (Isothermal, γ=2)</option>
+        <option value="epl"       ${lensObj.model==='epl'       ?'selected':''}>EPL (Power law)</option>
+        <option value="pointmass" ${lensObj.model==='pointmass' ?'selected':''}>Point mass</option>`;
+      const srcModelOpts = `
+        <option value="gaussian"    ${srcObj.model==='gaussian'    ?'selected':''}>Gaussian</option>
+        <option value="exponential" ${srcObj.model==='exponential' ?'selected':''}>Exponential</option>
+        <option value="point"       ${srcObj.model==='point'       ?'selected':''}>Uniform circle</option>
+        <option value="pastedimage" ${srcObj.model==='pastedimage' ?'selected':''}>Pasted image</option>`;
+
+      paramsPanel = `
+        <div class="sl-panel">
+          <div class="sl-params-meta-row">
+            <span class="sl-params-z">z: ${pl.z.toFixed(2)}</span>
+            <span class="sl-params-pos" id="sl-obj-pos">Pos: (${lensObj.cx.toFixed(2)}, ${lensObj.cy.toFixed(2)})</span>
+            <button class="sl-obj-vis-btn${bothHidden ? ' sl-obj-hidden' : ''}" id="sl-toggle-vis" title="${bothHidden ? 'Show in image' : 'Hide from image'}">${eyeIcon(bothHidden)}</button>
+            <button class="sl-delete-obj-btn" id="sl-delete-obj">Delete</button>
+          </div>
+          <div class="sl-hybrid-section">
+            <button class="sl-hybrid-hdr" id="sl-hybrid-lens-hdr">
+              <span class="sl-hybrid-arrow">${lensExp ? '▾' : '▶'}</span>
+              <span class="sl-panel-title" style="flex:1">Lens</span>
+              ${infoSection('sl-param-info-lens', LENS_INFO[lensObj.model] ?? '')}
+            </button>
+            ${lensExp ? `<div class="sl-hybrid-body" data-hybrid-section="lens">
+              <select class="sl-select" id="sl-model-select-lens">${lensModelOpts}</select>
+              ${lensParamRows(lensObj)}
+            </div>` : ''}
+          </div>
+          <div class="sl-hybrid-section">
+            <button class="sl-hybrid-hdr" id="sl-hybrid-src-hdr">
+              <span class="sl-hybrid-arrow">${srcExp ? '▾' : '▶'}</span>
+              <span class="sl-panel-title" style="flex:1">Source</span>
+              ${infoSection('sl-param-info-src', SOURCE_INFO)}
+            </button>
+            ${srcExp ? `<div class="sl-hybrid-body" data-hybrid-section="src">
+              <select class="sl-select" id="sl-model-select-src">${srcModelOpts}</select>
+              ${sourceParamRows(srcObj)}
+            </div>` : ''}
+          </div>
+        </div>`;
+    } else {
+      // ── Single-type object ──
+      const isLens = obj.type === 'lens';
+      const modelOptions = isLens
+        ? `<option value="sie"       ${obj.model==='sie'       ?'selected':''}>SIE (Isothermal, γ=2)</option>
+           <option value="epl"       ${obj.model==='epl'       ?'selected':''}>EPL (Power law)</option>
+           <option value="pointmass" ${obj.model==='pointmass' ?'selected':''}>Point mass</option>`
+        : `<option value="gaussian"    ${obj.model==='gaussian'    ?'selected':''}>Gaussian</option>
+           <option value="exponential" ${obj.model==='exponential' ?'selected':''}>Exponential</option>
+           <option value="point"       ${obj.model==='point'       ?'selected':''}>Uniform circle</option>
+           <option value="pastedimage" ${obj.model==='pastedimage' ?'selected':''}>Pasted image</option>`;
+      const infoHtml = isLens
+        ? infoSection('sl-param-info', LENS_INFO[obj.model] ?? '')
+        : infoSection('sl-param-info', SOURCE_INFO);
+      paramsPanel = `
+        <div class="sl-panel">
+          <div class="sl-panel-title-row">
+            <span class="sl-panel-title">Selected: ${isLens ? 'Lens' : 'Source'}</span>
+            ${infoHtml}
+          </div>
+          <div class="sl-params-meta-row">
+            <span class="sl-params-z">z: ${pl.z.toFixed(2)}</span>
+            <span class="sl-params-pos" id="sl-obj-pos">Pos: (${obj.cx.toFixed(2)}, ${obj.cy.toFixed(2)})</span>
+            <button class="sl-obj-vis-btn${obj.hidden ? ' sl-obj-hidden' : ''}" id="sl-toggle-vis" title="${obj.hidden ? 'Show in image' : 'Hide from image'}">${eyeIcon(obj.hidden)}</button>
+            <button class="sl-delete-obj-btn" id="sl-delete-obj">Delete</button>
+          </div>
+          <select class="sl-select" id="sl-model-select">${modelOptions}</select>
+          ${isLens ? lensParamRows(obj) : sourceParamRows(obj)}
+        </div>`;
+    }
   } else {
     paramsPanel = `<div class="sl-panel"><div class="sl-empty-msg">Click an object in a plane box to edit its parameters.</div></div>`;
   }
@@ -900,32 +1067,90 @@ function renderSidebar() {
   document.getElementById('sl-show-caus')?.addEventListener('change', e => { state.showCaustics   = e.target.checked; redraw(); });
 
   if (obj && pl) {
+    const partner = hybridPartner(pl, obj);
+    const isHybrid = !!partner;
+    const lensObj = isHybrid ? (obj.type === 'lens' ? obj : partner) : null;
+    const srcObj  = isHybrid ? (obj.type === 'source' ? obj : partner) : null;
+
     document.getElementById('sl-toggle-vis')?.addEventListener('click', () => {
-      obj.hidden = !obj.hidden;
+      if (isHybrid) {
+        const newHidden = !(lensObj.hidden && srcObj.hidden);
+        lensObj.hidden = newHidden; srcObj.hidden = newHidden;
+      } else {
+        obj.hidden = !obj.hidden;
+      }
       renderSidebar(); redraw();
     });
     document.getElementById('sl-delete-obj')?.addEventListener('click', deleteSelectedObject);
-    document.getElementById('sl-show-shape')?.addEventListener('change', e => { obj.showShape = e.target.checked; redraw(); });
-    document.getElementById('sl-model-select')?.addEventListener('change', e => {
-      obj.model = e.target.value; obj.params = defaultParams(obj.model);
-      renderSidebar(); redraw();
-    });
-    document.getElementById('sl-obj-panel').querySelectorAll('input[type="color"][data-param-color]').forEach(inp => {
-      inp.addEventListener('input', () => {
-        // Picker shows the display colour; store the dark-mode equivalent.
-        const light = document.documentElement.getAttribute('data-theme') !== 'dark';
-        obj.params.color = light ? invertHexColor(inp.value) : inp.value;
-        redraw();
+
+    if (isHybrid) {
+      // Hybrid: collapsible section toggles
+      document.getElementById('sl-hybrid-lens-hdr')?.addEventListener('click', () => {
+        _hybridExpanded.lens = !_hybridExpanded.lens; renderSidebar();
       });
-    });
-    document.getElementById('sl-obj-panel').querySelectorAll('input[type="range"][data-param]').forEach(inp => {
-      const valEl = inp.parentElement.querySelector('.sl-param-val');
-      inp.addEventListener('input', () => {
-        obj.params[inp.dataset.param] = parseFloat(inp.value);
-        if (valEl) valEl.textContent = fmtP(parseFloat(inp.value));
-        redraw();
+      document.getElementById('sl-hybrid-src-hdr')?.addEventListener('click', () => {
+        _hybridExpanded.src = !_hybridExpanded.src; renderSidebar();
       });
-    });
+      // Lens section model + params
+      document.getElementById('sl-model-select-lens')?.addEventListener('change', e => {
+        lensObj.model = e.target.value; lensObj.params = defaultParams(lensObj.model);
+        renderSidebar(); redraw();
+      });
+      document.getElementById('sl-model-select-src')?.addEventListener('change', e => {
+        srcObj.model = e.target.value; srcObj.params = defaultParams(srcObj.model);
+        renderSidebar(); redraw();
+      });
+      document.getElementById('sl-obj-panel').querySelectorAll('[data-hybrid-section="lens"] input[type="range"][data-param]').forEach(inp => {
+        const valEl = inp.parentElement.querySelector('.sl-param-val');
+        inp.addEventListener('input', () => {
+          lensObj.params[inp.dataset.param] = parseFloat(inp.value);
+          if (valEl) valEl.textContent = fmtP(parseFloat(inp.value));
+          redraw();
+        });
+      });
+      document.getElementById('sl-obj-panel').querySelectorAll('[data-hybrid-section="src"] input[type="range"][data-param]').forEach(inp => {
+        const valEl = inp.parentElement.querySelector('.sl-param-val');
+        inp.addEventListener('input', () => {
+          srcObj.params[inp.dataset.param] = parseFloat(inp.value);
+          if (valEl) valEl.textContent = fmtP(parseFloat(inp.value));
+          redraw();
+        });
+      });
+      document.getElementById('sl-obj-panel').querySelectorAll('[data-hybrid-section="src"] input[type="color"][data-param-color]').forEach(inp => {
+        inp.addEventListener('input', () => {
+          const light = document.documentElement.getAttribute('data-theme') !== 'dark';
+          srcObj.params.color = light ? invertHexColor(inp.value) : inp.value;
+          redraw();
+        });
+      });
+      document.getElementById('sl-obj-panel').querySelectorAll('[data-hybrid-section="lens"] input[type="checkbox"]').forEach(inp => {
+        inp.addEventListener('change', () => { lensObj.showShape = inp.checked; redraw(); });
+      });
+      document.getElementById('sl-obj-panel').querySelectorAll('[data-hybrid-section="src"] input[type="checkbox"]').forEach(inp => {
+        inp.addEventListener('change', () => { srcObj.showShape = inp.checked; redraw(); });
+      });
+    } else {
+      document.getElementById('sl-show-shape')?.addEventListener('change', e => { obj.showShape = e.target.checked; redraw(); });
+      document.getElementById('sl-model-select')?.addEventListener('change', e => {
+        obj.model = e.target.value; obj.params = defaultParams(obj.model);
+        renderSidebar(); redraw();
+      });
+      document.getElementById('sl-obj-panel').querySelectorAll('input[type="color"][data-param-color]').forEach(inp => {
+        inp.addEventListener('input', () => {
+          const light = document.documentElement.getAttribute('data-theme') !== 'dark';
+          obj.params.color = light ? invertHexColor(inp.value) : inp.value;
+          redraw();
+        });
+      });
+      document.getElementById('sl-obj-panel').querySelectorAll('input[type="range"][data-param]').forEach(inp => {
+        const valEl = inp.parentElement.querySelector('.sl-param-val');
+        inp.addEventListener('input', () => {
+          obj.params[inp.dataset.param] = parseFloat(inp.value);
+          if (valEl) valEl.textContent = fmtP(parseFloat(inp.value));
+          redraw();
+        });
+      });
+    }
   }
 }
 
@@ -1063,7 +1288,7 @@ function drawAxisCanvas() {
 
   for (const plane of state.planes) {
     const x    = axisZToX(plane.z, Wl);
-    const col  = typeColorHex(plane.type);
+    const col  = typeColorHex(planeEffectiveType(plane));
     const sel  = plane.id === state.selectedPlaneId;
     const lv   = planeLevel.get(plane.id) || 0;
     const dy   = lv * BUMP_STEP;   // extra upward shift
@@ -1098,7 +1323,8 @@ function drawAxisCanvas() {
     // L/S tag below axis
     ctx.fillStyle = dark ? '#8b949e' : '#6b7280';
     ctx.font = '9px system-ui, sans-serif';
-    ctx.fillText(plane.type === 'lens' ? 'L' : 'S', x, axisY + 26);
+    const _eff = planeEffectiveType(plane);
+    ctx.fillText(_eff === 'lens' ? 'L' : _eff === 'hybrid' ? 'H' : 'S', x, axisY + 26);
   }
 
   // Hint text — bottom centre of the axis strip.
@@ -1115,7 +1341,7 @@ function drawAxisCanvas() {
 
 function effectiveCritZs() {
   if (state.critZs !== null) return state.critZs;
-  const sources = state.planes.filter(p => p.type === 'source');
+  const sources = state.planes.filter(p => { const t = planeEffectiveType(p); return t === 'source' || t === 'hybrid'; });
   return sources.length > 0 ? Math.max(...sources.map(p => p.z)) : 2.0;
 }
 
@@ -1124,10 +1350,10 @@ function effectiveCritZs() {
 function computeCritCurvesForZs(planes, dist, zs, fovArcsec, gridN) {
   const sorted = [...planes].sort((a, b) => a.z - b.z);
   // Look for a source plane already at zs.
-  let idx = sorted.findIndex(p => p.type === 'source' && Math.abs(p.z - zs) < 0.005);
+  let idx = sorted.findIndex(p => { const t = planeEffectiveType(p); return (t === 'source' || t === 'hybrid') && Math.abs(p.z - zs) < 0.005; });
   if (idx >= 0) return computeCriticalCurves(sorted, dist, idx, fovArcsec, gridN);
   // Insert a virtual (empty) source plane at zs and recompute distances.
-  const vp       = { id: -1, z: zs, type: 'source', objects: [] };
+  const vp       = { id: -1, z: zs, addLens: false, addSrc: true, objects: [] };
   const augmented = [...sorted, vp].sort((a, b) => a.z - b.z);
   const augDist   = precomputeDistances(augmented);
   const augIdx    = augmented.indexOf(vp);
@@ -1144,7 +1370,7 @@ function drawOverlay() {
   if (overlay.width !== W || overlay.height !== H) { overlay.width = W; overlay.height = H; }
   overlayCtx.clearRect(0, 0, W, H);
 
-  const hasLens     = state.planes.some(p => p.type === 'lens');
+  const hasLens     = state.planes.some(p => p.objects.some(o => o.type === 'lens'));
   const needCurve   = (state.showCritCurves || state.showCaustics) && state.dist && hasLens;
   const needEllipse = state.planes.some(pl => pl.objects.some(o => o.showShape));
   if (!needCurve && !state.showMarkers && !needEllipse) return;
@@ -1163,13 +1389,13 @@ function drawOverlay() {
     overlayCtx.globalAlpha = 0.6;
     overlayCtx.setLineDash([5, 4]);
     for (const plane of state.planes) {
-      const col = typeColorHex(plane.type);
       for (const obj of plane.objects) {
         if (!obj.showShape || obj.hidden) continue;
+        const col = typeColorHex(obj.type);
         const [px, py] = toPixel(obj.cx, obj.cy);
         const p = obj.params;
         let a_arc = 0, q = 1, phi = 0;
-        if (plane.type === 'lens') {
+        if (obj.type === 'lens') {
           if      (obj.model === 'sie')       { a_arc = p.b ?? 1;      q = p.q ?? 0.75; phi = p.phi ?? 0; }
           else if (obj.model === 'epl')       { a_arc = p.b ?? 1;      q = p.q ?? 0.75; phi = p.phi ?? 0; }
           else if (obj.model === 'pointmass') { a_arc = p.thetaE ?? 1; }
@@ -1194,22 +1420,28 @@ function drawOverlay() {
   // ── 1. Position markers — same style as the plane-view canvases ─────────────
   if (state.showMarkers) {
     const RAD = 6;
+    const drawnHybrids = new Set();
     for (const plane of state.planes) {
-      const col = typeColorHex(plane.type);
       for (const obj of plane.objects) {
+        if (obj.hybridId) {
+          if (drawnHybrids.has(obj.hybridId)) continue;
+          drawnHybrids.add(obj.hybridId);
+        }
+        const markerType = obj.hybridId ? 'hybrid' : obj.type;
+        const col = typeColorHex(markerType);
         const [px, py] = toPixel(obj.cx, obj.cy);
-        const sel = obj.id === state.selectedObjId && plane.id === state.selectedPlaneId;
-        overlayCtx.beginPath();
-        overlayCtx.arc(px, py, RAD, 0, Math.PI * 2);
-        overlayCtx.fillStyle  = col;
+        const sel = plane.id === state.selectedPlaneId &&
+          (obj.id === state.selectedObjId ||
+           (obj.hybridId && plane.objects.some(o => o.hybridId === obj.hybridId && o.id === state.selectedObjId)));
+        overlayCtx.fillStyle   = col;
         overlayCtx.globalAlpha = sel ? 1 : 0.7;
+        drawShapeMarker(overlayCtx, markerType, px, py, RAD);
         overlayCtx.fill();
         overlayCtx.globalAlpha = 1;
         if (sel) {
-          overlayCtx.beginPath();
-          overlayCtx.arc(px, py, RAD + 3.5, 0, Math.PI * 2);
           overlayCtx.strokeStyle = col;
           overlayCtx.lineWidth   = 1.5;
+          drawShapeMarker(overlayCtx, markerType, px, py, RAD + 3.5);
           overlayCtx.stroke();
         }
       }
@@ -1266,10 +1498,14 @@ function drawOverlay() {
   const legendItems = [];
   if (state.showCritCurves && hasLens) legendItems.push({ color: CRIT_COLOR, label: 'Critical curves', isLine: true });
   if (state.showCaustics   && hasLens) legendItems.push({ color: CAUS_COLOR, label: 'Caustics',        isLine: true });
-  if (state.showMarkers && state.planes.some(p => p.type === 'lens'))
-    legendItems.push({ color: typeColorHex('lens'),   label: 'Lens position',   isDot: true });
-  if (state.showMarkers && state.planes.some(p => p.type === 'source'))
-    legendItems.push({ color: typeColorHex('source'), label: 'Source position', isDot: true });
+  if (state.showMarkers) {
+    const hasLensObj   = state.planes.some(p => p.objects.some(o => o.type === 'lens'   && !o.hybridId));
+    const hasSrcObj    = state.planes.some(p => p.objects.some(o => o.type === 'source' && !o.hybridId));
+    const hasHybridObj = state.planes.some(p => p.objects.some(o => o.hybridId));
+    if (hasLensObj)   legendItems.push({ color: typeColorHex('lens'),   label: 'Lens',   isDot: true, markerType: 'lens'   });
+    if (hasSrcObj)    legendItems.push({ color: typeColorHex('source'), label: 'Source', isDot: true, markerType: 'source' });
+    if (hasHybridObj) legendItems.push({ color: typeColorHex('hybrid'), label: 'Hybrid', isDot: true, markerType: 'hybrid' });
+  }
 
   if (state.showLegend && legendItems.length > 0) {
     const lx = 8, ly = 8;
@@ -1291,7 +1527,8 @@ function drawOverlay() {
         overlayCtx.beginPath(); overlayCtx.moveTo(ix, iy); overlayCtx.lineTo(ix + 25, iy); overlayCtx.stroke();
       } else if (item.isDot) {
         overlayCtx.fillStyle = item.color;
-        overlayCtx.beginPath(); overlayCtx.arc(ix + 12, iy, 7, 0, Math.PI * 2); overlayCtx.fill();
+        drawShapeMarker(overlayCtx, item.markerType, ix + 12, iy, 7);
+        overlayCtx.fill();
       }
       overlayCtx.fillStyle = _dark ? 'rgba(255,255,255,0.88)' : 'rgba(0,0,0,0.75)';
       overlayCtx.fillText(item.label, ix + 33, iy);
@@ -1386,7 +1623,7 @@ function addToProgram() {
     planeId:    pl.id,
     initialPos: { cx: staging.initialPos.cx, cy: staging.initialPos.cy },
     finalPos:   { cx: staging.finalPos.cx,   cy: staging.finalPos.cy   },
-    label:      `${pl.type === 'lens' ? 'Lens' : 'Source'} z=${pl.z.toFixed(2)} (${obj.model})`,
+    label:      `${obj.type === 'lens' ? 'Lens' : 'Source'} z=${pl.z.toFixed(2)} (${obj.model})`,
   });
   // Clear this object's staging after committing.
   recState.progStaging.delete(obj.id);
@@ -1415,7 +1652,7 @@ function startProgrammaticRecording() {
     const obj = pl?.objects.find(o => o.id === entry.objId);
     if (!obj) return null;
     return {
-      obj,
+      obj, plane: pl,
       startCx: entry.initialPos.cx,
       startCy: entry.initialPos.cy,
       endCx:   entry.finalPos.cx,
@@ -1446,6 +1683,8 @@ function startProgrammaticRecording() {
     for (const a of animations) {
       a.obj.cx = a.startCx + (a.endCx - a.startCx) * t;
       a.obj.cy = a.startCy + (a.endCy - a.startCy) * t;
+      const _ap = hybridPartner(a.plane, a.obj);
+      if (_ap) { _ap.cx = a.obj.cx; _ap.cy = a.obj.cy; }
     }
 
     // Force a synchronous render.
@@ -1682,49 +1921,49 @@ const TOUR_STEPS = [
     target: '.sl-timeline',
     arrow: 'above',
     label: 'Redshift timeline',
-    text: 'The bar at the bottom is the <b>redshift timeline</b>. It represents the line of sight from the observer (left, z = 0) to distant galaxies (right). Click anywhere on the axis to place a new lens or source plane at that redshift.',
+    text: 'The bar at the bottom is the <b>redshift timeline</b>. It represents the line of sight from the observer (left, z = 0) to distant galaxies (right). Click anywhere on the axis to place a new plane at that redshift.',
   },
   {
     target: '.sl-planes',
     arrow: 'above',
     label: 'Plane viewer',
-    text: 'Each plane you add appears here as a small panel. The <b>canvas</b> shows a projected view of that plane. Dots represent lens masses or light sources. Click to select them, drag to move them. Click empty space in a plane to add a new object.',
+    text: 'Each plane you add appears here as a small panel. The canvas shows a projected view of that plane. Dots represent lens masses or light sources. Click to select them, drag to move them. Click empty space to add a new object.',
   },
   {
     target: '.sl-plane-box',
     arrow: 'above',
-    label: 'Lens / source planes',
-    text: 'Use the <b>Lens / Src</b> buttons at the top of each panel to switch the plane type. A <b>lens plane</b> contains mass that deflects light; a <b>source plane</b> contains light emitting objects. You can have multiple of each at different redshifts.',
+    label: 'Lens / source toggles',
+    text: 'The <b>Lens</b> and <b>Src</b> buttons are independent toggles that control what the next click creates. With only <b>Lens</b> active, clicking adds a deflecting mass. With only <b>Src</b> active, clicking adds a light-emitting source. With <b>both active</b>, clicking adds a <b>hybrid object</b>: a co-located lens and source shown as a single purple dot. Lenses, sources, and hybrids can coexist in any plane.',
   },
   {
     target: '#sl-obj-panel',
     arrow: 'left',
     label: 'Plane Controls',
-    text: 'When an object is selected in a plane panel, its parameters appear here. Choose the mass or light profile from the dropdown, then adjust sliders for Einstein radius, axis ratio, position angle, brightness, and more.',
+    text: 'When an object is selected, its parameters appear here. Choose a mass or brightness profile and adjust the sliders. For <b>hybrid objects</b>, two collapsible sections appear (one for the lens, one for the source), each expandable independently. The eye button hides an object from the computation without deleting it.',
   },
   {
     target: '#sl-image-wrap',
     arrow: 'right',
     label: 'Lensed image',
-    text: 'This is the <b>primary image panel</b>, showing what an observer at z = 0 would see. Light from source planes is bent by all intervening lens planes using full multiplane gravitational lensing. The image updates in real time as you move or adjust objects.',
+    text: 'This is the <b>primary image panel</b>, showing what an observer at z = 0 would see. Light from source objects is bent by all intervening lens objects using full multiplane gravitational lensing. The image updates in real time as you move or adjust objects.',
   },
   {
     target: '.sl-tab-btn[data-tab="settings"]',
     arrow: 'left',
     label: 'Settings',
-    text: 'The <b>Settings tab</b> controls the field of view and maximum redshift. The Critical Curves section lets you toggle the curves that mark where the number of lensed images changes. Press <kbd>C</kbd> to toggle them.',
+    text: 'The <b>Settings tab</b> controls the field of view, maximum redshift, and tone mapping curve. The Critical Curves section lets you overlay the contours where image count changes (press <kbd>C</kbd> to toggle). The Resolution dropdown controls curve detail: higher values are sharper but slower.',
   },
   {
     target: '.sl-tab-btn[data-tab="recording"]',
     arrow: 'left',
     label: 'Recording',
-    text: 'The <b>Recording tab</b> has two modes. <b>Live</b> recording captures whatever you do — press Record, interact with the simulation, press Stop, and download the result as a WebM video or GIF. <b>Programmatic</b> recording automatically animates a selected object in a straight line between two positions at a chosen speed — set a start, set an end, and hit Record Program.',
+    text: 'The <b>Recording tab</b> has two modes. <b>Live</b> recording captures whatever you do: press Record, interact, press Stop, then download as WebM or GIF. <b>Programmatic</b> recording animates a selected object between two positions at a chosen speed: set a start position, set an end position, and press Record Program.',
   },
   {
     target: null,
     arrow: null,
     label: 'Ready to explore',
-    text: 'That\'s the full tour! Try clicking on the redshift axis to add planes, moving the objects in the plane panels, and watching the lensed image update live. :)',
+    text: 'That\'s the full tour! Try clicking the redshift axis to add planes, moving objects in the plane panels, and watching the lensed image update live.',
     final: true,
   },
 ];
@@ -1735,6 +1974,12 @@ const tour = {
   active: false, step: 0,
   backdrop: null, spotlight: null, tooltip: null, quitBtn: null,
 };
+
+function _tourKeyHandler(e) {
+  if (!tour.active) return;
+  if (e.key === 'Enter') { e.preventDefault(); tourNext(); }
+  if (e.key === 'Escape') { endTour(); }
+}
 
 function startTour() {
   if (tour.active) return;
@@ -1752,6 +1997,7 @@ function startTour() {
   document.body.appendChild(tour.tooltip);
 
   window.addEventListener('resize', repositionTour);
+  document.addEventListener('keydown', _tourKeyHandler);
   showTourStep();
 }
 
@@ -1884,6 +2130,7 @@ function endTour() {
   if (!tour.active) return;
   tour.active = false;
   window.removeEventListener('resize', repositionTour);
+  document.removeEventListener('keydown', _tourKeyHandler);
   tour.backdrop?.remove();  tour.spotlight?.remove();  tour.tooltip?.remove();
   tour.backdrop = tour.spotlight = tour.tooltip = null;
 }

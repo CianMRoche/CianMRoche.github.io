@@ -15,8 +15,9 @@
   --bad:         #ef4444;
 
   /* Unified type colors: all lens planes share one color, all source planes another. */
-  --lens-color: #4a7fc8;
-  --src-color:  #f59e0b;
+  --lens-color:   #4a7fc8;
+  --src-color:    #f59e0b;
+  --hybrid-color: #9b7dd4;
 }
 
 html[data-theme="dark"] {
@@ -33,8 +34,9 @@ html[data-theme="dark"] {
   --warn:        #fbbf24;
   --bad:         #f87171;
 
-  --lens-color: #7bbfcc;
-  --src-color:  #fbbf24;
+  --lens-color:   #7bbfcc;
+  --src-color:    #fbbf24;
+  --hybrid-color: #b09ac8;
 }
 
 /* ── Reset / base ─────────────────────────────────────────────────────────── */
@@ -375,6 +377,7 @@ html[data-theme="light"] #sl-gl-canvas { filter: invert(1); }
 #sl-obj-panel .sl-panel-title-row,
 #sl-obj-panel .sl-params-meta-row,
 #sl-obj-panel .sl-select,
+#sl-obj-panel .sl-hybrid-section,
 #sl-obj-panel .sl-empty-msg { grid-column: 1 / -1; }
 /* Remove param-row's own box so its three children become direct grid items.
    Also suppress the margins that the parent row-gap now handles. */
@@ -465,6 +468,32 @@ html[data-theme="light"] #sl-gl-canvas { filter: invert(1); }
   color: var(--muted);
   flex: 1;
 }
+
+/* ── Hybrid object panels ─────────────────────────────────────────────────── */
+
+.sl-hybrid-section { border-top: 1px solid var(--hairline); padding-top: 4px; margin-top: 4px; }
+.sl-hybrid-section:first-of-type { border-top: none; margin-top: 0; padding-top: 0; }
+.sl-hybrid-hdr {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 2px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: var(--fg);
+  border-radius: 3px;
+}
+.sl-hybrid-hdr:hover { background: var(--bg-soft); }
+.sl-hybrid-arrow {
+  font-size: 9px;
+  color: var(--muted);
+  flex-shrink: 0;
+  width: 10px;
+}
+.sl-hybrid-body { padding: 4px 2px 2px; }
 
 /* ⓘ info toggle */
 .sl-info-details { position: relative; }
@@ -957,9 +986,10 @@ html[data-theme="light"] #sl-gl-canvas { filter: invert(1); }
   color: #fff;
 }
 
-/* Type-based border color on the plane box */
-.sl-plane-box[data-type="lens"]   { border-color: var(--lens-color); }
-.sl-plane-box[data-type="source"] { border-color: var(--src-color);  }
+/* Effective-type drives border and button active color via --plane-color */
+.sl-plane-box[data-effective-type="lens"]   { --plane-color: var(--lens-color);   }
+.sl-plane-box[data-effective-type="source"] { --plane-color: var(--src-color);    }
+.sl-plane-box[data-effective-type="hybrid"] { --plane-color: var(--hybrid-color); }
 
 .sl-plane-del {
   font-size: 13px;

@@ -8,6 +8,16 @@ A description of the gravitational lensing computation behind [simpleLens](/asse
 
 ---
 
+## Quick start
+
+1. **Click the redshift axis** (the bar at the bottom left) to add a plane. The first click places a lens plane; the second places a source plane. Additional planes can be added at any redshift and dragged to reposition them.
+2. **Click inside a plane panel** at the bottom of the screen to add an object at that position, or drag from empty space to place and position it in one motion. Click an existing dot to select it.
+3. **Toggle Lens and Src** in the plane header to control what the next click creates. With only one active, clicks add that object type. With both active, a click adds a **hybrid object** — a co-located lens and source that move together as a single purple dot.
+4. **Adjust parameters** in the Plane Controls panel. For regular objects, choose a profile and tune the sliders. For hybrid objects, collapsed sections for both lens and source controls appear.
+5. **The image panel** updates in real time. Press **C** to overlay critical curves and caustics. Use the eye button on any object to exclude it from the computation without deleting it. Use live or prorammatic recording features to make gifs or WebMs. 
+
+---
+
 ## 1. Coordinate system
 
 All angular positions are measured in **arcseconds** (″): object coordinates $(c_x, c_y)$, deflection angles, and size parameters all use this unit.
@@ -76,13 +86,14 @@ $$\boldsymbol{\theta}_j \;=\; \boldsymbol{\theta} \;-\; \sum_{k\,<\,j} \frac{D_{
 | $\boldsymbol{\theta}_j$ | Ray's angular position at plane $j$ (arcsec) |
 | $D_{kj}$ | Angular diameter distance from plane $k$ to plane $j$ |
 | $D_j$ | Angular diameter distance from observer to plane $j$ |
-| $\hat{\boldsymbol{\alpha}}_k(\boldsymbol{\theta}_k)$ | Deflection angle from all lenses in plane $k$, evaluated at the ray's position $\boldsymbol{\theta}_k$ |
+| $\hat{\boldsymbol{\alpha}}_k(\boldsymbol{\theta}_k)$ | Deflection angle from all lens objects in plane $k$, evaluated at the ray's position $\boldsymbol{\theta}_k$ |
 
-**Source planes** are passive: they receive the ray but contribute no deflection.
-Only **lens planes** enter the sum.
+Each object carries its own type — **lens** or **source** — independently of which plane it belongs to.
+Only lens objects enter the deflection sum; source objects are passive and receive the ray without contributing to it.
+A plane containing both types is a **hybrid plane**; its lens objects deflect and its source objects emit, handled separately by the same recursion.
 The weight $D_{kj}/D_j$ converts the deflection at plane $k$ into its angular displacement at the later plane $j$.
 
-The position at the final source plane is the **source-plane position** $\boldsymbol{\beta}$, where source brightness is sampled.
+The position at the target plane is the **source-plane position** $\boldsymbol{\beta}$, where source brightness is sampled.
 
 > Because each lens plane evaluates its deflection at the ray's *already-deflected* position $\boldsymbol{\theta}_k$, successive lens planes interact non-linearly — a key feature of multiplane lensing absent in single-plane calculations.
 
@@ -193,7 +204,8 @@ At each pixel, $\boldsymbol{\beta}$ is converted to UV coordinates centred on $(
 
 ### Compositing and tone mapping
 
-Contributions from all source objects across all source planes are summed per pixel to give a linear intensity $I \in [0,\infty)$.
+Contributions from all source objects across all planes are summed per pixel to give a linear intensity $I \in [0,\infty)$.
+Hidden objects contribute nothing to the sum, nor to deflection or critical curve computation.
 The sum is clamped to $[0,1]$ and passed through a tone-mapping curve before display.
 
 The dynamic range of astrophysical sources (bright ring core to faint extended arcs) far exceeds what a monitor can show linearly, so a nonlinear stretch is needed. Three standard options are available:

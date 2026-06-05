@@ -340,7 +340,8 @@ export class Renderer {
     gl.uniform1i(_locs.u_numPlanes, N);
 
     const planeType = new Int32Array(MAX_PLANES);
-    for (let i = 0; i < N; i++) planeType[i] = allPlanes[i].type === 'lens' ? 0 : 1;
+    for (let i = 0; i < N; i++)
+      planeType[i] = allPlanes[i].objects.some(o => !o.hidden && o.type === 'lens') ? 0 : 1;
     gl.uniform1iv(_locs.u_planeType, planeType);
 
     const D_obs  = new Float32Array(MAX_PLANES);
@@ -359,10 +360,9 @@ export class Renderer {
     const lensParams   = new Float32Array(MAX_OBJECTS * 4);
     let li = 0;
     for (let pi = 0; pi < N && li < MAX_OBJECTS; pi++) {
-      if (allPlanes[pi].type !== 'lens') continue;
       for (const obj of allPlanes[pi].objects) {
         if (li >= MAX_OBJECTS) break;
-        if (obj.hidden) continue;
+        if (obj.hidden || obj.type !== 'lens') continue;
         lensPlaneIdx[li]     = pi;
         lensCenter[li * 2]   = obj.cx;
         lensCenter[li * 2+1] = obj.cy;
@@ -394,10 +394,9 @@ export class Renderer {
     let si = 0;
 
     for (let pi = 0; pi < N && si < MAX_OBJECTS; pi++) {
-      if (allPlanes[pi].type !== 'source') continue;
       for (const obj of allPlanes[pi].objects) {
         if (si >= MAX_OBJECTS) break;
-        if (obj.hidden) continue;
+        if (obj.hidden || obj.type !== 'source') continue;
         srcPlaneIdx[si]     = pi;
         srcCenter[si * 2]   = obj.cx;
         srcCenter[si * 2+1] = obj.cy;
