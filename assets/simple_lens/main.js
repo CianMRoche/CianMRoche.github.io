@@ -965,9 +965,9 @@ function renderSidebar() {
         </select>
       </div>
       <div class="sl-capture-row" style="margin-top:8px">
-        <button class="sl-capture-btn" id="sl-snapshot-btn">📷 Save PNG</button>
+        <button class="sl-capture-btn" id="sl-snapshot-btn"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-1px;margin-right:4px"><path d="M8 2v8M4 7l4 4 4-4"/><line x1="2" y1="14" x2="14" y2="14"/></svg>Save PNG</button>
         <button class="sl-capture-btn ${recState.active ? 'recording' : ''}" id="sl-rec-btn"
-                title="Shortcut: R">${recState.active ? '⏹ Stop [R]' : '⏺ Record [R]'}</button>
+                title="Shortcut: R">${recState.active ? '■ Stop [R]' : '● Record [R]'}</button>
       </div>
 
       <div class="sl-rec-subsection-label">Programmatic</div>
@@ -1014,7 +1014,7 @@ function renderSidebar() {
 
       <div class="sl-capture-row" style="margin-top:8px">
         <button class="sl-capture-btn" id="sl-prog-record"
-                ${recState.progObjects.length === 0 ? 'disabled' : ''}>⏺ Record program</button>
+                ${recState.progObjects.length === 0 ? 'disabled' : ''}>● Record program</button>
         ${recState.progObjects.length > 0
           ? `<button class="sl-rec-mini-btn sl-rec-mini-clear" id="sl-prog-clear-all" title="Clear program list">Clear all</button>`
           : ''}
@@ -1776,7 +1776,7 @@ function updateRecordingIndicator() {
   if (dot) dot.style.display = recState.active ? '' : 'none';
   const btn = document.getElementById('sl-rec-btn');
   if (btn) {
-    btn.textContent = recState.active ? '⏹ Stop [R]' : '⏺ Record [R]';
+    btn.textContent = recState.active ? '■ Stop [R]' : '● Record [R]';
     btn.classList.toggle('recording', recState.active);
   }
 }
