@@ -59,7 +59,19 @@ function defaultParams(model) {
 }
 
 function makeObject(type, model, cx = 0, cy = 0) {
-  return { id: uid(), model, cx, cy, params: defaultParams(model), showShape: false };
+  return { id: uid(), model, cx, cy, params: defaultParams(model), showShape: false, hidden: false };
+}
+
+function eyeIcon(hidden) {
+  return hidden
+    ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block">
+        <path d="M17.94 17.94A10 10 0 0112 20c-7 0-11-8-11-8a18 18 0 015.06-5.94M9.9 4.24A9 9 0 0112 4c7 0 11 8 11 8a18 18 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/>
+        <line x1="1" y1="1" x2="23" y2="23"/>
+       </svg>`
+    : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block">
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+        <circle cx="12" cy="12" r="3"/>
+       </svg>`;
 }
 
 function addPlane(z, type) {
@@ -508,7 +520,7 @@ function attachPlaneCanvasHandlers(canvas, plane) {
       // Keep the "Initial pos (current)" display in sync without a full sidebar rebuild.
       if (hitObj.id === state.selectedObjId) {
         const posEl = document.getElementById('sl-obj-pos');
-        if (posEl) posEl.textContent = `(${hitObj.cx.toFixed(2)}, ${hitObj.cy.toFixed(2)})`;
+        if (posEl) posEl.textContent = `Position: (${hitObj.cx.toFixed(2)}, ${hitObj.cy.toFixed(2)})″`;
       }
     }
   });
@@ -604,13 +616,14 @@ function drawPlaneCanvas(canvas, plane) {
     const sel = obj.id === state.selectedObjId && plane.id === state.selectedPlaneId;
     const rad = 6;
     ctx.beginPath(); ctx.arc(px, py, rad, 0, Math.PI * 2);
-    ctx.fillStyle = color;
-    ctx.globalAlpha = sel ? 1 : 0.7;
+    ctx.fillStyle = obj.hidden ? (dark ? '#555' : '#bbb') : color;
+    ctx.globalAlpha = obj.hidden ? 0.4 : (sel ? 1 : 0.7);
     ctx.fill();
     ctx.globalAlpha = 1;
     if (sel) {
       ctx.beginPath(); ctx.arc(px, py, rad + 3.5, 0, Math.PI * 2);
-      ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.strokeStyle = obj.hidden ? (dark ? '#666' : '#aaa') : color;
+      ctx.lineWidth = 1.5; ctx.stroke();
     }
   }
 }
@@ -663,12 +676,12 @@ function renderSidebar() {
     paramsPanel = `
       <div class="sl-panel">
         <div class="sl-panel-title-row">
-          <span class="sl-panel-title">Selected: ${isLens ? 'Lens' : 'Source'}</span>
+          <span class="sl-panel-title">Selected: ${isLens ? 'Lens' : 'Source'} <span class="sl-params-z" style="text-transform:none">(z=${pl.z.toFixed(2)})</span></span>
           ${infoHtml}
         </div>
         <div class="sl-params-meta-row">
-          <span class="sl-params-z">z = ${pl.z.toFixed(2)}</span>
-          <span class="sl-params-pos" id="sl-obj-pos">(${obj.cx.toFixed(2)}, ${obj.cy.toFixed(2)})</span>
+          <span class="sl-params-pos" id="sl-obj-pos">Position: (${obj.cx.toFixed(2)}, ${obj.cy.toFixed(2)})″</span>
+          <button class="sl-obj-vis-btn${obj.hidden ? ' sl-obj-hidden' : ''}" id="sl-toggle-vis" title="${obj.hidden ? 'Show in image' : 'Hide from image'}">${eyeIcon(obj.hidden)}</button>
           <button class="sl-delete-obj-btn" id="sl-delete-obj">Delete</button>
         </div>
         <select class="sl-select" id="sl-model-select">${modelOptions}</select>
@@ -840,6 +853,10 @@ function renderSidebar() {
   document.getElementById('sl-show-caus')?.addEventListener('change', e => { state.showCaustics   = e.target.checked; redraw(); });
 
   if (obj && pl) {
+    document.getElementById('sl-toggle-vis')?.addEventListener('click', () => {
+      obj.hidden = !obj.hidden;
+      renderSidebar(); redraw();
+    });
     document.getElementById('sl-delete-obj')?.addEventListener('click', deleteSelectedObject);
     document.getElementById('sl-show-shape')?.addEventListener('change', e => { obj.showShape = e.target.checked; redraw(); });
     document.getElementById('sl-model-select')?.addEventListener('change', e => {
@@ -1101,7 +1118,7 @@ function drawOverlay() {
     for (const plane of state.planes) {
       const col = typeColorHex(plane.type);
       for (const obj of plane.objects) {
-        if (!obj.showShape) continue;
+        if (!obj.showShape || obj.hidden) continue;
         const [px, py] = toPixel(obj.cx, obj.cy);
         const p = obj.params;
         let a_arc = 0, q = 1, phi = 0;

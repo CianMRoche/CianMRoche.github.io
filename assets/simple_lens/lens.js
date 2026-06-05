@@ -108,6 +108,7 @@ export function traceRay(thetaX, thetaY, planes, dist, targetIdx) {
       if (plane_k.type !== 'lens') continue;
       const wt = D_btwn[k * N + j] / Dj;
       for (const obj of plane_k.objects) {
+        if (obj.hidden) continue;
         const [ax, ay] = lensDeflection(obj, posX[k] - obj.cx, posY[k] - obj.cy);
         dx += wt * ax; dy += wt * ay;
       }

@@ -349,6 +349,7 @@ export class Renderer {
       if (allPlanes[pi].type !== 'lens') continue;
       for (const obj of allPlanes[pi].objects) {
         if (li >= MAX_OBJECTS) break;
+        if (obj.hidden) continue;
         lensPlaneIdx[li]     = pi;
         lensCenter[li * 2]   = obj.cx;
         lensCenter[li * 2+1] = obj.cy;
@@ -383,6 +384,7 @@ export class Renderer {
       if (allPlanes[pi].type !== 'source') continue;
       for (const obj of allPlanes[pi].objects) {
         if (si >= MAX_OBJECTS) break;
+        if (obj.hidden) continue;
         srcPlaneIdx[si]     = pi;
         srcCenter[si * 2]   = obj.cx;
         srcCenter[si * 2+1] = obj.cy;

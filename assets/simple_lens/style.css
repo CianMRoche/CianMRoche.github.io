@@ -409,6 +409,30 @@ html[data-theme="light"] #sl-gl-canvas { filter: invert(1); }
   font-variant-numeric: tabular-nums;
   color: var(--muted);
   flex: 1;
+  min-width: 0;
+}
+.sl-obj-vis-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.1s, border-color 0.1s, background 0.1s;
+  flex-shrink: 0;
+}
+.sl-obj-vis-btn:hover {
+  color: var(--fg);
+  border-color: var(--fg);
+}
+.sl-obj-vis-btn.sl-obj-hidden {
+  color: var(--muted);
+  opacity: 0.5;
 }
 .sl-delete-obj-btn {
   font-size: 11px;
