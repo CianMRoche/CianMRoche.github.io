@@ -10,9 +10,9 @@ A description of the gravitational lensing computation behind [simpleLens](/asse
 
 ## Quick start
 
-1. **Click the redshift axis** (the bar at the bottom left) to add a plane. The first click places a lens plane; the second places a source plane. Additional planes can be added at any redshift and dragged to reposition them.
-2. **Click inside a plane panel** at the bottom of the screen to add an object at that position, or drag from empty space to place and position it in one motion. Click an existing dot to select it.
-3. **Toggle Lens and Src** in the plane header to control what the next click creates. With only one active, clicks add that object type. With both active, a click adds a **hybrid object** — a co-located lens and source that move together as a single purple dot.
+1. **Click the redshift axis** (the bar at the bottom left) to add an empty plane at that redshift. Planes can be dragged along the axis to reposition them.
+2. **Toggle Lens and Src** in the plane header to control what clicking inside the panel creates. With only one active, clicks add that object type. With both active, a click adds a **hybrid object** — a co-located lens and source that move together as a single purple dot.
+3. **Click inside a plane panel** to add an object at that position, or drag from empty space to place and position it in one motion. Click an existing marker to select it.
 4. **Adjust parameters** in the Plane Controls panel. For regular objects, choose a profile and tune the sliders. For hybrid objects, collapsed sections for both lens and source controls appear.
 5. **The image panel** updates in real time. Press **C** to overlay critical curves and caustics. Use the eye button on any object to exclude it from the computation without deleting it. Use live or prorammatic recording features to make gifs or WebMs. 
 

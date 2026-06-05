@@ -990,6 +990,7 @@ html[data-theme="light"] #sl-gl-canvas { filter: invert(1); }
 .sl-plane-box[data-effective-type="lens"]   { --plane-color: var(--lens-color);   }
 .sl-plane-box[data-effective-type="source"] { --plane-color: var(--src-color);    }
 .sl-plane-box[data-effective-type="hybrid"] { --plane-color: var(--hybrid-color); }
+.sl-plane-box[data-effective-type="empty"]  { --plane-color: var(--hairline);     }
 
 .sl-plane-del {
   font-size: 13px;

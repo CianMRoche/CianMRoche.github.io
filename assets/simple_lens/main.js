@@ -15,6 +15,7 @@ function typeColorHex(type) {
   const dark = document.documentElement.getAttribute('data-theme') === 'dark';
   if (type === 'lens')   return dark ? '#7bbfcc' : '#4a7fc8';
   if (type === 'hybrid') return dark ? '#b09ac8' : '#9b7dd4';
+  if (type === 'empty')  return dark ? '#484f58' : '#d1d5db';
   return dark ? '#fbbf24' : '#f59e0b';
 }
 
@@ -24,9 +25,7 @@ function planeEffectiveType(plane) {
   if (hasLens && hasSrc) return 'hybrid';
   if (hasLens) return 'lens';
   if (hasSrc)  return 'source';
-  // Empty plane: infer from button state
-  if (plane.addLens && plane.addSrc) return 'hybrid';
-  return plane.addLens ? 'lens' : 'source';
+  return 'empty';
 }
 
 // Hybrid objects: a lens + source sharing a hybridId, treated as one in the UI.
@@ -126,12 +125,11 @@ function eyeIcon(hidden) {
 }
 
 function addPlane(z, type) {
-  const model = type === 'lens' ? 'sie' : 'exponential';
   const plane = {
     id: uid(), z,
     addLens: type !== 'source',
     addSrc:  type !== 'lens',
-    objects: [makeObject(type, model)],
+    objects: [],
   };
   state.planes.push(plane);
   state.planes.sort((a, b) => a.z - b.z);
@@ -490,8 +488,8 @@ function attachAxisHandlers() {
     if (!dragPlane && !didDrag) {
       const r    = axisCanvas.getBoundingClientRect();
       const z    = Math.round(axisXToZ(e.clientX - r.left, r.width) * 100) / 100;
-      const hasLensPlane = state.planes.some(p => { const t = planeEffectiveType(p); return t === 'lens' || t === 'hybrid'; });
-      const hasSrcPlane  = state.planes.some(p => { const t = planeEffectiveType(p); return t === 'source' || t === 'hybrid'; });
+      const hasLensPlane = state.planes.some(p => { const t = planeEffectiveType(p); return t === 'lens' || t === 'hybrid' || (t === 'empty' && p.addLens && !p.addSrc); });
+      const hasSrcPlane  = state.planes.some(p => { const t = planeEffectiveType(p); return t === 'source' || t === 'hybrid' || (t === 'empty' && p.addSrc && !p.addLens); });
       const type = hasLensPlane && !hasSrcPlane ? 'source' : 'lens';
       const pl = addPlane(z, type);
       state.selectedPlaneId = pl.id;
@@ -1324,7 +1322,8 @@ function drawAxisCanvas() {
     ctx.fillStyle = dark ? '#8b949e' : '#6b7280';
     ctx.font = '9px system-ui, sans-serif';
     const _eff = planeEffectiveType(plane);
-    ctx.fillText(_eff === 'lens' ? 'L' : _eff === 'hybrid' ? 'H' : 'S', x, axisY + 26);
+    const _lbl = _eff === 'lens' ? 'L' : _eff === 'source' ? 'S' : _eff === 'hybrid' ? 'H' : '';
+    if (_lbl) ctx.fillText(_lbl, x, axisY + 26);
   }
 
   // Hint text — bottom centre of the axis strip.
