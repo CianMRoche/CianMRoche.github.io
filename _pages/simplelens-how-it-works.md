@@ -174,11 +174,11 @@ $$I = A\exp\!\left(-\frac{r_\text{ell}^2}{2\sigma^2}\right)$$
 
 The Show Shape ellipse is drawn at $r_\text{ell} = 2\sigma$.
 
-### Exponential (Sérsic $n=1$)
+### Exponential
 
 $$I = A\exp\!\left(-\frac{r_\text{ell}}{\sigma}\right)$$
 
-More extended than Gaussian; $\sigma$ is the exponential scale length.
+More extended than Gaussian; $\sigma$ is the exponential scale length. This is a Sérsic profile with $n=1$.
 
 ### Uniform circle
 
@@ -198,13 +198,14 @@ The sum is clamped to $[0,1]$ and passed through a tone-mapping curve before dis
 
 The dynamic range of astrophysical sources (bright ring core to faint extended arcs) far exceeds what a monitor can show linearly, so a nonlinear stretch is needed. Three standard options are available:
 
-| Mode | Formula | Character |
-|---|---|---|
-| Linear | $\text{out} = I$ | No stretch. Faint arcs invisible; bright cores sharp. |
-| Square root | $\text{out} = \sqrt{I}$ | Moderate stretch ($\gamma = 0.5$). Default. |
-| Asinh | $\text{out} = \operatorname{asinh}(aI)\,/\,\operatorname{asinh}(a),\quad a=5$ | Aggressive stretch; used by SDSS, HST, and modern survey pipelines (Lupton et al. 2004). Near-linear at low $I$; logarithmic at high $I$. |
+| Mode | Formula | Parameter | Character |
+|---|---|---|---|
+| Linear | $\text{out} = I$ | — | No stretch. Faint arcs invisible; bright cores sharp. |
+| Square root | $\text{out} = \sqrt{I}$ | — | Moderate fixed stretch ($\gamma = 0.5$). Default. |
+| Power law | $\text{out} = I^\gamma$ | $\gamma \in [0.1,\,1]$ | Generalises square root. Lower $\gamma$ lifts faint emission more aggressively. |
+| Asinh | $\text{out} = \operatorname{asinh}(aI)\,/\,\operatorname{asinh}(a)$ | $a \in [0.5,\,20]$ | Near-linear at low $I$, logarithmic at high $I$. Used by SDSS, HST, and modern survey pipelines (Lupton et al. 2004). Larger $a$ gives a stronger stretch. |
 
-The normalisation $\operatorname{asinh}(a)$ ensures $f(1)=1$, so the output spans $[0,1]$ for all $a$.
+All modes satisfy $f(0)=0$ and $f(1)=1$, so the output always spans $[0,1]$.
 
 ---
 
