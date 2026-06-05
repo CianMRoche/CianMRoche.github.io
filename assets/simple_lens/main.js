@@ -127,8 +127,8 @@ function eyeIcon(hidden) {
 function addPlane(z, type) {
   const plane = {
     id: uid(), z,
-    addLens: type !== 'source',
-    addSrc:  type !== 'lens',
+    addLens: false,
+    addSrc:  false,
     objects: [],
   };
   state.planes.push(plane);
