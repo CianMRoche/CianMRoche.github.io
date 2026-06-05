@@ -41,6 +41,7 @@ const state = {
   showCaustics:    false,
   showMarkers:     false,
   showLegend:      true,
+  toneMap:         1,   // 0=linear, 1=sqrt, 2=asinh
   critGridN:       512,
   critZs:          null,  // null = auto (highest-z source plane)
   dist:            null,
@@ -714,6 +715,14 @@ function renderSidebar() {
         <label><input type="checkbox" id="sl-show-markers" ${state.showMarkers?'checked':''}> Show source/lens positions</label>
         <label><input type="checkbox" id="sl-show-legend"  ${state.showLegend ?'checked':''}> Show legend</label>
       </div>
+      <div class="sl-global-input">
+        <label>Tone map</label>
+        <select id="sl-tone-map">
+          <option value="0" ${state.toneMap===0?'selected':''}>Linear</option>
+          <option value="1" ${state.toneMap===1?'selected':''}>Square root</option>
+          <option value="2" ${state.toneMap===2?'selected':''}>Asinh</option>
+        </select>
+      </div>
 
       <div class="sl-subsection-header">Critical Curves <kbd>C</kbd></div>
       <p class="sl-perf-note">(Can be slow at high resolutions. GIF recording includes them; WebM does not.)</p>
@@ -841,6 +850,7 @@ function renderSidebar() {
   document.getElementById('sl-zmax')?.addEventListener('change',        e => { const v = parseFloat(e.target.value); if (v > 0) { state.zMax = v; drawAxisCanvas(); } });
   document.getElementById('sl-show-markers')?.addEventListener('change',e => { state.showMarkers = e.target.checked; redraw(); });
   document.getElementById('sl-show-legend')?.addEventListener('change', e => { state.showLegend  = e.target.checked; redraw(); });
+  document.getElementById('sl-tone-map')?.addEventListener('change',    e => { state.toneMap = parseInt(e.target.value, 10); redraw(); });
   document.getElementById('sl-snapshot-btn')?.addEventListener('click', captureSnapshot);
   document.getElementById('sl-rec-btn')?.addEventListener('click', () => { recState.active ? stopRecording() : startRecording(); });
   document.getElementById('sl-rec-fps')?.addEventListener('change', e => { recState.fps = parseInt(e.target.value, 10); });
@@ -1271,7 +1281,7 @@ function redraw() {
 function _doRedraw() {
   if (!renderer || !state.dist) return;
   const allPlanes = [...state.planes].sort((a, b) => a.z - b.z);
-  renderer.setScene(allPlanes, state.dist, state.fov);
+  renderer.setScene(allPlanes, state.dist, state.fov, state.toneMap);
   for (const plane of state.planes) redrawPlaneCanvas(plane);
   drawAxisCanvas();
   drawOverlay();
@@ -1306,7 +1316,7 @@ function captureSnapshot() {
   // Ensure the frame is fully drawn first.
   if (renderer && state.dist) {
     const allPlanes = [...state.planes].sort((a, b) => a.z - b.z);
-    renderer.setScene(allPlanes, state.dist, state.fov);
+    renderer.setScene(allPlanes, state.dist, state.fov, state.toneMap);
     drawOverlay();
   }
   buildCompositeCanvas().toBlob(blob => downloadBlob(blob, 'simplelens.png'), 'image/png');
@@ -1409,7 +1419,7 @@ function startProgrammaticRecording() {
     //       duplication, so critical curves/caustics are suppressed for WebM.
     if (renderer && state.dist) {
       const allPlanes = [...state.planes].sort((a, b) => a.z - b.z);
-      renderer.setScene(allPlanes, state.dist, state.fov);
+      renderer.setScene(allPlanes, state.dist, state.fov, state.toneMap);
       const savedCrit = state.showCritCurves, savedCaus = state.showCaustics;
       if (!recState.useGif) { state.showCritCurves = false; state.showCaustics = false; }
       drawOverlay();

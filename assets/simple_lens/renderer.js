@@ -46,6 +46,7 @@ const float SIE_SOFT    = 0.001;
 
 uniform float u_fov;
 uniform vec2  u_res;
+uniform int   u_toneMap;
 
 uniform float u_D_obs [${MAX_PLANES}];
 uniform float u_D_btwn[${MAX_PLANES * MAX_PLANES}];
@@ -235,7 +236,16 @@ void main() {
     }
   }
 
-  colorOut = sqrt(clamp(colorOut, 0.0, 1.0));
+  colorOut = clamp(colorOut, 0.0, 1.0);
+  if (u_toneMap == 0) {
+    // linear — no stretch
+  } else if (u_toneMap == 1) {
+    colorOut = sqrt(colorOut);
+  } else {
+    // asinh stretch: asinh(a*x)/asinh(a), a=5
+    const float a = 5.0;
+    colorOut = log(a * colorOut + sqrt(a * a * colorOut * colorOut + 1.0)) / log(a + sqrt(a * a + 1.0));
+  }
   fragColor = vec4(colorOut, 1.0);
 }`;
 
@@ -282,8 +292,8 @@ export class Renderer {
     if (entry) { gl.deleteTexture(entry.tex); this._pastedTexCache.delete(objId); }
   }
 
-  setScene(planes, dist, fovArcsec) {
-    this._scene = { planes, dist, fovArcsec };
+  setScene(planes, dist, fovArcsec, toneMap = 1) {
+    this._scene = { planes, dist, fovArcsec, toneMap };
     this._draw();
   }
 
@@ -310,7 +320,7 @@ export class Renderer {
 
   _draw() {
     const { gl, _prog, _locs } = this;
-    const { planes, dist, fovArcsec } = this._scene;
+    const { planes, dist, fovArcsec, toneMap } = this._scene;
 
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     gl.useProgram(_prog);
@@ -321,6 +331,7 @@ export class Renderer {
 
     gl.uniform1f(_locs.u_fov, fovArcsec);
     gl.uniform2f(_locs.u_res, this.canvas.width, this.canvas.height);
+    gl.uniform1i(_locs.u_toneMap, toneMap ?? 1);
 
     const allPlanes = [...planes].sort((a, b) => a.z - b.z);
     const N = Math.min(allPlanes.length, MAX_PLANES);
@@ -491,6 +502,7 @@ export class Renderer {
       a_pos:          a('a_pos'),
       u_fov:          u('u_fov'),
       u_res:          u('u_res'),
+      u_toneMap:      u('u_toneMap'),
       u_D_obs:        u('u_D_obs'),
       u_D_btwn:       u('u_D_btwn'),
       u_numPlanes:    u('u_numPlanes'),
