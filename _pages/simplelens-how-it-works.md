@@ -18,6 +18,19 @@ A description of the gravitational lensing computation behind [simpleLens](/asse
 
 ---
 
+## Keyboard shortcuts
+
+| Key | Action |
+|---|---|
+| `C` | Toggle critical curves and caustics |
+| `H` | Hide / show the selected object |
+| `R` | Start / stop live recording |
+| `↑ ↓ ← →` | Nudge selected object (hold for acceleration) |
+| `Delete` / `Backspace` | Delete the selected object |
+| `Escape` | Deselect |
+
+---
+
 ## 1. Coordinate system
 
 All angular positions are measured in **arcseconds** (″): object coordinates $(c_x, c_y)$, deflection angles, and size parameters all use this unit.

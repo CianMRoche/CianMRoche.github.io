@@ -383,6 +383,19 @@ function attachHandlers() {
       return;
     }
 
+    if (e.key === 'h' || e.key === 'H') {
+      const obj = selectedObj(), pl = selectedPlane();
+      if (!obj || !pl) return;
+      const partner = hybridPartner(pl, obj);
+      if (partner) {
+        const newHidden = !(obj.hidden && partner.hidden);
+        obj.hidden = newHidden; partner.hidden = newHidden;
+      } else {
+        obj.hidden = !obj.hidden;
+      }
+      renderSidebar(); redraw();
+      return;
+    }
     if (e.key === 'r' || e.key === 'R') {
       recState.active ? stopRecording() : startRecording();
       return;
