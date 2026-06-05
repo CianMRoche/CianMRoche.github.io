@@ -787,6 +787,7 @@ function loadImageDemo(src) {
 applyScenario(1);
 
 window.addEventListener('message', function(e) {
+  if (e.origin !== location.origin) return;
   if (e.data && e.data.theme) {
     document.documentElement.setAttribute('data-theme', e.data.theme);
   }

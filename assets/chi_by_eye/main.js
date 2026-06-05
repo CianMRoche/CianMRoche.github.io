@@ -587,7 +587,7 @@ function renderLeaderboardPreview(entry) {
         <span class="lb-rank">#${rank}</span>
         ${isUser ? `<span class="lb-you">You</span>` : ''}
         ${inputHtml}
-        <span class="lb-score">${crownIfQualified(e.score, e.difficulty || entry.difficulty)}${e.score.toLocaleString()}</span>
+        <span class="lb-score">${crownIfQualified(e.score, e.difficulty || entry.difficulty)}${Number(e.score).toLocaleString()}</span>
       </div>`;
   }).join('');
 
@@ -1059,7 +1059,7 @@ function renderLeaderboardView() {
           <div class="lbf-row${isHighlight ? ' lbf-row-highlight' : ''}">
             <span class="lbf-rank">#${rank}</span>
             <span class="lbf-name">${escapeHtml(name)}</span>
-            <span class="lbf-score">${crownIfQualified(e.score, e.difficulty || lbView.difficulty)}${e.score.toLocaleString()}<span class="lbf-denom"> / ${maxTotal.toLocaleString()}</span></span>
+            <span class="lbf-score">${crownIfQualified(e.score, e.difficulty || lbView.difficulty)}${Number(e.score).toLocaleString()}<span class="lbf-denom"> / ${maxTotal.toLocaleString()}</span></span>
             <span class="lbf-date">${dateStr}</span>
           </div>`;
       }).join('');

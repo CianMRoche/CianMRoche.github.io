@@ -149,10 +149,17 @@ function applyThemeIcons(theme) {
 
 function showRendererError(msg) {
   const wrap = document.getElementById('sl-image-wrap');
-  if (wrap) wrap.innerHTML = `<div style="position:absolute;inset:0;display:flex;
-    align-items:center;justify-content:center;padding:16px;font-size:13px;
-    color:#f87171;text-align:center;background:#0d1117">
-    WebGL2 required.<br><small style="opacity:.7">${msg}</small></div>`;
+  if (!wrap) return;
+  const div = document.createElement('div');
+  div.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;font-size:13px;color:#f87171;text-align:center;background:#0d1117;flex-direction:column;gap:6px';
+  const h = document.createElement('span');
+  h.textContent = 'WebGL2 required.';
+  const s = document.createElement('small');
+  s.style.opacity = '0.7';
+  s.textContent = msg;
+  div.appendChild(h); div.appendChild(s);
+  wrap.innerHTML = '';
+  wrap.appendChild(div);
 }
 
 function loadDemoState() {
@@ -1440,8 +1447,7 @@ function startProgrammaticRecording() {
       doFrame();
     };
     if (!window.GIF) {
-      const s = document.createElement('script');
-      s.src = 'gif.js'; s.onload = _run; document.head.appendChild(s);
+      _loadGifJs(_run);
     } else { _run(); }
   } else {
     const stream   = lc.captureStream(fps);
@@ -1580,14 +1586,23 @@ function _startWebMRecording(fps, liveCanvas) {
   _compositeToLive();
 }
 
+function _loadGifJs(cb) {
+  if (document.querySelector('script[data-gifjs]')) {
+    // already injected but not yet loaded — wait
+    document.querySelector('script[data-gifjs]').addEventListener('load', cb);
+    return;
+  }
+  const script = document.createElement('script');
+  script.src = 'gif.js';
+  script.dataset.gifjs = '1';
+  script.onload = cb;
+  script.onerror = () => console.error('simpleLens: could not load gif.js');
+  document.head.appendChild(script);
+}
+
 function _startGifRecording(fps, liveCanvas) {
-  // Lazy-load gif.js from the local copy (avoids cross-origin worker issues).
   if (!window.GIF) {
-    const script  = document.createElement('script');
-    script.src    = 'gif.js';
-    script.onload = () => _initGifEncoder(fps, liveCanvas);
-    script.onerror = () => console.error('simpleLens: could not load gif.js');
-    document.head.appendChild(script);
+    _loadGifJs(() => _initGifEncoder(fps, liveCanvas));
   } else {
     _initGifEncoder(fps, liveCanvas);
   }
