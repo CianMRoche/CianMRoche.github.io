@@ -1146,7 +1146,7 @@ html[data-theme="light"] #sl-gl-canvas { filter: invert(1); }
     flex-wrap: nowrap;
     gap: 0;
     /* Pad bottom so content isn't hidden under the fixed Plane Setup bar */
-    padding-bottom: 56px;
+    padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
   }
   .sl-controls-col > .sl-param-col,
   .sl-controls-col > .sl-sidebar {

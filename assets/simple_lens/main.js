@@ -1612,8 +1612,8 @@ function drawOverlay() {
           a_arc = 2 * (p.sigma ?? 0.1); q = p.q ?? 1; phi = p.phi ?? 0;
         }
         if (a_arc <= 0) continue;
-        const a_px = a_arc / state.fov * Wl;
-        const b_px = a_px * Math.max(q, 0.01);
+        const a_px = Math.max(a_arc / state.fov * Wl, 10);
+        const b_px = Math.max(a_px * Math.max(q, 0.01), 3);
         overlayCtx.strokeStyle = col;
         overlayCtx.beginPath();
         overlayCtx.ellipse(px, py, a_px, b_px, -phi, 0, Math.PI * 2);
@@ -1720,8 +1720,6 @@ function drawOverlay() {
     const lineH = _mob ? 20 : 28, padV = _mob ? 7 : 11, padH = _mob ? 10 : 14;
     const boxW  = _mob ? 150 : 220, boxH = legendItems.length * lineH + 2 * padV;
     const _dark = document.documentElement.getAttribute('data-theme') === 'dark';
-    overlayCtx.fillStyle = _dark ? 'rgba(0,0,0,0.60)' : 'rgba(255,255,255,0.90)';
-    overlayCtx.fillRect(lx, ly, boxW, boxH);
 
     overlayCtx.font         = `${_mob ? 12 : 18}px system-ui, -apple-system, sans-serif`;
     overlayCtx.textBaseline = 'middle';
