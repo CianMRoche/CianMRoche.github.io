@@ -222,6 +222,7 @@ html[data-theme="dark"] .sl-theme-btn:hover { color: #fff; background: rgba(255,
   display: block;
   width: 100%;
   height: 100%;
+  touch-action: none; /* prevent page scroll/refresh when dragging on the canvas */
 }
 
 /* In light mode, invert the lensed image so background is bright and arcs are dark. */
