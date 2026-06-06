@@ -64,8 +64,9 @@ const state = {
   selectedObjId:   null,
   showCritCurves:  false,
   showCaustics:    false,
-  showMarkers:     false,
+  showMarkers:     true,
   showLegend:      true,
+  addMode:         'lens',   // 'lens' | 'source' | 'hybrid' — global tool state
   toneMap:         1,   // 0=linear, 1=sqrt, 2=power, 3=asinh
   toneMapPower:    0.5,
   toneMapAsinh:    5.0,
@@ -124,13 +125,8 @@ function eyeIcon(hidden) {
        </svg>`;
 }
 
-function addPlane(z, type) {
-  const plane = {
-    id: uid(), z,
-    addLens: false,
-    addSrc:  false,
-    objects: [],
-  };
+function addPlane(z) {
+  const plane = { id: uid(), z, objects: [] };
   state.planes.push(plane);
   state.planes.sort((a, b) => a.z - b.z);
   invalidateDistances();
@@ -231,13 +227,13 @@ function showRendererError(msg) {
 }
 
 function loadDemoState() {
-  const lp = addPlane(0.5, 'lens');
+  const lp = addPlane(0.5);
   const smallLens = { id: uid(), type: 'lens', model: 'sie', cx: 0.86, cy: 0.71, params: { b: 0.3, q: 0.75, phi: 0 }, showShape: false, hidden: false };
   lp.objects = [
     { id: uid(), type: 'lens', model: 'sie', cx: 0, cy: 0, params: { b: 2.3, q: 0.75, phi: 0 }, showShape: false, hidden: false },
     smallLens,
   ];
-  const sp = addPlane(1.0, 'source');
+  const sp = addPlane(1.0);
   sp.objects = [{ id: uid(), type: 'source', model: 'exponential', cx: 0.3, cy: 0.1,
                   params: { sigma: 0.05, q: 0.40, phi: 0, amplitude: 2.20 }, showShape: false, hidden: false }];
   // Pre-select the small off-axis lens so its params appear on load.
@@ -301,6 +297,13 @@ function buildDOM() {
             <div class="sl-axis-label">redshift z →</div>
             <canvas class="sl-axis-canvas" id="sl-axis-canvas"></canvas>
           </div>
+          <div class="sl-plane-toolbar" id="sl-plane-toolbar">
+            <button class="sl-tool-btn active" data-mode="lens"   title="Add lens (1)"><span class="sl-tool-s">L</span><span class="sl-tool-l">Lens</span></button>
+            <button class="sl-tool-btn"         data-mode="source" title="Add source (2)"><span class="sl-tool-s">S</span><span class="sl-tool-l">Source</span></button>
+            <button class="sl-tool-btn"         data-mode="hybrid" title="Add hybrid (3)"><span class="sl-tool-s">H</span><span class="sl-tool-l">Hybrid</span></button>
+            <div class="sl-tool-sep"></div>
+            <button class="sl-tool-btn sl-tool-del" id="sl-tool-del-obj" title="Delete selected object"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="1.5" y1="4" x2="12.5" y2="4"/><path d="M4 4l.5 7h5l.5-7"/><path d="M5 4V3h4v1"/></svg></button>
+          </div>
           <div class="sl-planes" id="sl-planes"></div>
         </div>
       </div>
@@ -361,7 +364,20 @@ function attachHandlers() {
   // Set initial caret state.
   document.getElementById('sl-plane-setup-btn').textContent = '▲ Plane Setup';
 
+  // Global plane toolbar: L / S / H mode + delete selected object.
+  document.getElementById('sl-plane-toolbar').addEventListener('click', e => {
+    const modeBtn = e.target.closest('.sl-tool-btn[data-mode]');
+    if (modeBtn) {
+      state.addMode = modeBtn.dataset.mode;
+      document.querySelectorAll('.sl-tool-btn[data-mode]').forEach(b =>
+        b.classList.toggle('active', b.dataset.mode === state.addMode));
+      return;
+    }
+    if (e.target.closest('#sl-tool-del-obj')) deleteSelectedObject();
+  });
+
   attachAxisHandlers();
+  attachImageHandlers(document.getElementById('sl-image-wrap'));
 
   // Paste image from clipboard — applies to the currently selected pastedimage object.
   document.addEventListener('paste', e => {
@@ -438,6 +454,27 @@ function attachHandlers() {
       renderSidebar(); redraw();
       return;
     }
+    if (e.key === '1' || e.key === '2' || e.key === '3') {
+      state.addMode = e.key === '1' ? 'lens' : e.key === '2' ? 'source' : 'hybrid';
+      document.querySelectorAll('.sl-tool-btn[data-mode]').forEach(b =>
+        b.classList.toggle('active', b.dataset.mode === state.addMode));
+      return;
+    }
+    if (e.key === 'o' || e.key === 'O') {
+      const pl = selectedPlane();
+      if (!pl) return;
+      pl.objects.filter(o => o.model === 'pastedimage').forEach(o => renderer?.clearPastedTexture(o.id));
+      pl.objects = [];
+      state.selectedObjId = null;
+      rebuildPlaneBoxes(); renderSidebar(); redraw();
+      return;
+    }
+    if (e.key === 'x' || e.key === 'X') {
+      const pl = selectedPlane();
+      if (!pl) return;
+      removePlane(pl.id); rebuildPlaneBoxes(); renderSidebar(); redraw();
+      return;
+    }
     if (e.key === 'r' || e.key === 'R') {
       recState.active ? stopRecording() : startRecording();
       return;
@@ -470,6 +507,82 @@ function axisZToX(z, Wl) {
 function axisXToZ(x, Wl) {
   const PAD = 12;
   return Math.max(0.01, Math.min(state.zMax, ((x - PAD) / (Wl - 2 * PAD)) * state.zMax));
+}
+
+// ── Image-panel drag ─────────────────────────────────────────────────────────
+// Converts a pointer event on the image wrap to arcsec coordinates.
+function imageWrapToArcsec(wrap, e) {
+  const r = wrap.getBoundingClientRect();
+  return {
+    x:  ((e.clientX - r.left) / r.width  - 0.5) * state.fov,
+    y: -((e.clientY - r.top)  / r.height - 0.5) * state.fov,
+  };
+}
+
+// Hit-test all objects in all planes against an image-space pointer event.
+function hitTestImage(wrap, e) {
+  const pos = imageWrapToArcsec(wrap, e);
+  const r   = wrap.getBoundingClientRect();
+  // Convert pixel hit radius to arcsec, scaled up on mobile.
+  const thresh = (hitRadius() * 1.5) / r.width * state.fov;
+  const seenHybrids = new Set();
+  for (const plane of state.planes) {
+    for (const obj of plane.objects) {
+      if (obj.hidden) continue;
+      if (obj.hybridId) {
+        if (seenHybrids.has(obj.hybridId)) continue;
+        seenHybrids.add(obj.hybridId);
+      }
+      if (Math.hypot(obj.cx - pos.x, obj.cy - pos.y) < thresh)
+        return { obj: hybridLensHalf(plane, obj), plane };
+    }
+  }
+  return null;
+}
+
+function attachImageHandlers(wrap) {
+  let imgDrag = null; // { obj, plane, startCx, startCy, startMx, startMy }
+
+  wrap.addEventListener('pointerdown', e => {
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
+    const hit = hitTestImage(wrap, e);
+    if (!hit) return;
+    e.preventDefault();
+    wrap.setPointerCapture(e.pointerId);
+    const pos = imageWrapToArcsec(wrap, e);
+    imgDrag = { obj: hit.obj, plane: hit.plane,
+                startCx: hit.obj.cx, startCy: hit.obj.cy,
+                startMx: pos.x,      startMy: pos.y };
+    state.selectedPlaneId = hit.plane.id;
+    state.selectedObjId   = hit.obj.id;
+    wrap.style.cursor = 'grabbing';
+    renderSidebar(); redraw();
+  });
+
+  wrap.addEventListener('pointermove', e => {
+    if (!imgDrag) {
+      wrap.style.cursor = hitTestImage(wrap, e) ? 'grab' : '';
+      return;
+    }
+    e.preventDefault();
+    const pos = imageWrapToArcsec(wrap, e);
+    imgDrag.obj.cx = imgDrag.startCx + (pos.x - imgDrag.startMx);
+    imgDrag.obj.cy = imgDrag.startCy + (pos.y - imgDrag.startMy);
+    const partner = hybridPartner(imgDrag.plane, imgDrag.obj);
+    if (partner) { partner.cx = imgDrag.obj.cx; partner.cy = imgDrag.obj.cy; }
+    const posEl = document.getElementById('sl-obj-pos');
+    if (posEl) posEl.textContent = `Pos: (${imgDrag.obj.cx.toFixed(2)}, ${imgDrag.obj.cy.toFixed(2)})`;
+    redrawPlaneCanvas(imgDrag.plane);
+    redraw();
+  });
+
+  wrap.addEventListener('pointerup', e => {
+    if (!imgDrag) return;
+    invalidateDistances();
+    redraw();
+    wrap.style.cursor = '';
+    imgDrag = null;
+  });
 }
 
 function attachAxisHandlers() {
@@ -544,10 +657,7 @@ function attachAxisHandlers() {
     if (!dragPlane && !didDrag) {
       const r    = axisCanvas.getBoundingClientRect();
       const z    = Math.round(axisXToZ(e.clientX - r.left, r.width) * 100) / 100;
-      const hasLensPlane = state.planes.some(p => { const t = planeEffectiveType(p); return t === 'lens' || t === 'hybrid' || (t === 'empty' && p.addLens && !p.addSrc); });
-      const hasSrcPlane  = state.planes.some(p => { const t = planeEffectiveType(p); return t === 'source' || t === 'hybrid' || (t === 'empty' && p.addSrc && !p.addLens); });
-      const type = hasLensPlane && !hasSrcPlane ? 'source' : 'lens';
-      const pl = addPlane(z, type);
+      const pl = addPlane(z);
       state.selectedPlaneId = pl.id;
       state.selectedObjId   = pl.objects[0]?.id ?? null;
       rebuildPlaneBoxes(); renderSidebar(); redraw();
@@ -568,10 +678,8 @@ function rebuildPlaneBoxes() {
   }
 
   for (const plane of state.planes) {
-    const effType   = planeEffectiveType(plane);
-    const lensAct   = plane.addLens ? ' active' : '';
-    const srcAct    = plane.addSrc  ? ' active' : '';
-    const box       = document.createElement('div');
+    const effType = planeEffectiveType(plane);
+    const box     = document.createElement('div');
     box.className   = 'sl-plane-box';
     box.dataset.id            = plane.id;
     box.dataset.effectiveType = effType;
@@ -579,21 +687,19 @@ function rebuildPlaneBoxes() {
     box.innerHTML = `
       <div class="sl-plane-header">
         <span class="sl-plane-z">z = ${plane.z.toFixed(2)}</span>
-        <button class="sl-plane-type-btn${lensAct}" data-type="lens" title="Next click adds a lens">Lens</button>
-        <button class="sl-plane-type-btn${srcAct}"  data-type="source" title="Next click adds a source">Src</button>
+        <button class="sl-plane-clear" title="Clear all objects">○</button>
         <button class="sl-plane-del" title="Delete plane">×</button>
       </div>
       <canvas class="sl-plane-canvas" width="148" height="148"></canvas>`;
 
     planesEl.appendChild(box);
 
-    // Type buttons are independent toggles; both on → next click adds a hybrid object.
-    box.querySelectorAll('.sl-plane-type-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        if (btn.dataset.type === 'lens')   plane.addLens = !plane.addLens;
-        else                               plane.addSrc  = !plane.addSrc;
-        rebuildPlaneBoxes();
-      });
+    // Clear button removes all objects from this plane.
+    box.querySelector('.sl-plane-clear').addEventListener('click', () => {
+      plane.objects.filter(o => o.model === 'pastedimage').forEach(o => renderer?.clearPastedTexture(o.id));
+      plane.objects = [];
+      if (state.selectedPlaneId === plane.id) state.selectedObjId = null;
+      rebuildPlaneBoxes(); renderSidebar(); redraw();
     });
 
     // Delete.
@@ -608,7 +714,8 @@ function rebuildPlaneBoxes() {
 }
 
 // ── Plane canvas interaction ───────────────────────────────────────────────────
-const HIT_R = 10; // px
+const HIT_R = 10; // px desktop
+function hitRadius() { return window.innerWidth <= 640 ? 18 : HIT_R; }
 
 function attachPlaneCanvasHandlers(canvas, plane) {
   // 'idle' | 'hit-pending' | 'dragging' | 'add-pending' | 'add-dragging'
@@ -656,20 +763,24 @@ function attachPlaneCanvasHandlers(canvas, plane) {
   canvas.addEventListener('pointerleave', () => { if (istate === 'idle') canvas.style.cursor = 'crosshair'; });
 
   canvas.addEventListener('pointerdown', e => {
-    e.preventDefault();
-    canvas.setPointerCapture(e.pointerId);
-    const pos = canvasToArcsec(canvas, e);
+    const pos  = canvasToArcsec(canvas, e);
     hitObj     = hitTestPlane(plane, canvas, e);
     if (hitObj) {
+      e.preventDefault();
+      canvas.setPointerCapture(e.pointerId);
       istate = 'hit-pending'; canvas.style.cursor = 'grab';
       pStart = { cx: hitObj.cx, cy: hitObj.cy, mx: pos.x, my: pos.y };
       state.selectedPlaneId = plane.id;
       state.selectedObjId   = hitObj.id;
-      renderSidebar(); redraw();  // redraw() updates all plane canvases, clearing stale rings
-    } else {
+      renderSidebar(); redraw();
+    } else if (e.pointerType !== 'touch') {
+      // Mouse on empty space: add object on click/drag.
+      e.preventDefault();
+      canvas.setPointerCapture(e.pointerId);
       istate = 'add-pending';
       pStart = { mx: pos.x, my: pos.y };
     }
+    // Touch on empty space: no capture → browser handles horizontal scroll.
   });
 
   canvas.addEventListener('pointerup', e => {
@@ -701,21 +812,21 @@ function canvasToArcsec(canvas, e) {
   };
 }
 
-// Create one or two objects based on the plane's add-button state.
+// Create one or two objects based on the global add mode (state.addMode).
 // Returns the primary object to track as hitObj (lens half for hybrid).
 function _makeAddObjects(plane, cx, cy) {
-  if (plane.addLens && plane.addSrc) {
+  if (state.addMode === 'hybrid') {
     const hybridId = uid();
     const lensObj = Object.assign(makeObject('lens',   'sie',      cx, cy), { hybridId });
     const srcObj  = Object.assign(makeObject('source', 'gaussian', cx, cy), { hybridId });
     plane.objects.push(lensObj, srcObj);
     return lensObj;
-  } else if (plane.addLens) {
-    const obj = makeObject('lens',   'sie',      cx, cy);
+  } else if (state.addMode === 'source') {
+    const obj = makeObject('source', 'gaussian', cx, cy);
     plane.objects.push(obj);
     return obj;
   } else {
-    const obj = makeObject('source', 'gaussian', cx, cy);
+    const obj = makeObject('lens', 'sie', cx, cy);
     plane.objects.push(obj);
     return obj;
   }
@@ -732,7 +843,7 @@ function hitTestPlane(plane, canvas, e) {
     }
     const px = (obj.cx / state.fov + 0.5) * r.width;
     const py = (-obj.cy / state.fov + 0.5) * r.height;
-    if (Math.hypot(e.clientX - r.left - px, e.clientY - r.top - py) < HIT_R)
+    if (Math.hypot(e.clientX - r.left - px, e.clientY - r.top - py) < hitRadius())
       return hybridLensHalf(plane, obj);
   }
   return null;
@@ -962,7 +1073,7 @@ function renderSidebar() {
       </div>` : ''}
 
       <div class="sl-subsection-header">Critical Curves <kbd>C</kbd></div>
-      <p class="sl-perf-note">(Can be slow at high resolutions. GIF recording includes them; WebM does not.)</p>
+      <p class="sl-perf-note">(Can be slow at high resolutions.)</p>
       <div class="sl-checkbox-row">
         <label><input type="checkbox" id="sl-show-crit" ${state.showCritCurves?'checked':''}> Show critical curves</label>
         <label><input type="checkbox" id="sl-show-caus" ${state.showCaustics   ?'checked':''}> Show caustics</label>
@@ -996,6 +1107,7 @@ function renderSidebar() {
 
   const recordingPanel = `
     <div class="sl-panel">
+      <p class="sl-perf-note" style="margin-bottom:10px">Critical curves are included in GIF recordings but hidden in WebM to keep frame timing accurate.</p>
       <div class="sl-panel-title-row">
         <span class="sl-panel-title">LIVE</span>
         ${infoSection('sl-rec-info', `
@@ -1304,12 +1416,15 @@ function drawAxisCanvas() {
 
   const Wl = W/dpr, Hl = H/dpr;
   const PAD = 12, axisY = Hl * 0.55;
+  const _mobAxis = window.innerWidth <= 640;
+  const _textAlpha = _mobAxis ? 0.45 : 1.0;
 
   ctx.strokeStyle = dark ? '#30363d' : '#e5e7eb';
   ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.moveTo(PAD, axisY); ctx.lineTo(Wl-PAD, axisY); ctx.stroke();
 
   ctx.font = '10px system-ui, sans-serif'; ctx.textAlign = 'center';
+  ctx.globalAlpha = _textAlpha;
   for (const z of [0, 0.5, 1, 1.5, 2, 2.5, 3, 4, 5].filter(z => z <= state.zMax)) {
     const x = axisZToX(z, Wl);
     ctx.strokeStyle = dark ? '#30363d' : '#e5e7eb'; ctx.lineWidth = 1;
@@ -1317,6 +1432,7 @@ function drawAxisCanvas() {
     ctx.fillStyle = dark ? '#8b949e' : '#6b7280';
     ctx.fillText(String(z), x, axisY + 15);
   }
+  ctx.globalAlpha = 1;
 
   // Assign vertical levels so close markers bump up instead of overlapping.
   const BUMP_STEP = 28;   // px per level (taller bump for clear separation)
@@ -1386,10 +1502,10 @@ function drawAxisCanvas() {
     if (_lbl) ctx.fillText(_lbl, x, axisY + 26);
   }
 
-  ctx.font      = '10.5px system-ui, sans-serif';
-  ctx.fillStyle = dark ? '#8b949e' : '#6b7280';
-  const _mob = window.innerWidth <= 640;
-  if (_mob) {
+  ctx.font        = '10.5px system-ui, sans-serif';
+  ctx.fillStyle   = dark ? '#8b949e' : '#6b7280';
+  ctx.globalAlpha = _textAlpha;
+  if (_mobAxis) {
     // On mobile the HTML label is hidden; draw both texts on one line in the canvas.
     const _ty = 13;
     ctx.textAlign    = 'left';
@@ -1403,6 +1519,7 @@ function drawAxisCanvas() {
     ctx.textBaseline = 'bottom';
     ctx.fillText('Click to add a lens or source plane', Wl / 2, Hl - 4);
   }
+  ctx.globalAlpha = 1;
 
   ctx.restore();
 }
@@ -1423,7 +1540,7 @@ function computeCritCurvesForZs(planes, dist, zs, fovArcsec, gridN) {
   let idx = sorted.findIndex(p => { const t = planeEffectiveType(p); return (t === 'source' || t === 'hybrid') && Math.abs(p.z - zs) < 0.005; });
   if (idx >= 0) return computeCriticalCurves(sorted, dist, idx, fovArcsec, gridN);
   // Insert a virtual (empty) source plane at zs and recompute distances.
-  const vp       = { id: -1, z: zs, addLens: false, addSrc: true, objects: [] };
+  const vp       = { id: -1, z: zs, objects: [] };
   const augmented = [...sorted, vp].sort((a, b) => a.z - b.z);
   const augDist   = precomputeDistances(augmented);
   const augIdx    = augmented.indexOf(vp);
@@ -1489,7 +1606,7 @@ function drawOverlay() {
 
   // ── 1. Position markers — same style as the plane-view canvases ─────────────
   if (state.showMarkers) {
-    const RAD = 6;
+    const RAD = window.innerWidth <= 640 ? 10 : 6;
     const drawnHybrids = new Set();
     for (const plane of state.planes) {
       for (const obj of plane.objects) {
@@ -1988,54 +2105,94 @@ function _initGifEncoder(fps, liveCanvas) {
 
 // ── Tour / tutorial ───────────────────────────────────────────────────────────
 
+// Mobile helpers: open/close the plane setup drawer and switch mobile tabs.
+function _tourOpenPlaneSetup() {
+  if (window.innerWidth > 640) return;
+  const tl  = document.getElementById('sl-timeline');
+  const btn = document.getElementById('sl-plane-setup-btn');
+  tl.classList.add('plane-setup-open');
+  if (btn) btn.textContent = '▼ Plane Setup';
+}
+function _tourClosePlaneSetup() {
+  if (window.innerWidth > 640) return;
+  const tl  = document.getElementById('sl-timeline');
+  const btn = document.getElementById('sl-plane-setup-btn');
+  tl.classList.remove('plane-setup-open');
+  if (btn) btn.textContent = '▲ Plane Setup';
+}
+function _tourSetMobileTab(tab) {
+  if (window.innerWidth > 640) return;
+  const col = document.getElementById('sl-controls-col');
+  if (!col) return;
+  col.dataset.mobileTab = tab;
+  document.querySelectorAll('.sl-mobile-tab-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.tab === tab));
+  if (tab === 'settings' || tab === 'recording') {
+    activeTab = tab;
+    document.getElementById('sl-tab-settings').style.display  = tab === 'settings'  ? '' : 'none';
+    document.getElementById('sl-tab-recording').style.display = tab === 'recording' ? '' : 'none';
+  }
+}
+
 const TOUR_STEPS = [
   {
-    target: '.sl-timeline',
+    target: '.sl-axis-wrap',
+    onEnter: _tourOpenPlaneSetup,
     arrow: 'above',
     label: 'Redshift timeline',
-    text: 'The bar at the bottom is the <b>redshift timeline</b>. It represents the line of sight from the observer (left, z = 0) to distant galaxies (right). Click anywhere on the axis to place a new plane at that redshift.',
+    text: 'The redshift axis represents the line of sight from z = 0 (observer) to distant galaxies. Click or tap the axis to place a new plane at that redshift; drag existing markers to reposition them.',
   },
   {
     target: '.sl-planes',
+    onEnter: _tourOpenPlaneSetup,
     arrow: 'above',
     label: 'Plane viewer',
-    text: 'Each plane you add appears here as a small panel. The canvas shows a projected view of that plane. Dots represent lens masses or light sources. Click to select them, drag to move them. Click empty space to add a new object.',
+    text: 'Each plane appears here as a canvas panel showing a projected view of that redshift slice. Click to select an object, drag to move it. The <b>○</b> button (or press <kbd>O</kbd>) clears all objects from the selected plane. The <b>×</b> button (or press <kbd>X</kbd>) deletes the plane entirely.',
   },
   {
-    target: '.sl-plane-box',
-    arrow: 'above',
-    label: 'Lens / source toggles',
-    text: 'The <b>Lens</b> and <b>Src</b> buttons are independent toggles that control what the next click creates. With only <b>Lens</b> active, clicking adds a deflecting mass. With only <b>Src</b> active, clicking adds a light-emitting source. With <b>both active</b>, clicking adds a <b>hybrid object</b>: a co-located lens and source shown as a single purple dot. Lenses, sources, and hybrids can coexist in any plane.',
+    target: '#sl-plane-toolbar',
+    onEnter: _tourOpenPlaneSetup,
+    arrow: 'right',
+    label: 'Add toolbar',
+    text: 'Select what clicking in a plane creates: <b>Lens</b> (deflects light), <b>Source</b> (emits light), or <b>Hybrid</b> (both at once as a purple dot). Press <kbd>1</kbd>, <kbd>2</kbd>, or <kbd>3</kbd> to switch modes. The trash button deletes the selected object.',
   },
   {
     target: '#sl-obj-panel',
+    mobileTarget: '#sl-obj-panel',
+    onEnter: () => { _tourClosePlaneSetup(); _tourSetMobileTab('object'); },
     arrow: 'left',
     label: 'Object Controls',
-    text: 'When an object is selected, its parameters appear here. Choose a mass or brightness profile and adjust the sliders. For <b>hybrid objects</b>, two collapsible sections appear (one for the lens, one for the source), each expandable independently. The eye button hides an object from the computation without deleting it.',
+    text: 'When an object is selected, its parameters appear here. Choose a profile and adjust sliders. For <b>hybrid objects</b>, two collapsible sections appear, one for the lens and one for the source. You can drag objects directly in the main image panel too. Press <kbd>H</kbd> to hide or show the selected object.',
   },
   {
     target: '#sl-image-wrap',
+    onEnter: _tourClosePlaneSetup,
     arrow: 'right',
     label: 'Lensed image',
-    text: 'This is the <b>primary image panel</b>, showing what an observer at z = 0 would see. Light from source objects is bent by all intervening lens objects using full multiplane gravitational lensing. The image updates in real time as you move or adjust objects.',
+    text: 'This panel shows what an observer at z = 0 would see. Light from source objects is bent by all intervening lenses using full multiplane gravitational lensing. Drag objects directly here or in the plane panels; the image updates in real time.',
   },
   {
     target: '.sl-tab-btn[data-tab="settings"]',
+    mobileTarget: '.sl-mobile-tab-btn[data-tab="settings"]',
+    onEnter: () => { _tourClosePlaneSetup(); _tourSetMobileTab('settings'); },
     arrow: 'left',
     label: 'Settings',
-    text: 'The <b>Settings tab</b> controls the field of view, maximum redshift, and tone mapping curve. The Critical Curves section lets you overlay the contours where image count changes (press <kbd>C</kbd> to toggle). The Resolution dropdown controls curve detail: higher values are sharper but slower.',
+    text: 'The <b>Settings tab</b> controls field of view, maximum redshift, and tone mapping. The Critical Curves section overlays contours where image count changes (press <kbd>C</kbd>). The Resolution dropdown controls curve detail.',
   },
   {
     target: '.sl-tab-btn[data-tab="recording"]',
+    mobileTarget: '.sl-mobile-tab-btn[data-tab="recording"]',
+    onEnter: () => { _tourClosePlaneSetup(); _tourSetMobileTab('recording'); },
     arrow: 'left',
     label: 'Recording',
-    text: 'The <b>Recording tab</b> has two modes. <b>Live</b> recording captures whatever you do: press Record, interact, press Stop, then download as WebM or GIF. <b>Programmatic</b> recording animates a selected object between two positions at a chosen speed: set a start position, set an end position, and press Record Program.',
+    text: 'The <b>Recording tab</b> has two modes. <b>Live</b> captures whatever you do: press Record, interact, press Stop, then download as WebM or GIF. <b>Programmatic</b> animates a selected object between two positions; set start, set end, then press Record Program.',
   },
   {
     target: null,
+    onEnter: _tourClosePlaneSetup,
     arrow: null,
     label: 'Ready to explore',
-    text: 'That\'s the full tour! Try clicking the redshift axis to add planes, moving objects in the plane panels, and watching the lensed image update live.',
+    text: 'That\'s the full tour! Click the redshift axis to add planes, pick a tool, click in a plane to add objects, and watch the lensed image update live.',
     final: true,
   },
 ];
@@ -2073,13 +2230,31 @@ function startTour() {
   showTourStep();
 }
 
+function _tourTargetSel(s) {
+  const mob = window.innerWidth <= 640;
+  return (mob && s.mobileTarget) ? s.mobileTarget : s.target;
+}
+
 function showTourStep() {
   const s = TOUR_STEPS[tour.step];
   if (!s) { endTour(); return; }
+  tour.tooltip.style.visibility = 'hidden'; // hide until positioned
+  if (s.onEnter) {
+    s.onEnter();
+    setTimeout(_renderTourStep, 120); // let layout settle after drawer/tab changes
+  } else {
+    _renderTourStep();
+  }
+}
 
+function _renderTourStep() {
+  const s = TOUR_STEPS[tour.step];
+  if (!s || !tour.active) return;
+
+  const sel = _tourTargetSel(s);
   let targetRect = null;
-  if (s.target) {
-    const el = document.querySelector(s.target);
+  if (sel) {
+    const el = document.querySelector(sel);
     if (el) targetRect = el.getBoundingClientRect();
   }
 
@@ -2110,15 +2285,17 @@ function showTourStep() {
   document.getElementById('tt-skip').addEventListener('click', endTour);
 
   positionTourTooltip(targetRect, s.arrow);
+  tour.tooltip.style.visibility = '';
 }
 
 function repositionTour() {
   if (!tour.active) return;
   const s = TOUR_STEPS[tour.step];
   if (!s) return;
+  const sel = _tourTargetSel(s);
   let targetRect = null;
-  if (s.target) {
-    const el = document.querySelector(s.target);
+  if (sel) {
+    const el = document.querySelector(sel);
     if (el) targetRect = el.getBoundingClientRect();
   }
   if (targetRect && targetRect.width > 0) {
@@ -2201,6 +2378,7 @@ function tourNext() {
 function endTour() {
   if (!tour.active) return;
   tour.active = false;
+  _tourClosePlaneSetup();
   window.removeEventListener('resize', repositionTour);
   document.removeEventListener('keydown', _tourKeyHandler);
   tour.backdrop?.remove();  tour.spotlight?.remove();  tour.tooltip?.remove();

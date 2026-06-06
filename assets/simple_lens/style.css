@@ -970,23 +970,58 @@ html[data-theme="light"] #sl-gl-canvas { filter: invert(1); }
   white-space: nowrap;
 }
 
-/* Plane type toggle buttons */
-.sl-plane-type-btn {
-  font-size: 10.5px;
-  padding: 1px 6px;
-  border: 1px solid var(--hairline);
-  border-radius: 3px;
+/* Clear-plane button */
+.sl-plane-clear {
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 6px;
+  border: none;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  transition: background 0.1s, color 0.1s;
 }
-/* Active state uses type-based color from --plane-color set inline */
-.sl-plane-type-btn.active {
-  background: var(--plane-color, var(--accent));
-  border-color: var(--plane-color, var(--accent));
-  color: #fff;
+.sl-plane-clear:hover { color: var(--warn); }
+
+/* ── Plane toolbar (left of .sl-planes, above on mobile) ────────────────── */
+.sl-plane-toolbar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 5px;
+  border-right: 1px solid var(--hairline);
+  background: var(--bg);
+  flex-shrink: 0;
+  width: 38px;
 }
+.sl-tool-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+  flex-shrink: 0;
+}
+.sl-tool-btn:hover:not(.active) { color: var(--fg); border-color: var(--fg); }
+.sl-tool-btn[data-mode="lens"].active   { background: var(--lens-color);   border-color: var(--lens-color);   color: #fff; }
+.sl-tool-btn[data-mode="source"].active { background: var(--src-color);    border-color: var(--src-color);    color: #fff; }
+.sl-tool-btn[data-mode="hybrid"].active { background: var(--hybrid-color); border-color: var(--hybrid-color); color: #fff; }
+/* Short label shown on desktop (vertical column), long label on mobile (horizontal row) */
+.sl-tool-s { display: inline; }
+.sl-tool-l { display: none;   }
+.sl-tool-del { margin-top: auto; } /* bottom-justify in the column */
+.sl-tool-del:hover { color: var(--bad) !important; border-color: var(--bad) !important;
+  background: color-mix(in srgb, var(--bad) 8%, transparent) !important; }
+/* sep is a spacer that grows to push delete down */
+.sl-tool-sep { flex: 1; width: 18px; min-height: 6px; }
 
 /* Effective-type drives border and button active color via --plane-color */
 .sl-plane-box[data-effective-type="lens"]   { --plane-color: var(--lens-color);   }
@@ -1157,6 +1192,26 @@ html[data-theme="light"] #sl-gl-canvas { filter: invert(1); }
   }
   .sl-timeline.plane-setup-open { display: flex; }
 
+  /* Toolbar: horizontal row above the planes, left-aligned */
+  .sl-timeline .sl-plane-toolbar {
+    order: 0;
+    flex-direction: row;
+    width: 100%;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--hairline);
+    padding: 6px 8px;
+    justify-content: flex-start;
+    gap: 6px;
+  }
+  /* Show full labels in horizontal layout */
+  .sl-timeline .sl-tool-s { display: none; }
+  .sl-timeline .sl-tool-l { display: inline; }
+  .sl-timeline .sl-tool-btn { width: auto; padding: 0 10px; font-size: 12px; }
+  .sl-timeline .sl-tool-del { margin-top: 0; margin-left: auto; width: 32px; padding: 0; }
+  .sl-timeline .sl-tool-sep { flex: 0; width: 1px; height: 18px; min-height: 0;
+                               background: var(--hairline); align-self: center; }
+
   /* Inside the drawer: planes on top, axis below.
      flex: 0 0 auto on planes prevents them from filling max-height. */
   .sl-timeline .sl-planes {
@@ -1204,9 +1259,10 @@ html[data-theme="light"] #sl-gl-canvas { filter: invert(1); }
     height: 100%;
   }
 
-  /* touch-action: none prevents browser scroll-hijack during object drag */
-  .sl-plane-canvas { touch-action: none; }
-  .sl-axis-canvas  { touch-action: none; }
+  /* axis canvas: none prevents scroll-hijack when dragging plane markers */
+  .sl-axis-canvas { touch-action: none; }
+  /* plane canvases: leave touch-action default so empty-space drags scroll;
+     pointerdown on an object calls setPointerCapture + preventDefault instead */
 }
 
 /* ── Tour overlay (mirrors chi-by-eye tutorial styles) ───────────────────── */

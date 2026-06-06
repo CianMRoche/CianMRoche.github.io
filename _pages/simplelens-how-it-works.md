@@ -10,11 +10,11 @@ A description of the gravitational lensing computation behind [simpleLens](/asse
 
 ## Quick start
 
-1. **Click the redshift axis** (the bar at the bottom left) to add an empty plane at that redshift. Planes can be dragged along the axis to reposition them.
-2. **Toggle Lens and Src** in the plane header to control what clicking inside the panel creates. With only one active, clicks add that object type. With both active, a click adds a **hybrid object** — a co-located lens and source that move together as a single purple dot.
-3. **Click inside a plane panel** to add an object at that position, or drag from empty space to place and position it in one motion. Click an existing marker to select it.
-4. **Adjust parameters** in the Plane Controls panel. For regular objects, choose a profile and tune the sliders. For hybrid objects, collapsed sections for both lens and source controls appear.
-5. **The image panel** updates in real time. Press **C** to overlay critical curves and caustics. Use the eye button on any object to exclude it from the computation without deleting it. Use live or prorammatic recording features to make gifs or WebMs. 
+1. **Click the redshift axis** (bottom left) to add an empty plane. Drag existing plane markers to reposition them along the axis.
+2. **Pick a tool** using the L / S / H toolbar (or press 1 / 2 / 3): Lens (deflects light), Source (emits light), or Hybrid (both at once, shown as a purple dot).
+3. **Click inside a plane panel** to place an object. Drag from an existing marker to move it. You can also drag objects directly in the main image panel.
+4. **Adjust parameters** in the Object Controls panel on the right. For hybrid objects, separate collapsible sections appear for the lens and source halves. The eye button excludes an object from the computation without deleting it.
+5. **The image panel** updates in real time. Press C to overlay critical curves and caustics. Use the recording tab to save a PNG, WebM, or GIF.
 
 ---
 
@@ -22,8 +22,11 @@ A description of the gravitational lensing computation behind [simpleLens](/asse
 
 | Key | Action |
 |---|---|
+| `1` / `2` / `3` | Select add mode: Lens / Source / Hybrid |
 | `C` | Toggle critical curves and caustics |
 | `H` | Hide / show the selected object |
+| `O` | Clear all objects from the selected plane |
+| `X` | Delete the selected plane |
 | `R` | Start / stop live recording |
 | `↑ ↓ ← →` | Nudge selected object (hold for acceleration) |
 | `Delete` / `Backspace` | Delete the selected object |
@@ -101,14 +104,14 @@ $$\boldsymbol{\theta}_j \;=\; \boldsymbol{\theta} \;-\; \sum_{k\,<\,j} \frac{D_{
 | $D_j$ | Angular diameter distance from observer to plane $j$ |
 | $\hat{\boldsymbol{\alpha}}_k(\boldsymbol{\theta}_k)$ | Deflection angle from all lens objects in plane $k$, evaluated at the ray's position $\boldsymbol{\theta}_k$ |
 
-Each object carries its own type — **lens** or **source** — independently of which plane it belongs to.
+Each object carries its own type, **lens** or **source**, independently of which plane it belongs to.
 Only lens objects enter the deflection sum; source objects are passive and receive the ray without contributing to it.
 A plane containing both types is a **hybrid plane**; its lens objects deflect and its source objects emit, handled separately by the same recursion.
 The weight $D_{kj}/D_j$ converts the deflection at plane $k$ into its angular displacement at the later plane $j$.
 
 The position at the target plane is the **source-plane position** $\boldsymbol{\beta}$, where source brightness is sampled.
 
-> Because each lens plane evaluates its deflection at the ray's *already-deflected* position $\boldsymbol{\theta}_k$, successive lens planes interact non-linearly — a key feature of multiplane lensing absent in single-plane calculations.
+> Because each lens plane evaluates its deflection at the ray's *already-deflected* position $\boldsymbol{\theta}_k$, successive lens planes interact non-linearly, a key feature of multiplane lensing absent in single-plane calculations.
 
 ---
 
@@ -177,7 +180,7 @@ where $m$ is the elliptical radius from step 2 of the SIE and $\hat{\boldsymbol{
 
 ## 5. Source brightness models
 
-Once a ray arrives at a source plane at position $\boldsymbol{\beta}$, the brightness of each source object is evaluated.
+Once a ray arrives at a plane at position $\boldsymbol{\beta}$, the brightness of each source object at that plane is evaluated.
 The elliptically-weighted separation from the source centre is:
 
 $$\mathbf{d} = \boldsymbol{\beta} - (c_x, c_y), \qquad \begin{pmatrix}x_r \\ y_r\end{pmatrix} = R(-\varphi)\,\mathbf{d}, \qquad r_\text{ell}^2 = x_r^2 + (y_r/q)^2$$
@@ -221,7 +224,7 @@ Contributions from all source objects across all planes are summed per pixel to 
 Hidden objects contribute nothing to the sum, nor to deflection or critical curve computation.
 The sum is clamped to $[0,1]$ and passed through a tone-mapping curve before display.
 
-The dynamic range of astrophysical sources (bright ring core to faint extended arcs) far exceeds what a monitor can show linearly, so a nonlinear stretch is needed. Three standard options are available:
+The dynamic range of astrophysical sources (bright ring core to faint extended arcs) far exceeds what a monitor can show linearly, so a nonlinear stretch is applied. Four options are available:
 
 | Mode | Formula | Parameter | Character |
 |---|---|---|---|
@@ -242,7 +245,7 @@ Their pre-images in the source plane are the **caustics**; crossing a caustic ch
 
 The computation proceeds in four steps:
 
-1. **Sample a ray grid.** Trace $N \times N$ rays (Resolution slider, default $N = 512$) to the chosen source plane using the multiplane recursion, recording $\boldsymbol{\beta}$ at each image-plane point.
+1. **Sample a ray grid.** Trace $N \times N$ rays (Resolution dropdown, default $N = 512$) to the chosen source plane using the multiplane recursion, recording $\boldsymbol{\beta}$ at each image-plane point.
 
 2. **Compute the Jacobian.** At each interior grid point, approximate the $2\times2$ Jacobian $\partial\boldsymbol{\beta}/\partial\boldsymbol{\theta}$ via central finite differences and compute its determinant.
 
@@ -251,6 +254,55 @@ The computation proceeds in four steps:
 4. **Map to caustics.** Each critical-curve point is traced to the source plane by interpolating from the already-computed $\boldsymbol{\beta}$ grid.
 
 > Fine features such as cusps are only resolved at higher resolutions.
+
+---
+
+## 7. Code structure
+
+simpleLens is written in vanilla JavaScript with no framework. The source lives in `/assets/simple_lens/`.
+
+### `lens.js`
+
+Pure physics; no DOM access or rendering.
+
+- **Cosmology**: `comovingDist`, `angDiamDist`, `angDiamDistBetween` — flat ΛCDM distance integrals via midpoint Riemann sum.
+- **Deflection models**: `deflectPointMass`, `deflectSIE`, `deflectEPL` — take a ray–lens separation in arcsec and return a deflection angle in arcsec.
+- **`precomputeDistances(planes)`**: builds the $D_\text{obs}$ and $D_\text{btwn}$ arrays once per plane configuration.
+- **`traceRay(θ, planes, dist, targetIdx)`**: evaluates the multiplane recursion in JavaScript; used for critical curve sampling.
+- **`computeCriticalCurves(planes, dist, sourceIdx, fov, gridN)`**: samples an $N \times N$ ray grid, computes the Jacobian determinant via finite differences, then runs marching squares to extract critical curve and caustic segments.
+
+### `renderer.js`
+
+WebGL2 GPU renderer.
+
+- A single **GLSL 300 es fragment shader** runs the full multiplane lensing computation per pixel: it re-implements the multiplane recursion, all lens deflection models, all source brightness profiles, and tone mapping entirely on the GPU.
+- Scene data (plane redshifts, lens positions and parameters, source positions and parameters, pasted-image textures) are packed into uniform arrays and uploaded each frame.
+- The `Renderer` class manages the WebGL context, shader compilation, geometry, and texture slots. `setScene(planes, dist, fov, toneMap, toneMapParam)` triggers a redraw.
+- `preserveDrawingBuffer: true` is set on the WebGL context to allow screenshot and recording capture.
+
+### `main.js`
+
+Application shell (~2500 lines).
+
+- **`state`**: single object holding all mutable app state — planes and their objects, selected IDs, display flags, add mode, tone-map settings, recording state.
+- **`buildDOM()`**: constructs the entire UI tree in one pass (image panel, sidebar tabs, redshift axis, plane boxes area, toolbar, plane setup bar).
+- **Event wiring**: `attachHandlers()` for global keyboard/tab/toolbar events; `attachAxisHandlers()` for plane-dragging on the redshift axis; `attachPlaneCanvasHandlers(canvas, plane)` per plane panel; `attachImageHandlers(wrap)` for drag-to-move in the main image.
+- **`renderSidebar()`**: rebuilds the Object Controls and settings/recording tab content. Called whenever selection or state changes.
+- **`rebuildPlaneBoxes()`**: rebuilds the plane panel DOM from scratch, called when planes are added or removed.
+- **`_doRedraw()`**: packs the scene into the renderer, redraws the axis canvas, and redraws the overlay (critical curves, position markers, legend) on a 2D canvas layered above the WebGL output.
+- **Recording**: `captureSnapshot()` composites the WebGL canvas and overlay into a PNG; `startRecording()` / `stopRecording()` drive a `MediaRecorder` for WebM or a gif.js encoder for GIF.
+- **Programmatic recording**: each selected object can have an initial and final position set; `startProgrammaticRecording()` interpolates all registered objects simultaneously.
+- **Tour**: `startTour()` / `showTourStep()` — spotlight-and-tooltip tutorial with mobile-aware step callbacks that open/close the plane setup drawer and switch mobile tabs as needed.
+
+### `style.css`
+
+Single stylesheet using CSS custom properties for theming (`--accent`, `--lens-color`, `--src-color`, `--hybrid-color`, and others) with `html[data-theme="dark"]` overrides.
+The layout uses flexbox throughout: three-column on wide screens, collapsing to a single-column mobile layout with a fixed Plane Setup drawer at the bottom that slides up to reveal the redshift axis and plane panels.
+
+### `gif.js` + `gif.worker.js`
+
+A vendored local copy of the gif.js library.
+Loaded lazily (only when GIF recording is requested) via a dynamic `<script>` tag, avoiding cross-origin Web Worker restrictions that would arise from a CDN-hosted copy.
 
 ---
 
