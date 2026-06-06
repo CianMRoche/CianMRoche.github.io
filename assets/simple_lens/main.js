@@ -725,11 +725,24 @@ function attachPlaneCanvasHandlers(canvas, plane) {
   const DRAG_THRESH = 3; // px
 
   canvas.addEventListener('pointermove', e => {
-    if (istate !== 'idle') e.preventDefault();
     if (istate === 'idle') {
       canvas.style.cursor = hitTestPlane(plane, canvas, e) ? 'grab' : 'crosshair';
       return;
     }
+    if (istate === 'touch-watch') {
+      // Once the touch moves enough, commit to drag-add (vertical/diagonal gesture).
+      // Horizontal swipes are left to the browser — it will issue pointercancel.
+      const moved = Math.hypot(e.clientX - pStart.ex, e.clientY - pStart.ey);
+      if (moved > 6) {
+        e.preventDefault();
+        canvas.setPointerCapture(e.pointerId);
+        istate = 'add-pending';
+        // fall through to add-pending handling below
+      } else {
+        return;
+      }
+    }
+    if (istate !== 'idle') e.preventDefault();
     const pos = canvasToArcsec(canvas, e);
     const dx  = pos.x - pStart.mx, dy = pos.y - pStart.my;
     const dpx = dx / state.fov * canvas.offsetWidth;
@@ -766,26 +779,39 @@ function attachPlaneCanvasHandlers(canvas, plane) {
     const pos  = canvasToArcsec(canvas, e);
     hitObj     = hitTestPlane(plane, canvas, e);
     if (hitObj) {
+      // Object hit — capture immediately for all pointer types.
       e.preventDefault();
       canvas.setPointerCapture(e.pointerId);
       istate = 'hit-pending'; canvas.style.cursor = 'grab';
-      pStart = { cx: hitObj.cx, cy: hitObj.cy, mx: pos.x, my: pos.y };
+      pStart = { cx: hitObj.cx, cy: hitObj.cy, mx: pos.x, my: pos.y, ex: e.clientX, ey: e.clientY };
       state.selectedPlaneId = plane.id;
       state.selectedObjId   = hitObj.id;
       renderSidebar(); redraw();
     } else if (e.pointerType !== 'touch') {
-      // Mouse on empty space: add object on click/drag.
+      // Mouse on empty space — capture for drag-add.
       e.preventDefault();
       canvas.setPointerCapture(e.pointerId);
       istate = 'add-pending';
-      pStart = { mx: pos.x, my: pos.y };
+      pStart = { mx: pos.x, my: pos.y, ex: e.clientX, ey: e.clientY };
+    } else {
+      // Touch on empty space — watch intent before capturing.
+      // A horizontal swipe will trigger pointercancel (browser scrolls planes).
+      // A tap triggers pointerup without cancel — that's our add signal.
+      // A vertical drag transitions to add-pending once intent is clear.
+      istate = 'touch-watch';
+      pStart = { mx: pos.x, my: pos.y, ex: e.clientX, ey: e.clientY };
     }
-    // Touch on empty space: no capture → browser handles horizontal scroll.
+  });
+
+  canvas.addEventListener('pointercancel', () => {
+    // Browser took the touch for scrolling — reset cleanly.
+    istate = 'idle'; hitObj = null;
+    canvas.style.cursor = 'crosshair';
   });
 
   canvas.addEventListener('pointerup', e => {
-    if (istate === 'add-pending') {
-      // Clean click on empty space → add object(s) here.
+    if (istate === 'touch-watch' || istate === 'add-pending') {
+      // touch-watch + pointerup (no pointercancel) = tap. add-pending = clean click.
       const pos = canvasToArcsec(canvas, e);
       const obj = _makeAddObjects(plane, pos.x, pos.y);
       state.selectedPlaneId = plane.id;

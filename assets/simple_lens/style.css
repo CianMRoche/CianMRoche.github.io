@@ -1046,7 +1046,7 @@ html[data-theme="light"] #sl-gl-canvas { filter: invert(1); }
   width: 148px;
   height: 148px;
   cursor: crosshair;
-  cursor: crosshair;
+  /* touch-action intentionally unset: JS handles intent detection per-gesture */
 }
 .sl-plane-canvas.has-selected { cursor: grab; }
 
@@ -1259,10 +1259,8 @@ html[data-theme="light"] #sl-gl-canvas { filter: invert(1); }
     height: 100%;
   }
 
-  /* axis canvas: none prevents scroll-hijack when dragging plane markers */
+  /* axis canvas: prevent scroll-hijack when dragging plane markers */
   .sl-axis-canvas { touch-action: none; }
-  /* plane canvases: leave touch-action default so empty-space drags scroll;
-     pointerdown on an object calls setPointerCapture + preventDefault instead */
 }
 
 /* ── Tour overlay (mirrors chi-by-eye tutorial styles) ───────────────────── */
