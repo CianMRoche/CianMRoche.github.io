@@ -304,7 +304,11 @@ function buildDOM() {
             <div class="sl-tool-sep"></div>
             <button class="sl-tool-btn sl-tool-del" id="sl-tool-del-obj" title="Delete selected object"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="1.5" y1="4" x2="12.5" y2="4"/><path d="M4 4l.5 7h5l.5-7"/><path d="M5 4V3h4v1"/></svg></button>
           </div>
-          <div class="sl-planes" id="sl-planes"></div>
+          <div class="sl-planes-wrap">
+            <button class="sl-planes-arrow sl-planes-arrow-l" id="sl-planes-arrow-l" aria-label="Scroll planes left">‹</button>
+            <div class="sl-planes" id="sl-planes"></div>
+            <button class="sl-planes-arrow sl-planes-arrow-r" id="sl-planes-arrow-r" aria-label="Scroll planes right">›</button>
+          </div>
         </div>
       </div>
     </div>`;
@@ -375,6 +379,26 @@ function attachHandlers() {
     }
     if (e.target.closest('#sl-tool-del-obj')) deleteSelectedObject();
   });
+
+  // Mobile plane scroll arrows.
+  function _updatePlaneArrows() {
+    const el = document.getElementById('sl-planes');
+    const l  = document.getElementById('sl-planes-arrow-l');
+    const r  = document.getElementById('sl-planes-arrow-r');
+    if (!el || !l || !r) return;
+    l.style.display = el.scrollLeft > 1 ? '' : 'none';
+    r.style.display = el.scrollLeft < el.scrollWidth - el.clientWidth - 1 ? '' : 'none';
+  }
+  const _planesEl2 = document.getElementById('sl-planes');
+  _planesEl2?.addEventListener('scroll', _updatePlaneArrows);
+  new ResizeObserver(_updatePlaneArrows).observe(_planesEl2 ?? document.body);
+  document.getElementById('sl-planes-arrow-l')?.addEventListener('click', () => {
+    document.getElementById('sl-planes')?.scrollBy({ left: -162, behavior: 'smooth' });
+  });
+  document.getElementById('sl-planes-arrow-r')?.addEventListener('click', () => {
+    document.getElementById('sl-planes')?.scrollBy({ left:  162, behavior: 'smooth' });
+  });
+  _updatePlaneArrows();
 
   attachAxisHandlers();
   attachImageHandlers(document.getElementById('sl-image-wrap'));
@@ -729,19 +753,6 @@ function attachPlaneCanvasHandlers(canvas, plane) {
       canvas.style.cursor = hitTestPlane(plane, canvas, e) ? 'grab' : 'crosshair';
       return;
     }
-    if (istate === 'touch-watch') {
-      // Once the touch moves enough, commit to drag-add (vertical/diagonal gesture).
-      // Horizontal swipes are left to the browser — it will issue pointercancel.
-      const moved = Math.hypot(e.clientX - pStart.ex, e.clientY - pStart.ey);
-      if (moved > 6) {
-        e.preventDefault();
-        canvas.setPointerCapture(e.pointerId);
-        istate = 'add-pending';
-        // fall through to add-pending handling below
-      } else {
-        return;
-      }
-    }
     if (istate !== 'idle') e.preventDefault();
     const pos = canvasToArcsec(canvas, e);
     const dx  = pos.x - pStart.mx, dy = pos.y - pStart.my;
@@ -776,42 +787,26 @@ function attachPlaneCanvasHandlers(canvas, plane) {
   canvas.addEventListener('pointerleave', () => { if (istate === 'idle') canvas.style.cursor = 'crosshair'; });
 
   canvas.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    canvas.setPointerCapture(e.pointerId);
     const pos  = canvasToArcsec(canvas, e);
     hitObj     = hitTestPlane(plane, canvas, e);
     if (hitObj) {
-      // Object hit — capture immediately for all pointer types.
-      e.preventDefault();
-      canvas.setPointerCapture(e.pointerId);
       istate = 'hit-pending'; canvas.style.cursor = 'grab';
-      pStart = { cx: hitObj.cx, cy: hitObj.cy, mx: pos.x, my: pos.y, ex: e.clientX, ey: e.clientY };
+      pStart = { cx: hitObj.cx, cy: hitObj.cy, mx: pos.x, my: pos.y };
       state.selectedPlaneId = plane.id;
       state.selectedObjId   = hitObj.id;
       renderSidebar(); redraw();
-    } else if (e.pointerType !== 'touch') {
-      // Mouse on empty space — capture for drag-add.
-      e.preventDefault();
-      canvas.setPointerCapture(e.pointerId);
-      istate = 'add-pending';
-      pStart = { mx: pos.x, my: pos.y, ex: e.clientX, ey: e.clientY };
     } else {
-      // Touch on empty space — watch intent before capturing.
-      // A horizontal swipe will trigger pointercancel (browser scrolls planes).
-      // A tap triggers pointerup without cancel — that's our add signal.
-      // A vertical drag transitions to add-pending once intent is clear.
-      istate = 'touch-watch';
-      pStart = { mx: pos.x, my: pos.y, ex: e.clientX, ey: e.clientY };
+      istate = 'add-pending';
+      pStart = { mx: pos.x, my: pos.y };
     }
   });
 
-  canvas.addEventListener('pointercancel', () => {
-    // Browser took the touch for scrolling — reset cleanly.
-    istate = 'idle'; hitObj = null;
-    canvas.style.cursor = 'crosshair';
-  });
+  canvas.addEventListener('pointercancel', () => { istate = 'idle'; hitObj = null; canvas.style.cursor = 'crosshair'; });
 
   canvas.addEventListener('pointerup', e => {
-    if (istate === 'touch-watch' || istate === 'add-pending') {
-      // touch-watch + pointerup (no pointercancel) = tap. add-pending = clean click.
+    if (istate === 'add-pending') {
       const pos = canvasToArcsec(canvas, e);
       const obj = _makeAddObjects(plane, pos.x, pos.y);
       state.selectedPlaneId = plane.id;
