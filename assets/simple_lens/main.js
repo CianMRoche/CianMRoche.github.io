@@ -169,6 +169,15 @@ let activeTab = 'settings'; // 'settings' | 'recording'
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 let renderer = null, glCanvas = null, overlayCtx = null;
 let axisCanvas = null, planesEl = null, sidebarEl = null;
+
+function updatePlaneArrows() {
+  const el = document.getElementById('sl-planes');
+  const l  = document.getElementById('sl-planes-arrow-l');
+  const r  = document.getElementById('sl-planes-arrow-r');
+  if (!el || !l || !r) return;
+  l.style.display = el.scrollLeft > 1 ? '' : 'none';
+  r.style.display = el.scrollLeft < el.scrollWidth - el.clientWidth - 1 ? '' : 'none';
+}
 let _planeLevels      = new Map();  // plane.id → bump level, kept in sync with drawAxisCanvas
 let _draggingPlaneId  = null;       // id of the plane currently being axis-dragged
 let _arrowKeyStart    = 0;          // timestamp of the first keydown in the current arrow-key hold
@@ -381,24 +390,13 @@ function attachHandlers() {
   });
 
   // Mobile plane scroll arrows.
-  function _updatePlaneArrows() {
-    const el = document.getElementById('sl-planes');
-    const l  = document.getElementById('sl-planes-arrow-l');
-    const r  = document.getElementById('sl-planes-arrow-r');
-    if (!el || !l || !r) return;
-    l.style.display = el.scrollLeft > 1 ? '' : 'none';
-    r.style.display = el.scrollLeft < el.scrollWidth - el.clientWidth - 1 ? '' : 'none';
-  }
-  const _planesEl2 = document.getElementById('sl-planes');
-  _planesEl2?.addEventListener('scroll', _updatePlaneArrows);
-  new ResizeObserver(_updatePlaneArrows).observe(_planesEl2 ?? document.body);
+  document.getElementById('sl-planes')?.addEventListener('scroll', updatePlaneArrows);
   document.getElementById('sl-planes-arrow-l')?.addEventListener('click', () => {
     document.getElementById('sl-planes')?.scrollBy({ left: -162, behavior: 'smooth' });
   });
   document.getElementById('sl-planes-arrow-r')?.addEventListener('click', () => {
     document.getElementById('sl-planes')?.scrollBy({ left:  162, behavior: 'smooth' });
   });
-  _updatePlaneArrows();
 
   attachAxisHandlers();
   attachImageHandlers(document.getElementById('sl-image-wrap'));
@@ -735,6 +733,7 @@ function rebuildPlaneBoxes() {
     attachPlaneCanvasHandlers(cvs, plane);
     drawPlaneCanvas(cvs, plane);
   }
+  updatePlaneArrows();
 }
 
 // ── Plane canvas interaction ───────────────────────────────────────────────────
@@ -742,6 +741,9 @@ const HIT_R = 10; // px desktop
 function hitRadius() { return window.innerWidth <= 640 ? 18 : HIT_R; }
 
 function attachPlaneCanvasHandlers(canvas, plane) {
+  // Prevent iOS Safari from cancelling pointer events inside position:fixed ancestors.
+  canvas.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
+
   // 'idle' | 'hit-pending' | 'dragging' | 'add-pending' | 'add-dragging'
   let istate  = 'idle';
   let hitObj  = null;

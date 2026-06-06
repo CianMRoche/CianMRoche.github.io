@@ -944,9 +944,7 @@ html[data-theme="light"] #sl-gl-canvas { filter: invert(1); }
   overflow-x: auto;
   overflow-y: hidden;
   padding: 8px 12px;
-  scrollbar-width: none; /* hide scrollbar — arrows replace it on mobile */
 }
-.sl-planes::-webkit-scrollbar { display: none; }
 .sl-planes-arrow {
   display: none; /* shown only on mobile via media query */
   position: absolute;
@@ -1248,9 +1246,9 @@ html[data-theme="light"] #sl-gl-canvas { filter: invert(1); }
 
   /* Inside the drawer: planes on top, axis below.
      flex: 0 0 auto on planes prevents them from filling max-height. */
-  .sl-timeline .sl-planes-wrap { order: 1; flex: 0 0 auto; }
+  .sl-timeline .sl-planes-wrap { order: 1; flex: 0 0 auto; width: 100%; }
   .sl-timeline .sl-planes {
-    flex: 0 0 auto;
+    flex: 1;
     overflow-x: auto;
     overflow-y: hidden;
   }
