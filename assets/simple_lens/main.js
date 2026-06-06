@@ -914,7 +914,7 @@ function drawPlaneCanvas(canvas, plane) {
        (obj.hybridId && plane.objects.some(o => o.hybridId === obj.hybridId && o.id === state.selectedObjId)));
     const isHidden = obj.hidden && (!obj.hybridId || plane.objects.every(o => o.hybridId !== obj.hybridId || o.id === obj.id || o.hidden));
     const dotType  = obj.hybridId ? 'hybrid' : obj.type;
-    const rad = 6;
+    const rad = window.innerWidth <= 640 ? 10 : 6;
     const objCol = isHidden ? (dark ? '#555' : '#bbb') : typeColorHex(dotType);
     ctx.fillStyle = objCol;
     ctx.globalAlpha = isHidden ? 0.4 : (sel ? 1 : 0.7);
