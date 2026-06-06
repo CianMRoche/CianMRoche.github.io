@@ -49,10 +49,21 @@ html[data-theme="dark"] .doc-toc-list a:hover { color: #e6edf3; border-left-colo
 .doc-toc-list a.active { color: #2563eb; border-left-color: #2563eb; font-weight: 500; }
 html[data-theme="dark"] .doc-toc-list a.active { color: #7bbfcc; border-left-color: #7bbfcc; }
 .doc-toc-list .toc-h3 a { padding-left: 20px; font-size: 0.78rem; }
-.doc-content { flex: 1; min-width: 0; }
+.doc-content { flex: 1; min-width: 0; overflow-x: hidden; }
+/* Equations that overflow are given a local horizontal scroll rather than
+   widening the page layout. Targets both MathJax 2.x and 3.x output. */
+.doc-content .MathJax_Display,
+.doc-content mjx-container[display="true"] {
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+}
+/* Tables can also overflow on narrow screens */
+.doc-content table { display: block; overflow-x: auto; max-width: 100%; }
 @media (max-width: 700px) {
   .doc-wrap { flex-direction: column; padding: 20px 16px 60px; gap: 0; }
   .doc-sidebar { position: static; max-height: none; margin-bottom: 24px; }
+  .doc-content { font-size: 0.93rem; }
 }
 </style>
 
