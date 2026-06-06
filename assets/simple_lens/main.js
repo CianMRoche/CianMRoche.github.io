@@ -741,9 +741,6 @@ const HIT_R = 10; // px desktop
 function hitRadius() { return window.innerWidth <= 640 ? 18 : HIT_R; }
 
 function attachPlaneCanvasHandlers(canvas, plane) {
-  // Prevent iOS Safari from cancelling pointer events inside position:fixed ancestors.
-  canvas.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
-
   // 'idle' | 'hit-pending' | 'dragging' | 'add-pending' | 'add-dragging'
   let istate  = 'idle';
   let hitObj  = null;

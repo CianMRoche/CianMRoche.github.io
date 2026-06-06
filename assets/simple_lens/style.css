@@ -201,6 +201,7 @@ html[data-theme="dark"] .sl-theme-btn:hover { color: #fff; background: rgba(255,
 /* ── Image panel ─────────────────────────────────────────────────────────── */
 
 .sl-image-wrap {
+  touch-action: none; /* prevent page scroll / pull-to-refresh when dragging in the image */
   flex: 1 1 320px;   /* grow freely, wraps to own row if it would be < 320px */
   min-width: 0;
   /* max-width caps the flex main axis so aspect-ratio:1 derives height without overflow.
