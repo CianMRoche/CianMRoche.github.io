@@ -1023,15 +1023,190 @@ html[data-theme="light"] #sl-gl-canvas { filter: invert(1); }
   align-self: center;
 }
 
+/* Mobile tab bar — hidden on desktop */
+.sl-mobile-tabs { display: none; }
+.sl-plane-setup-bar { display: none; }
+
 /* ── Narrow screens: tighter padding, sidebars wrap to full rows ───────────── */
 
 @media (max-width: 600px) {
   .sl-upper { padding: 8px 8px 0; gap: 10px; }
-  .sl-timeline { height: 190px; }
   /* On very narrow screens controls group fills its row */
   .sl-upper .sl-controls-col { flex: 1 0 100%; min-width: 0; }
   .sl-controls-col > .sl-param-col,
   .sl-controls-col > .sl-sidebar { max-width: 100%; }
+}
+
+/* ── Mobile layout: single-column, plane setup in a slide-up drawer ───────── */
+
+@media (max-width: 640px) {
+  /* Make the body scroll; -webkit-overflow-scrolling:touch enables it inside
+     position:fixed ancestors on iOS Safari. */
+  .sl-body {
+    overflow-y: scroll;
+    -webkit-overflow-scrolling: touch;
+    /* Pad enough that the last element scrolls clear of the fixed bar +
+       device safe-area (iPhone home indicator etc.) */
+    padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Stack image above controls, stretch children to full width */
+  .sl-upper {
+    flex-wrap: nowrap;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 8px 8px 0;
+    gap: 0;
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+
+  /* Image: full width, square */
+  .sl-image-wrap {
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: 100%;
+    aspect-ratio: 1;
+    align-self: stretch;
+  }
+
+  /* Controls: full width below image, no internal scroll */
+  .sl-upper .sl-controls-col {
+    flex: 0 0 auto;
+    width: 100%;
+    min-width: 0;
+    align-self: stretch;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: 0;
+    /* Pad bottom so content isn't hidden under the fixed Plane Setup bar */
+    padding-bottom: 56px;
+  }
+  .sl-controls-col > .sl-param-col,
+  .sl-controls-col > .sl-sidebar {
+    max-width: 100%;
+    min-width: 0;
+    width: 100%;
+    overflow: visible;
+    height: auto;
+  }
+  /* Panels expand to natural height — no internal scrollbars */
+  #sl-obj-panel,
+  .sl-tab-content {
+    overflow: visible;
+    height: auto;
+    min-height: 0;
+    flex: 0 0 auto;
+  }
+  .sl-sidebar { overflow: visible; height: auto; min-height: 0; flex: 0 0 auto; }
+  .sl-param-col { overflow: visible; height: auto; min-height: 0; }
+
+  /* Mobile tab bar — full width, equal thirds */
+  .sl-mobile-tabs {
+    display: flex;
+    width: 100%;
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--hairline);
+    background: var(--bg-soft);
+  }
+  .sl-mobile-tab-btn {
+    flex: 1;
+    padding: 10px 4px;
+    font-size: 12px;
+    font-weight: 500;
+    border: none;
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+  }
+  .sl-mobile-tab-btn.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  /* Object tab: show/hide param-col and sidebar based on data-mobile-tab */
+  #sl-controls-col[data-mobile-tab="object"]    .sl-param-col { display: flex; }
+  #sl-controls-col[data-mobile-tab="object"]    .sl-sidebar   { display: none; }
+  #sl-controls-col[data-mobile-tab="settings"]  .sl-param-col { display: none; }
+  #sl-controls-col[data-mobile-tab="settings"]  .sl-sidebar   { display: flex; }
+  #sl-controls-col[data-mobile-tab="recording"] .sl-param-col { display: none; }
+  #sl-controls-col[data-mobile-tab="recording"] .sl-sidebar   { display: flex; }
+
+  /* Desktop tab header inside sidebar hidden — mobile tab bar takes over */
+  .sl-sidebar #sl-tabs { display: none; }
+  /* Object Controls title hidden — mobile tab bar already labels it */
+  .sl-param-col-title { display: none; }
+  /* Axis label hidden on mobile — canvas draws it inline with the hint text */
+  .sl-timeline .sl-axis-label { display: none; }
+
+  /* Timeline hidden in normal flow; becomes a slide-up drawer */
+  .sl-timeline {
+    display: none;
+    position: fixed;
+    bottom: 40px; /* sits above the plane setup bar */
+    left: 0;
+    right: 0;
+    z-index: 200;
+    flex-direction: column;
+    height: auto;
+    margin-top: 0;
+    border-top: 1px solid var(--hairline);
+    box-shadow: 0 -4px 16px rgba(0,0,0,0.25);
+  }
+  .sl-timeline.plane-setup-open { display: flex; }
+
+  /* Inside the drawer: planes on top, axis below.
+     flex: 0 0 auto on planes prevents them from filling max-height. */
+  .sl-timeline .sl-planes {
+    order: 1;
+    flex: 0 0 auto;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  .sl-timeline .sl-axis-wrap {
+    order: 2;
+    width: 100%;
+    height: auto;
+    flex-shrink: 0;
+    border-right: none;
+    border-top: 1px solid var(--hairline);
+  }
+  /* Fixed canvas height ensures getBoundingClientRect() is reliable on mobile */
+  .sl-timeline .sl-axis-canvas {
+    flex: 0 0 64px;
+    height: 64px;
+  }
+
+  /* Plane setup bar: fixed footer strip */
+  .sl-plane-setup-bar {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 201;
+    height: 40px;
+    background: var(--bg-soft);
+    border-top: 1px solid var(--hairline);
+    align-items: center;
+    justify-content: center;
+  }
+  .sl-plane-setup-btn {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--fg-soft);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 0 16px;
+    height: 100%;
+  }
+
+  /* touch-action: none prevents browser scroll-hijack during object drag */
+  .sl-plane-canvas { touch-action: none; }
+  .sl-axis-canvas  { touch-action: none; }
 }
 
 /* ── Tour overlay (mirrors chi-by-eye tutorial styles) ───────────────────── */

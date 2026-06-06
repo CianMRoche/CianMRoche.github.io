@@ -200,6 +200,14 @@ function init() {
 
   new ResizeObserver(() => { renderer?.resize(); redraw(); })
     .observe(document.getElementById('sl-image-wrap'));
+
+  new ResizeObserver(() => { drawAxisCanvas(); })
+    .observe(document.getElementById('sl-axis-canvas'));
+
+  // Redraw axis when crossing the mobile breakpoint (e.g. wide→narrow→wide).
+  window.matchMedia('(max-width: 640px)').addEventListener('change', () => {
+    setTimeout(drawAxisCanvas, 150);
+  });
 }
 
 function applyThemeIcons(theme) {
@@ -263,10 +271,15 @@ function buildDOM() {
             <div class="sl-rec-dot" id="sl-rec-dot" style="display:none"></div>
           </div>
           <!-- Controls group: right-justified, right-grows -->
-          <div class="sl-controls-col">
+          <div class="sl-controls-col" id="sl-controls-col" data-mobile-tab="object">
+            <div class="sl-mobile-tabs" id="sl-mobile-tabs">
+              <button class="sl-mobile-tab-btn active" data-tab="object">Object</button>
+              <button class="sl-mobile-tab-btn" data-tab="settings">Settings</button>
+              <button class="sl-mobile-tab-btn" data-tab="recording">Recording</button>
+            </div>
             <div class="sl-param-col">
               <div class="sl-tabs">
-                <div class="sl-param-col-title">Plane Controls</div>
+                <div class="sl-param-col-title">Object Controls</div>
               </div>
               <div id="sl-obj-panel"></div>
             </div>
@@ -280,7 +293,10 @@ function buildDOM() {
             </div>
           </div><!-- end sl-controls-col -->
         </div>
-        <div class="sl-timeline">
+        <div class="sl-plane-setup-bar" id="sl-plane-setup-bar">
+          <button class="sl-plane-setup-btn" id="sl-plane-setup-btn">▲ Plane Setup</button>
+        </div>
+        <div class="sl-timeline" id="sl-timeline">
           <div class="sl-axis-wrap">
             <div class="sl-axis-label">redshift z →</div>
             <canvas class="sl-axis-canvas" id="sl-axis-canvas"></canvas>
@@ -318,6 +334,32 @@ function attachHandlers() {
     document.getElementById('sl-tab-settings').style.display  = activeTab === 'settings'  ? '' : 'none';
     document.getElementById('sl-tab-recording').style.display = activeTab === 'recording' ? '' : 'none';
   });
+
+  // Mobile tab bar.
+  document.getElementById('sl-mobile-tabs').addEventListener('click', e => {
+    const btn = e.target.closest('.sl-mobile-tab-btn');
+    if (!btn) return;
+    const tab = btn.dataset.tab;
+    document.querySelectorAll('.sl-mobile-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    document.getElementById('sl-controls-col').dataset.mobileTab = tab;
+    if (tab === 'settings' || tab === 'recording') {
+      activeTab = tab;
+      document.querySelectorAll('.sl-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+      document.getElementById('sl-tab-settings').style.display  = tab === 'settings'  ? '' : 'none';
+      document.getElementById('sl-tab-recording').style.display = tab === 'recording' ? '' : 'none';
+    }
+  });
+
+  // Mobile plane setup toggle.
+  document.getElementById('sl-plane-setup-btn').addEventListener('click', () => {
+    const tl  = document.getElementById('sl-timeline');
+    const btn = document.getElementById('sl-plane-setup-btn');
+    const open = tl.classList.toggle('plane-setup-open');
+    btn.textContent = open ? '▼ Plane Setup' : '▲ Plane Setup';
+    if (open) { setTimeout(drawAxisCanvas, 150); }
+  });
+  // Set initial caret state.
+  document.getElementById('sl-plane-setup-btn').textContent = '▲ Plane Setup';
 
   attachAxisHandlers();
 
@@ -462,6 +504,7 @@ function attachAxisHandlers() {
 
   axisCanvas.addEventListener('pointermove', e => {
     if (dragPlane) {
+      e.preventDefault();
       // Cursor locked to grabbing during drag.
       axisCanvas.style.cursor = 'grabbing';
       didDrag = true;
@@ -575,6 +618,7 @@ function attachPlaneCanvasHandlers(canvas, plane) {
   const DRAG_THRESH = 3; // px
 
   canvas.addEventListener('pointermove', e => {
+    if (istate !== 'idle') e.preventDefault();
     if (istate === 'idle') {
       canvas.style.cursor = hitTestPlane(plane, canvas, e) ? 'grab' : 'crosshair';
       return;
@@ -1246,8 +1290,11 @@ function drawAxisCanvas() {
   if (!axisCanvas) return;
   const dpr = window.devicePixelRatio || 1;
   const r   = axisCanvas.getBoundingClientRect();
-  const W   = Math.max(1, Math.round(r.width * dpr));
-  const H   = Math.max(1, Math.round(r.height * dpr));
+  // If the canvas is hidden (inside display:none timeline), don't resize or draw —
+  // doing so would destroy the canvas dimensions and corrupt later renders.
+  if (!r.width || !r.height) return;
+  const W   = Math.round(r.width * dpr);
+  const H   = Math.round(r.height * dpr);
   if (axisCanvas.width !== W || axisCanvas.height !== H) { axisCanvas.width = W; axisCanvas.height = H; }
 
   const ctx  = axisCanvas.getContext('2d');
@@ -1339,12 +1386,23 @@ function drawAxisCanvas() {
     if (_lbl) ctx.fillText(_lbl, x, axisY + 26);
   }
 
-  // Hint text — bottom centre of the axis strip.
-  ctx.font          = '10.5px system-ui, sans-serif';
-  ctx.textAlign     = 'center';
-  ctx.textBaseline  = 'bottom';
-  ctx.fillStyle     = dark ? '#8b949e' : '#6b7280';
-  ctx.fillText('Click to add a lens or source plane', Wl / 2, Hl - 4);
+  ctx.font      = '10.5px system-ui, sans-serif';
+  ctx.fillStyle = dark ? '#8b949e' : '#6b7280';
+  const _mob = window.innerWidth <= 640;
+  if (_mob) {
+    // On mobile the HTML label is hidden; draw both texts on one line in the canvas.
+    const _ty = 13;
+    ctx.textAlign    = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText('redshift z →', PAD, _ty);
+    ctx.textAlign    = 'right';
+    ctx.fillText('(Click/tap to add a plane)', Wl - PAD, _ty);
+  } else {
+    // Desktop: centred hint at the bottom.
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('Click to add a lens or source plane', Wl / 2, Hl - 4);
+  }
 
   ctx.restore();
 }
@@ -1520,30 +1578,32 @@ function drawOverlay() {
   }
 
   if (state.showLegend && legendItems.length > 0) {
+    const _mob  = window.innerWidth <= 640;
     const lx = 8, ly = 8;
-    const lineH = 28, padV = 11, padH = 14;
-    const boxW  = 220, boxH = legendItems.length * lineH + 2 * padV;
+    const lineH = _mob ? 20 : 28, padV = _mob ? 7 : 11, padH = _mob ? 10 : 14;
+    const boxW  = _mob ? 150 : 220, boxH = legendItems.length * lineH + 2 * padV;
     const _dark = document.documentElement.getAttribute('data-theme') === 'dark';
     overlayCtx.fillStyle = _dark ? 'rgba(0,0,0,0.60)' : 'rgba(255,255,255,0.90)';
     overlayCtx.fillRect(lx, ly, boxW, boxH);
 
-    overlayCtx.font         = '18px system-ui, -apple-system, sans-serif';
+    overlayCtx.font         = `${_mob ? 12 : 18}px system-ui, -apple-system, sans-serif`;
     overlayCtx.textBaseline = 'middle';
     overlayCtx.textAlign    = 'left';
 
     legendItems.forEach((item, i) => {
       const iy = ly + padV + i * lineH + lineH / 2;
       const ix = lx + padH;
+      const iconW = _mob ? 16 : 25, dotR = _mob ? 5 : 7, textOff = _mob ? 22 : 33;
       if (item.isLine) {
-        overlayCtx.strokeStyle = item.color; overlayCtx.lineWidth = 3.5;
-        overlayCtx.beginPath(); overlayCtx.moveTo(ix, iy); overlayCtx.lineTo(ix + 25, iy); overlayCtx.stroke();
+        overlayCtx.strokeStyle = item.color; overlayCtx.lineWidth = _mob ? 2.5 : 3.5;
+        overlayCtx.beginPath(); overlayCtx.moveTo(ix, iy); overlayCtx.lineTo(ix + iconW, iy); overlayCtx.stroke();
       } else if (item.isDot) {
         overlayCtx.fillStyle = item.color;
-        drawShapeMarker(overlayCtx, item.markerType, ix + 12, iy, 7);
+        drawShapeMarker(overlayCtx, item.markerType, ix + iconW / 2, iy, dotR);
         overlayCtx.fill();
       }
       overlayCtx.fillStyle = _dark ? 'rgba(255,255,255,0.88)' : 'rgba(0,0,0,0.75)';
-      overlayCtx.fillText(item.label, ix + 33, iy);
+      overlayCtx.fillText(item.label, ix + textOff, iy);
     });
   }
 
@@ -1950,7 +2010,7 @@ const TOUR_STEPS = [
   {
     target: '#sl-obj-panel',
     arrow: 'left',
-    label: 'Plane Controls',
+    label: 'Object Controls',
     text: 'When an object is selected, its parameters appear here. Choose a mass or brightness profile and adjust the sliders. For <b>hybrid objects</b>, two collapsible sections appear (one for the lens, one for the source), each expandable independently. The eye button hides an object from the computation without deleting it.',
   },
   {
