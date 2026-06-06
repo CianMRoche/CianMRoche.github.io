@@ -497,7 +497,21 @@ html[data-theme="light"] #sl-gl-canvas { filter: invert(1); }
   flex-shrink: 0;
   width: 10px;
 }
-.sl-hybrid-body { padding: 4px 2px 2px; }
+.sl-hybrid-body {
+  padding: 4px 2px 2px;
+  display: grid;
+  grid-template-columns: max-content 1fr 28px;
+  column-gap: 8px;
+  row-gap: 6px;
+  align-items: center;
+}
+/* Full-width items inside hybrid body */
+.sl-hybrid-body .sl-select,
+.sl-hybrid-body .sl-shape-toggle,
+.sl-hybrid-body .sl-checkbox-row { grid-column: 1 / -1; }
+.sl-hybrid-body .sl-param-row { display: contents; }
+.sl-hybrid-body input[type="range"] { width: 100%; min-width: 0; }
+.sl-hybrid-body .sl-param-val { font-size: 11px; text-align: right; white-space: nowrap; }
 
 /* ⓘ info toggle */
 .sl-info-details { position: relative; }
