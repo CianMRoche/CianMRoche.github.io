@@ -1,16 +1,17 @@
-// Caustica — main.js
+// Caustica: main.js
 
 import { Renderer }                            from './renderer.js';
 import { precomputeDistances,
          computeCriticalCurves,
          angDiamDist,
-         angDiamDistBetween }                  from './lens.js';
+         angDiamDistBetween,
+         traceRay }                            from './lens.js';
 
 // ── ID generator ──────────────────────────────────────────────────────────────
 let _nextId = 1;
 function uid() { return _nextId++; }
 
-// ── Type colors — lens = blue/cyan, source = amber ────────────────────────────
+// ── Type colors: lens = blue/cyan, source = amber ────────────────────────────
 function typeColorHex(type) {
   const dark = document.documentElement.getAttribute('data-theme') === 'dark';
   if (type === 'lens')   return dark ? '#7bbfcc' : '#4a7fc8';
@@ -66,7 +67,7 @@ const state = {
   showCaustics:    false,
   showMarkers:     true,
   showLegend:      true,
-  addMode:         'lens',   // 'lens' | 'source' | 'hybrid' — global tool state
+  addMode:         'lens',   // 'lens' | 'source' | 'hybrid': global tool state
   toneMap:         1,   // 0=linear, 1=sqrt, 2=power, 3=asinh
   toneMapPower:    0.5,
   toneMapAsinh:    5.0,
@@ -97,6 +98,260 @@ function drawShapeMarker(ctx, type, px, py, r) {
   ctx.closePath();
 }
 
+// ── Point source image finder ─────────────────────────────────────────────────
+
+function findPointSourceImages(srcObj, srcPlane) {
+  // Two-stage approach matching lenstronomy:
+  // 1. Coarse grid → starting guesses via sign-change topology
+  // 2. Newton-Raphson refinement → exact image positions
+  // NR is stable because it either converges to a real image or diverges
+  // (which we detect and discard). Near caustics, multiple starting guesses
+  // converge to the same image, handled by deduplication.
+  if (!state.dist) return [];
+  const sorted = [...state.planes].sort((a, b) => a.z - b.z);
+  const tIdx   = sorted.findIndex(p => p.id === srcPlane.id);
+  if (tIdx < 0) return [];
+
+  const { cx: scx, cy: scy } = srcObj;
+
+  // F(θ) = β(θ) − source: the function whose zeros are image positions.
+  function evalF(x, y) {
+    const [bx, by] = traceRay(x, y, sorted, state.dist, tIdx);
+    return [bx - scx, by - scy];
+  }
+
+  // ── Stage 1: coarse sign-change grid for starting guesses ──────────────
+  const N    = 48;
+  const step = state.fov / (N - 1);
+  const half = state.fov / 2;
+
+  const Fx = new Float32Array(N * N);
+  const Fy = new Float32Array(N * N);
+  const D2 = new Float32Array(N * N);
+  const GX = new Float32Array(N * N);
+  const GY = new Float32Array(N * N);
+
+  for (let iy = 0; iy < N; iy++) {
+    for (let ix = 0; ix < N; ix++) {
+      const i = iy * N + ix;
+      GX[i] = -half + ix * step;
+      GY[i] = -half + iy * step;
+      const [fx, fy] = evalF(GX[i], GY[i]);
+      Fx[i] = fx; Fy[i] = fy;
+      D2[i] = fx*fx + fy*fy;
+    }
+  }
+
+  const M   = N - 1;
+  const hit = new Uint8Array(M * M);
+  for (let iy = 0; iy < M; iy++) {
+    for (let ix = 0; ix < M; ix++) {
+      const a = iy*N+ix, b = iy*N+ix+1, c = (iy+1)*N+ix, d = (iy+1)*N+ix+1;
+      const xc = Fx[a]*Fx[b]<0 || Fx[a]*Fx[c]<0 || Fx[b]*Fx[d]<0 || Fx[c]*Fx[d]<0
+              || !Fx[a] || !Fx[b] || !Fx[c] || !Fx[d];
+      if (!xc) continue;
+      const yc = Fy[a]*Fy[b]<0 || Fy[a]*Fy[c]<0 || Fy[b]*Fy[d]<0 || Fy[c]*Fy[d]<0
+              || !Fy[a] || !Fy[b] || !Fy[c] || !Fy[d];
+      if (yc) hit[iy*M+ix] = 1;
+    }
+  }
+
+  // One starting guess per connected component (best grid corner per component).
+  const label = new Int32Array(M * M).fill(-1);
+  const starts = [];
+  for (let s = 0; s < M * M; s++) {
+    if (!hit[s] || label[s] >= 0) continue;
+    const comp = starts.length;
+    let bestD = Infinity, bestI = -1;
+    const stack = [s];
+    label[s] = comp;
+    while (stack.length) {
+      const cur = stack.pop();
+      const cy = Math.floor(cur / M), cx = cur % M;
+      for (const [dy, dx] of [[0,0],[0,1],[1,0],[1,1]]) {
+        const pi = (cy+dy)*N+(cx+dx);
+        if (D2[pi] < bestD) { bestD = D2[pi]; bestI = pi; }
+      }
+      for (const [dy, dx] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+        const ny = cy+dy, nx = cx+dx;
+        if (ny<0||ny>=M||nx<0||nx>=M) continue;
+        const nc = ny*M+nx;
+        if (!hit[nc] || label[nc] >= 0) continue;
+        label[nc] = comp; stack.push(nc);
+      }
+    }
+    if (bestI >= 0) starts.push([GX[bestI], GY[bestI]]);
+  }
+
+  // ── Stage 2: Newton-Raphson with backtracking line search ──────────────
+  const h       = 1e-4;          // fixed finite-difference step (arcsec)
+  const maxIter = 60;
+  const convTol = 1e-14;         // |F|² convergence (sub-nano-arcsec)
+  const diverge = state.fov * 3;
+  const images  = [];
+
+  for (const [x0, y0] of starts) {
+    let x = x0, y = y0, ok = false;
+    for (let iter = 0; iter < maxIter; iter++) {
+      const [fx, fy] = evalF(x, y);
+      const f2 = fx*fx + fy*fy;
+      if (f2 < convTol) { ok = true; break; }
+
+      // Numerical Jacobian via central differences.
+      const [fxR, fyR] = evalF(x+h, y);
+      const [fxL, fyL] = evalF(x-h, y);
+      const [fxU, fyU] = evalF(x, y+h);
+      const [fxD, fyD] = evalF(x, y-h);
+      const Axx = (fxR-fxL)/(2*h), Axy = (fxU-fxD)/(2*h);
+      const Ayx = (fyR-fyL)/(2*h), Ayy = (fyU-fyD)/(2*h);
+      const det = Axx*Ayy - Axy*Ayx;
+      if (Math.abs(det) < 1e-14) break; // on or very near critical curve
+
+      const dx = (-fx*Ayy + fy*Axy) / det;
+      const dy = ( fx*Ayx - fy*Axx) / det;
+
+      // Backtracking line search: halve step until |F| decreases.
+      let alpha = 1.0;
+      for (let ls = 0; ls < 10; ls++) {
+        const xn = x + alpha*dx, yn = y + alpha*dy;
+        const [fn_x, fn_y] = evalF(xn, yn);
+        if (fn_x*fn_x + fn_y*fn_y < f2) { x = xn; y = yn; break; }
+        alpha *= 0.5;
+      }
+      if (Math.abs(x) > diverge || Math.abs(y) > diverge) break;
+    }
+    if (!ok) continue;
+
+    // Deduplicate: discard if another solution is within 1e-7 arcsec.
+    if (images.some(([ix, iy]) => (ix-x)**2+(iy-y)**2 < 1e-14)) continue;
+    images.push([x, y]);
+  }
+
+  return images;
+}
+
+// ── Config YAML ───────────────────────────────────────────────────────────────
+
+function configToYaml() {
+  let y = `fov: ${state.fov}\nzMax: ${state.zMax}\nplanes:\n`;
+  for (const plane of state.planes) {
+    y += `  - z: ${plane.z.toFixed(3)}\n    objects:\n`;
+    for (const obj of plane.objects) {
+      y += `      - type: ${obj.type}\n`;
+      y += `        model: ${obj.model}\n`;
+      y += `        cx: ${+obj.cx.toFixed(5)}\n`;
+      y += `        cy: ${+obj.cy.toFixed(5)}\n`;
+      y += `        hidden: ${obj.hidden}\n`;
+      if (obj.hybridId) y += `        hybridId: '${obj.hybridId}'\n`;
+      y += `        params:\n`;
+      for (const [k, v] of Object.entries(obj.params)) {
+        if (typeof v === 'string')       y += `          ${k}: '${v.replace(/'/g, "''")}'\n`;
+        else if (typeof v === 'number')  y += `          ${k}: ${+v.toFixed(6)}\n`;
+        else if (typeof v === 'boolean') y += `          ${k}: ${v}\n`;
+      }
+    }
+  }
+  return y;
+}
+
+function parseYamlConfig(yaml) {
+  const lines = yaml.split('\n');
+  const cfg = { planes: [] };
+  let plane = null, obj = null, inParams = false;
+
+  function parseVal(s) {
+    s = s.trim();
+    if (s === 'true')  return true;
+    if (s === 'false') return false;
+    if (s === 'null')  return null;
+    if ((s.startsWith("'") && s.endsWith("'")) || (s.startsWith('"') && s.endsWith('"')))
+      return s.slice(1,-1).replace(/''/g, "'");
+    const n = Number(s);
+    return (s !== '' && !isNaN(n)) ? n : s;
+  }
+
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    if (!line.trim() || line.trim().startsWith('#')) continue;
+    const indent = line.match(/^ */)[0].length;
+    const trimmed = line.trim();
+
+    if (indent === 0) {
+      const [k, ...rest] = trimmed.split(':');
+      const val = rest.join(':').trim();
+      if (val !== '') cfg[k.trim()] = parseVal(val);
+      // blank value (e.g. 'planes:') means a block key: leave existing array intact
+    } else if (indent === 2 && trimmed.startsWith('- z:')) {
+      plane = { z: parseVal(trimmed.slice(4)), objects: [] };
+      cfg.planes.push(plane); obj = null; inParams = false;
+    } else if (indent === 6 && trimmed.startsWith('- type:')) {
+      obj = { type: trimmed.slice(7).trim(), params: {}, showShape: false };
+      plane?.objects.push(obj); inParams = false;
+    } else if (indent === 8 && obj) {
+      const colon = trimmed.indexOf(':');
+      if (colon < 0) continue;
+      const k = trimmed.slice(0, colon).trim();
+      const v = trimmed.slice(colon + 1).trim();
+      if (k === 'params') { inParams = true; }
+      else { if (v !== '') obj[k] = parseVal(v); inParams = false; }
+    } else if (indent === 10 && inParams && obj) {
+      const colon = trimmed.indexOf(':');
+      if (colon >= 0) obj.params[trimmed.slice(0,colon).trim()] = parseVal(trimmed.slice(colon+1));
+    }
+  }
+  return cfg;
+}
+
+function saveConfig() {
+  downloadBlob(new Blob([configToYaml()], { type: 'text/yaml' }), 'caustica-config.yaml');
+}
+
+function loadConfigFromYaml(yaml) {
+  try {
+    const cfg = parseYamlConfig(yaml);
+    if (cfg.fov)  state.fov  = cfg.fov;
+    if (cfg.zMax) state.zMax = cfg.zMax;
+    // Clear pasted textures before replacing planes
+    for (const p of state.planes)
+      p.objects.filter(o => o.model === 'pastedimage').forEach(o => renderer?.clearPastedTexture(o.id));
+    const VALID_TYPES  = new Set(['lens', 'source']);
+    const VALID_MODELS = new Set(['pointmass','sie','epl','nfw','gaussian','exponential','point','pointsource','pastedimage']);
+    const COLOR_RE     = /^#[0-9a-fA-F]{6}$/;
+    state.planes = (cfg.planes || []).map(p => ({
+      id: uid(), z: isFinite(p.z) ? +p.z : 0,
+      objects: (p.objects || []).map(o => {
+        const type  = VALID_TYPES.has(o.type)   ? o.type  : 'lens';
+        const model = VALID_MODELS.has(o.model) ? o.model : (type === 'lens' ? 'sie' : 'gaussian');
+        // Sanitize params: numbers only except color (must be #rrggbb)
+        const rawParams = o.params ?? {};
+        const params = {};
+        for (const [k, v] of Object.entries(rawParams)) {
+          if (k === 'color') params[k] = COLOR_RE.test(v) ? v : '#ffffff';
+          else if (typeof v === 'number' && isFinite(v)) params[k] = v;
+          else if (typeof v === 'boolean') params[k] = v;
+        }
+        return {
+          id: uid(), type, model,
+          cx:       isFinite(o.cx) ? Math.max(-50, Math.min(50, +o.cx)) : 0,
+          cy:       isFinite(o.cy) ? Math.max(-50, Math.min(50, +o.cy)) : 0,
+          hidden:   o.hidden === true,
+          showShape: false,
+          ...(typeof o.hybridId === 'string' && /^[a-z0-9-]+$/.test(o.hybridId) ? { hybridId: o.hybridId } : {}),
+          params: Object.keys(params).length ? params : defaultParams(model),
+        };
+      })
+    }));
+    state.planes.sort((a, b) => a.z - b.z);
+    state.selectedPlaneId = state.planes[0]?.id ?? null;
+    state.selectedObjId   = state.planes[0]?.objects[0]?.id ?? null;
+    invalidateDistances();
+    rebuildPlaneBoxes(); renderSidebar(); redraw();
+  } catch (err) {
+    alert('Failed to load config: ' + err.message);
+    console.error(err);
+  }
+}
+
 function defaultParams(model) {
   if (model === 'pointmass')   return { thetaE: 1.0 };
   if (model === 'sie')         return { b: 1.0, q: 0.75, phi: 0 };
@@ -105,6 +360,7 @@ function defaultParams(model) {
   if (model === 'gaussian')    return { sigma: 0.06, q: 1.0,  phi: 0, amplitude: 1.0,  color: '#ffffff' };
   if (model === 'exponential') return { sigma: 0.05, q: 0.40, phi: 0, amplitude: 2.20, color: '#ffffff' };
   if (model === 'point')       return { sigma: 0.08, amplitude: 1.0, color: '#ffffff' };
+  if (model === 'pointsource') return { sigma: 0.05, amplitude: 1.0, color: '#ffffff' };
   if (model === 'pastedimage') return { amplitude: 1.0 };
   return {};
 }
@@ -324,7 +580,7 @@ function buildDOM() {
   glCanvas   = document.getElementById('sl-gl-canvas');
   axisCanvas = document.getElementById('sl-axis-canvas');
   planesEl   = document.getElementById('sl-planes');
-  // sidebarEl no longer used — renderSidebar targets sl-params-col / sl-settings-col directly.
+  // sidebarEl no longer used: renderSidebar targets sl-params-col / sl-settings-col directly.
   overlayCtx = document.getElementById('sl-overlay').getContext('2d');
 }
 
@@ -340,7 +596,7 @@ function attachHandlers() {
   });
   applyThemeIcons(document.documentElement.getAttribute('data-theme') || 'dark');
 
-  // Tab switching — static buttons, wired once.
+  // Tab switching: static buttons, wired once.
   document.getElementById('sl-tabs').addEventListener('click', e => {
     const btn = e.target.closest('.sl-tab-btn');
     if (!btn) return;
@@ -421,7 +677,7 @@ function attachHandlers() {
   attachAxisHandlers();
   attachImageHandlers(document.getElementById('sl-image-wrap'));
 
-  // Paste image from clipboard — applies to the currently selected pastedimage object.
+  // Paste image from clipboard: applies to the currently selected pastedimage object.
   document.addEventListener('paste', e => {
     const obj = selectedObj();
     if (!obj || obj.model !== 'pastedimage') return;
@@ -921,7 +1177,7 @@ function drawPlaneCanvas(canvas, plane) {
 
   const drawnHybrids = new Set();
   for (const obj of plane.objects) {
-    // Hybrid pairs share a position — draw only once as a single purple dot.
+    // Hybrid pairs share a position: draw only once as a single purple dot.
     if (obj.hybridId) {
       if (drawnHybrids.has(obj.hybridId)) continue;
       drawnHybrids.add(obj.hybridId);
@@ -952,20 +1208,32 @@ function drawPlaneCanvas(canvas, plane) {
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 const LENS_INFO = {
-  sie: `<b>b</b> — Deflection scale (arcsec), equal to 4πσ<sub>v</sub>²/c². Proportional to the velocity dispersion squared; independent of distances. The Einstein ring appears at roughly b × (D<sub>LS</sub>/D<sub>S</sub>).<br>
-        <b>q</b> — Axis ratio: 1 = circular, lower = more elliptical.<br>
-        <b>φ</b> — Position angle of the major axis (radians).`,
-  pointmass: `<b>Strength</b> — Mass scale (arcsec): equal to √(4GM / c² D<sub>L</sub>). For a fixed lens redshift, D<sub>L</sub> is constant, so Strength is proportional to √M. The Einstein ring appears at Strength × √(D<sub>LS</sub> / D<sub>S</sub>), so its size also depends on the redshift geometry.`,
-  epl: `<b>b</b> — Deflection scale (arcsec). Same meaning as for the SIE; the Einstein ring appears at roughly b × (D<sub>LS</sub>/D<sub>S</sub>).<br>
-        <b>q</b> — Axis ratio: 1 = circular, lower = more elliptical.<br>
-        <b>φ</b> — Position angle of the major axis (radians).<br>
-        <b>γ</b> — Power-law slope. γ = 2 is isothermal (identical to SIE). γ &lt; 2 gives a steeper central density; γ &gt; 2 gives a shallower one. Typical galaxies have γ ≈ 1.9–2.1.`,
+  sie: `<b>b</b>: deflection scale (arcsec), equal to 4πσ<sub>v</sub>²/c². Proportional to velocity dispersion squared; independent of distances. The Einstein ring appears at roughly b × (D<sub>LS</sub>/D<sub>S</sub>).<br>
+        <b>q</b>: axis ratio (1 = circular, lower = more elliptical).<br>
+        <b>φ</b>: position angle of the major axis (radians).`,
+  pointmass: `<b>Strength</b>: mass scale in arcsec, equal to √(4GM / c² D<sub>L</sub>). For a fixed lens redshift D<sub>L</sub> is constant, so Strength is proportional to √M. The Einstein ring appears at Strength × √(D<sub>LS</sub> / D<sub>S</sub>).`,
+  epl: `<b>b</b>: deflection scale (arcsec), same role as in SIE.<br>
+        <b>q</b>: axis ratio (1 = circular, lower = more elliptical).<br>
+        <b>φ</b>: position angle of the major axis (radians).<br>
+        <b>γ</b>: power-law slope. γ = 2 is isothermal (identical to SIE); γ &lt; 2 steepens the central density, γ &gt; 2 shallows it. Typical galaxies have γ ≈ 1.9–2.1.`,
 };
-const SOURCE_INFO = `
-  <b>σ</b> — Source size (arcsec): 1σ half-width of the brightness profile.<br>
-  <b>q</b> — Axis ratio: 1 = circular, lower = more elliptical.<br>
-  <b>φ</b> — Position angle of the major axis (radians).<br>
-  <b>Amplitude</b> — Peak surface brightness.`;
+const SOURCE_INFO = {
+  gaussian: `<b>σ</b>: half-width at 1/e² of the Gaussian profile (arcsec).<br>
+             <b>q</b>: axis ratio (1 = circular, lower = more elliptical).<br>
+             <b>φ</b>: position angle of the major axis (radians).<br>
+             <b>A</b>: peak surface brightness.`,
+  exponential: `<b>σ</b>: exponential scale length (arcsec). Sérsic n = 1; more extended than Gaussian.<br>
+                <b>q</b>: axis ratio (1 = circular, lower = more elliptical).<br>
+                <b>φ</b>: position angle of the major axis (radians).<br>
+                <b>A</b>: peak surface brightness.`,
+  point: `<b>r</b>: radius of the uniform disc (arcsec). The edge is sharp.<br>
+          <b>A</b>: surface brightness inside the disc.`,
+  pointsource: `Idealised point source for quasar lensing. Image positions are found by solving the lens equation numerically; each is drawn as a circle of fixed angular size, unaffected by magnification or shear.<br><br>
+                <b>Size</b>: angular radius of each image circle (arcsec).<br>
+                <b>A</b>: brightness of the circles.`,
+  pastedimage: `A user-supplied image mapped onto the source plane. Paste with Ctrl+V after selecting this object.<br><br>
+                <b>Brightness</b>: overall amplitude multiplier.`,
+};
 
 function infoSection(id, html) {
   return `<details class="sl-info-details" id="${id}">
@@ -980,7 +1248,7 @@ function renderSidebar() {
   const obj = selectedObj(), pl = selectedPlane();
   const ezs = effectiveCritZs();
 
-  // ── Params panel (built first — used in settingsContent below) ──────────────
+  // ── Params panel (built first: used in settingsContent below) ──────────────
   let paramsPanel = '';
   if (obj && pl) {
     const partner = hybridPartner(pl, obj);
@@ -1004,6 +1272,7 @@ function renderSidebar() {
         <option value="epl"       ${lensObj.model==='epl'       ?'selected':''}>EPL (Power law)</option>
         <option value="pointmass" ${lensObj.model==='pointmass' ?'selected':''}>Point mass</option>`;
       const srcModelOpts = `
+        <option value="pointsource" ${srcObj.model==='pointsource' ?'selected':''}>Point source</option>
         <option value="gaussian"    ${srcObj.model==='gaussian'    ?'selected':''}>Gaussian</option>
         <option value="exponential" ${srcObj.model==='exponential' ?'selected':''}>Exponential</option>
         <option value="point"       ${srcObj.model==='point'       ?'selected':''}>Uniform circle</option>
@@ -1032,7 +1301,7 @@ function renderSidebar() {
             <button class="sl-hybrid-hdr" id="sl-hybrid-src-hdr">
               <span class="sl-hybrid-arrow">${srcExp ? '▼' : '▶'}</span>
               <span class="sl-panel-title" style="flex:1">Source</span>
-              ${infoSection('sl-param-info-src', SOURCE_INFO)}
+              ${infoSection('sl-param-info-src', SOURCE_INFO[srcObj.model] ?? '')}
             </button>
             ${srcExp ? `<div class="sl-hybrid-body" data-hybrid-section="src">
               <select class="sl-select" id="sl-model-select-src">${srcModelOpts}</select>
@@ -1047,13 +1316,14 @@ function renderSidebar() {
         ? `<option value="sie"       ${obj.model==='sie'       ?'selected':''}>SIE (Isothermal, γ=2)</option>
            <option value="epl"       ${obj.model==='epl'       ?'selected':''}>EPL (Power law)</option>
            <option value="pointmass" ${obj.model==='pointmass' ?'selected':''}>Point mass</option>`
-        : `<option value="gaussian"    ${obj.model==='gaussian'    ?'selected':''}>Gaussian</option>
+        : `<option value="pointsource" ${obj.model==='pointsource' ?'selected':''}>Point source</option>
+           <option value="gaussian"    ${obj.model==='gaussian'    ?'selected':''}>Gaussian</option>
            <option value="exponential" ${obj.model==='exponential' ?'selected':''}>Exponential</option>
            <option value="point"       ${obj.model==='point'       ?'selected':''}>Uniform circle</option>
            <option value="pastedimage" ${obj.model==='pastedimage' ?'selected':''}>Pasted image</option>`;
       const infoHtml = isLens
         ? infoSection('sl-param-info', LENS_INFO[obj.model] ?? '')
-        : infoSection('sl-param-info', SOURCE_INFO);
+        : infoSection('sl-param-info', SOURCE_INFO[obj.model] ?? '');
       paramsPanel = `
         <div class="sl-panel">
           <div class="sl-panel-title-row">
@@ -1111,7 +1381,6 @@ function renderSidebar() {
         <input type="range" id="sl-tone-asinh" min="0.5" max="20" step="0.5" value="${state.toneMapAsinh}">
         <span class="sl-tone-param-val">${state.toneMapAsinh.toFixed(1)}</span>
       </div>` : ''}
-
       <div class="sl-subsection-header">Critical Curves <kbd>C</kbd></div>
       <p class="sl-perf-note">(Can be slow at high resolutions.)</p>
       <div class="sl-checkbox-row">
@@ -1130,6 +1399,12 @@ function renderSidebar() {
       <div class="sl-global-input">
         <label>Source z<sub>s</sub></label>
         <input type="number" id="sl-crit-zs" min="0.1" max="15" step="0.1" value="${ezs.toFixed(2)}">
+      </div>
+      <div class="sl-subsection-header">Configuration</div>
+      <div class="sl-capture-row">
+        <button class="sl-capture-btn" id="sl-save-config">↓ Save YAML</button>
+        <button class="sl-capture-btn" id="sl-load-config">↑ Load YAML</button>
+        <input type="file" id="sl-config-file" accept=".yaml,.yml" style="display:none">
       </div>
     </div>
     `;
@@ -1151,8 +1426,8 @@ function renderSidebar() {
       <div class="sl-panel-title-row">
         <span class="sl-panel-title">LIVE</span>
         ${infoSection('sl-rec-info', `
-          <b>WebM</b> — fast, browser-native. Critical curves are hidden during programmatic recording to keep frame timing correct.<br><br>
-          <b>GIF</b> — auto-looping, universally shareable. Slower to encode, 256 colors. GIF programmatic recording includes critical curves at full resolution.<br><br>
+          <b>WebM</b>: fast, browser-native. Critical curves are hidden during programmatic recording to keep frame timing correct.<br><br>
+          <b>GIF</b>: auto-looping, universally shareable. Slower to encode, 256 colors. GIF programmatic recording includes critical curves at full resolution.<br><br>
           <b>Programmatic:</b> select an object, set its initial and final positions, click Add to program. Repeat for each object. All listed objects animate simultaneously on Record.`)}
       </div>
 
@@ -1272,6 +1547,17 @@ function renderSidebar() {
   document.getElementById('sl-crit-zs')?.addEventListener('change',  e => { const v = parseFloat(e.target.value); if (v > 0) { state.critZs = v; redraw(); } });
   document.getElementById('sl-show-crit')?.addEventListener('change', e => { state.showCritCurves = e.target.checked; redraw(); });
   document.getElementById('sl-show-caus')?.addEventListener('change', e => { state.showCaustics   = e.target.checked; redraw(); });
+  document.getElementById('sl-save-config')?.addEventListener('click', saveConfig);
+  document.getElementById('sl-load-config')?.addEventListener('click', () => {
+    document.getElementById('sl-config-file')?.click();
+  });
+  document.getElementById('sl-config-file')?.addEventListener('change', e => {
+    const file = e.target.files?.[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => loadConfigFromYaml(ev.target.result);
+    reader.readAsText(file);
+    e.target.value = ''; // reset so same file can be loaded again
+  });
 
   if (obj && pl) {
     const partner = hybridPartner(pl, obj);
@@ -1310,16 +1596,18 @@ function renderSidebar() {
       document.getElementById('sl-obj-panel').querySelectorAll('[data-hybrid-section="lens"] input[type="range"][data-param]').forEach(inp => {
         const valEl = inp.parentElement.querySelector('.sl-param-val');
         inp.addEventListener('input', () => {
-          lensObj.params[inp.dataset.param] = parseFloat(inp.value);
-          if (valEl) valEl.textContent = fmtP(parseFloat(inp.value));
+          const _v = readSliderValue(inp);
+          lensObj.params[inp.dataset.param] = _v;
+          if (valEl) valEl.textContent = fmtP(_v);
           redraw();
         });
       });
       document.getElementById('sl-obj-panel').querySelectorAll('[data-hybrid-section="src"] input[type="range"][data-param]').forEach(inp => {
         const valEl = inp.parentElement.querySelector('.sl-param-val');
         inp.addEventListener('input', () => {
-          srcObj.params[inp.dataset.param] = parseFloat(inp.value);
-          if (valEl) valEl.textContent = fmtP(parseFloat(inp.value));
+          const _v = readSliderValue(inp);
+          srcObj.params[inp.dataset.param] = _v;
+          if (valEl) valEl.textContent = fmtP(_v);
           redraw();
         });
       });
@@ -1352,8 +1640,9 @@ function renderSidebar() {
       document.getElementById('sl-obj-panel').querySelectorAll('input[type="range"][data-param]').forEach(inp => {
         const valEl = inp.parentElement.querySelector('.sl-param-val');
         inp.addEventListener('input', () => {
-          obj.params[inp.dataset.param] = parseFloat(inp.value);
-          if (valEl) valEl.textContent = fmtP(parseFloat(inp.value));
+          const _v = readSliderValue(inp);
+          obj.params[inp.dataset.param] = _v;
+          if (valEl) valEl.textContent = fmtP(_v);
           redraw();
         });
       });
@@ -1361,13 +1650,39 @@ function renderSidebar() {
   }
 }
 
-function fmtP(v) { return v.toFixed(2); }
+function fmtP(v) {
+  const a = Math.abs(v);
+  if (a === 0)    return '0';
+  if (a < 0.005)  return v.toFixed(4);
+  if (a < 0.05)   return v.toFixed(3);
+  return v.toFixed(2);
+}
+
+// Read slider value, handling both linear and logarithmic sliders.
+function readSliderValue(inp) {
+  if (inp.dataset.logRange) {
+    const [minV, maxV] = inp.dataset.logRange.split(',').map(Number);
+    return minV * Math.pow(maxV / minV, parseFloat(inp.value) / 1000);
+  }
+  return parseFloat(inp.value);
+}
 
 function sliderRow(label, key, min, max, step, val) {
   return `<div class="sl-param-row">
     <span class="sl-param-label">${label}</span>
     <input type="range" data-param="${key}" min="${min}" max="${max}" step="${step}" value="${val}">
     <span class="sl-param-val">${fmtP(val)}</span>
+  </div>`;
+}
+
+// Logarithmic slider: slider position 0–1000 maps to [minV, maxV] on a log scale.
+function sliderRowLog(label, key, minV, maxV, val) {
+  const clamped = Math.max(minV, Math.min(maxV, val));
+  const pos = Math.round(Math.log(clamped / minV) / Math.log(maxV / minV) * 1000);
+  return `<div class="sl-param-row">
+    <span class="sl-param-label">${label}</span>
+    <input type="range" data-param="${key}" data-log-range="${minV},${maxV}" min="0" max="1000" step="1" value="${pos}">
+    <span class="sl-param-val">${fmtP(clamped)}</span>
   </div>`;
 }
 
@@ -1381,33 +1696,44 @@ function shapeToggle(obj) {
 function lensParamRows(obj) {
   const p = obj.params;
   if (obj.model === 'pointmass')
-    return sliderRow('Strength (")', 'thetaE', 0.1, 3.0, 0.05, p.thetaE ?? 1)
+    return sliderRowLog('Strength (")', 'thetaE', 0.01, 8.0, p.thetaE ?? 1)
          + shapeToggle(obj);
   if (obj.model === 'sie')
-    return sliderRow('b (")',   'b',   0.1, 3.0,     0.05, p.b   ?? 1)
-         + sliderRow('q',       'q',   0.1, 1.0,     0.05, p.q   ?? 0.75)
-         + sliderRow('φ (rad)', 'phi', 0,   Math.PI, 0.05, p.phi ?? 0)
+    return sliderRowLog('b (")',   'b',   0.01, 8.0,   p.b   ?? 1)
+         + sliderRow   ('q',       'q',   0.05, 1.0,   0.05, p.q   ?? 0.75)
+         + sliderRow   ('φ (rad)', 'phi', 0,   Math.PI, 0.05, p.phi ?? 0)
          + shapeToggle(obj);
   if (obj.model === 'epl')
-    return sliderRow('b (")',   'b',     0.1, 3.0,     0.05, p.b     ?? 1)
-         + sliderRow('q',       'q',     0.1, 1.0,     0.05, p.q     ?? 0.75)
-         + sliderRow('φ (rad)', 'phi',   0,   Math.PI, 0.05, p.phi   ?? 0)
-         + sliderRow('γ',       'gamma', 0.5, 3.0,     0.05, p.gamma ?? 2.0)
+    return sliderRowLog('b (")',   'b',     0.01, 8.0,   p.b     ?? 1)
+         + sliderRow   ('q',       'q',     0.05, 1.0,   0.05, p.q     ?? 0.75)
+         + sliderRow   ('φ (rad)', 'phi',   0,   Math.PI, 0.05, p.phi   ?? 0)
+         + sliderRow   ('γ',       'gamma', 0.5, 3.0,     0.05, p.gamma ?? 2.0)
          + shapeToggle(obj);
   if (obj.model === 'nfw')
-    return sliderRow('κ<sub>s</sub>',      'kappaS', 0.05, 3.0, 0.05, p.kappaS ?? 0.5)
-         + sliderRow('r<sub>s</sub> (")', 'rS',     0.05, 2.0, 0.05, p.rS     ?? 0.4)
+    return sliderRowLog('κ<sub>s</sub>',     'kappaS', 0.01, 5.0, p.kappaS ?? 0.5)
+         + sliderRowLog('r<sub>s</sub> (")', 'rS',     0.01, 5.0, p.rS     ?? 0.4)
          + shapeToggle(obj);
   return '';
 }
 
 function sourceParamRows(obj) {
   const p = obj.params;
+  if (obj.model === 'pointsource') {
+    const isLight = document.documentElement.getAttribute('data-theme') !== 'dark';
+    const displayColor = isLight ? invertHexColor(p.color ?? '#ffffff') : (p.color ?? '#ffffff');
+    return sliderRowLog('Size (″)', 'sigma', 0.002, 2.0, p.sigma ?? 0.05)
+         + sliderRow('A', 'amplitude', 0.1, 3.0, 0.1, p.amplitude ?? 1.0)
+         + `<div class="sl-param-row">
+              <span class="sl-param-label">Color</span>
+              <input type="color" data-param-color="1" value="${displayColor}" class="sl-color-input">
+            </div>`
+         + '<p style="font-size:11px;color:var(--muted);margin-top:4px;grid-column:1/-1">Image positions are computed with a numerical refinement algorithm. Einstein rings do not appear for point sources: use a uniform circle source instead. Some highly demagnified images may not appear.</p>';
+  }
   if (obj.model === 'point') {
     const isLight    = document.documentElement.getAttribute('data-theme') !== 'dark';
     const storedColor = p.color ?? '#ffffff';
     const displayColor = isLight ? invertHexColor(storedColor) : storedColor;
-    return sliderRow('r (")', 'sigma', 0.005, 1.0, 0.005, p.sigma ?? 0.08)
+    return sliderRowLog('r (")', 'sigma', 0.002, 4.0, p.sigma ?? 0.08)
          + `<div class="sl-param-row">
               <span class="sl-param-label">Color</span>
               <input type="color" data-param-color="1" value="${displayColor}" class="sl-color-input">
@@ -1425,10 +1751,10 @@ function sourceParamRows(obj) {
   const isLight    = document.documentElement.getAttribute('data-theme') !== 'dark';
   const storedColor = p.color ?? '#ffffff';
   const displayColor = isLight ? invertHexColor(storedColor) : storedColor;
-  return sliderRow('σ (")',   'sigma',     0.005, 0.5, 0.005, p.sigma     ?? 0.06)
-       + sliderRow('q',        'q',         0.1,  1.0, 0.05,  p.q         ?? 1.0)
-       + sliderRow('φ (rad)',  'phi',        0, Math.PI, 0.05, p.phi       ?? 0)
-       + sliderRow('A',        'amplitude',  0.1,  3.0, 0.1,   p.amplitude ?? 1.0)
+  return sliderRowLog('σ (")',  'sigma',     0.002, 4.0,      p.sigma     ?? 0.06)
+       + sliderRow   ('q',      'q',         0.05,  1.0, 0.05, p.q         ?? 1.0)
+       + sliderRow   ('φ (rad)','phi',        0, Math.PI, 0.05, p.phi       ?? 0)
+       + sliderRow   ('A',      'amplitude',  0.1,  5.0, 0.1,  p.amplitude ?? 1.0)
        + `<div class="sl-param-row">
             <span class="sl-param-label">Color</span>
             <input type="color" data-param-color="1" value="${displayColor}"
@@ -1610,6 +1936,27 @@ function drawOverlay() {
     return [(ax / state.fov + 0.5) * Wl, (-ay / state.fov + 0.5) * Hl];
   }
 
+  // ── Point source image circles ─────────────────────────────────────────────────────
+  for (const plane of state.planes) {
+    for (const obj of plane.objects) {
+      if (obj.type !== 'source' || obj.model !== 'pointsource' || obj.hidden) continue;
+      const imagePositions = findPointSourceImages(obj, plane);
+      const r_px = Math.max((obj.params.sigma ?? 0.05) / state.fov * Wl, 1.5);
+      const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+      const storedColor = obj.params.color ?? '#ffffff';
+      const col = dark ? storedColor : invertHexColor(storedColor);
+      overlayCtx.fillStyle = col;
+      overlayCtx.globalAlpha = obj.params.amplitude ?? 1.0;
+      for (const [tx, ty] of imagePositions) {
+        const [px, py] = toPixel(tx, ty);
+        overlayCtx.beginPath();
+        overlayCtx.arc(px, py, r_px, 0, Math.PI * 2);
+        overlayCtx.fill();
+      }
+      overlayCtx.globalAlpha = 1;
+    }
+  }
+
   // ── 0. Shape ellipses (drawn first, behind markers) ──────────────────────────
   if (needEllipse) {
     overlayCtx.lineWidth   = 1.5;
@@ -1627,8 +1974,8 @@ function drawOverlay() {
           else if (obj.model === 'epl')       { a_arc = p.b ?? 1;      q = p.q ?? 0.75; phi = p.phi ?? 0; }
           else if (obj.model === 'pointmass') { a_arc = p.thetaE ?? 1; }
         } else if (obj.model === 'point') {
-          a_arc = p.sigma ?? 0.08; q = 1; phi = 0;  // hard edge — draw at exact radius
-        } else if (obj.model !== 'pastedimage') {
+          a_arc = p.sigma ?? 0.08; q = 1; phi = 0;  // hard edge: draw at exact radius
+        } else if (obj.model !== 'pastedimage' && obj.model !== 'pointsource') {
           a_arc = 2 * (p.sigma ?? 0.1); q = p.q ?? 1; phi = p.phi ?? 0;
         }
         if (a_arc <= 0) continue;
@@ -1644,7 +1991,7 @@ function drawOverlay() {
     overlayCtx.globalAlpha = 1;
   }
 
-  // ── 1. Position markers — same style as the plane-view canvases ─────────────
+  // ── 1. Position markers: same style as the plane-view canvases ─────────────
   if (state.showMarkers) {
     const RAD = window.innerWidth <= 640 ? 10 : 6;
     const drawnHybrids = new Set();
@@ -1703,8 +2050,8 @@ function drawOverlay() {
     const MIN_CRIT_SEGS = 50;
 
     // Realness check uses the TOTAL segment count (before the display clip) so a
-    // genuine ring near the edge — which has many segments in the wider sample but
-    // few within the visible area — is not incorrectly suppressed.
+    // genuine ring near the edge: which has many segments in the wider sample but
+    // few within the visible area: is not incorrectly suppressed.
     const isRealCurve = critSegs.length >= MIN_CRIT_SEGS;
 
     // Clip to the visible image area for display.
@@ -1901,7 +2248,7 @@ function startProgrammaticRecording() {
 
   const doFrame = () => {
     if (!recState.active && frame < totalFrames) {
-      // Cancelled — restore all start positions.
+      // Cancelled: restore all start positions.
       for (const a of animations) { a.obj.cx = a.startCx; a.obj.cy = a.startCy; }
       invalidateDistances(); redraw();
       return;
@@ -1916,7 +2263,7 @@ function startProgrammaticRecording() {
 
     // Force a synchronous render.
     // GIF: frames are timestamped in metadata so slow computation doesn't
-    //      affect playback speed — critical curves render correctly.
+    //      affect playback speed: critical curves render correctly.
     // WebM: captureStream samples at real time; slow computation causes frame
     //       duplication, so critical curves/caustics are suppressed for WebM.
     if (renderer && state.dist) {
@@ -1937,7 +2284,7 @@ function startProgrammaticRecording() {
       // GIF: go as fast as possible; WebM: pace to real time.
       setTimeout(doFrame, recState.useGif ? 0 : frameDelayMs);
     } else {
-      // All frames done — finalize.
+      // All frames done: finalize.
       recState.active = false;
       updateRecordingIndicator();
       clearTimeout(recState.autoStopTimer);
@@ -1992,7 +2339,7 @@ const recState = {
   rafId:     null,
   frameInterval: null,
   autoStopTimer: null,
-  // Per-object staging: Map<objId, { initialPos, finalPos }> — each object keeps its own values
+  // Per-object staging: Map<objId, { initialPos, finalPos }>: each object keeps its own values
   progStaging:    new Map(),
   // Committed keyframes that will animate simultaneously
   progObjects:    [],    // [{ objId, planeId, initialPos:{cx,cy}, finalPos:{cx,cy}, label }]
@@ -2061,9 +2408,6 @@ function _compositeToLive() {
   }
   const ctx = lc.getContext('2d');
   ctx.drawImage(gl, 0, 0);
-  // In light mode CSS applies filter:invert(1) to the GL canvas visually, but
-  // drawImage captures raw pixels.  Replicate the inversion in the composite
-  // using difference-blend with white, which is mathematically identical.
   if (document.documentElement.getAttribute('data-theme') !== 'dark') {
     ctx.globalCompositeOperation = 'difference';
     ctx.fillStyle = '#ffffff';
@@ -2100,7 +2444,7 @@ function _startWebMRecording(fps, liveCanvas) {
 
 function _loadGifJs(cb) {
   if (document.querySelector('script[data-gifjs]')) {
-    // already injected but not yet loaded — wait
+    // already injected but not yet loaded: wait
     document.querySelector('script[data-gifjs]').addEventListener('load', cb);
     return;
   }
@@ -2125,7 +2469,7 @@ function _initGifEncoder(fps, liveCanvas) {
   const gif = new GIF({
     workers: 2,
     quality: 10,
-    workerScript: 'gif.worker.js',   // same-origin — no CSP issues
+    workerScript: 'gif.worker.js',   // same-origin: no CSP issues
   });
   recState.gifObj = gif;
 

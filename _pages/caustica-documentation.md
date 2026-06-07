@@ -15,6 +15,7 @@ permalink: /caustica-documentation/
 3. **Click inside a plane panel** to place an object. Drag from an existing marker to move it. You can also drag objects directly in the main image panel.
 4. **Adjust parameters** in the Object Controls panel on the right. For hybrid objects, separate collapsible sections appear for the lens and source halves. The eye button excludes an object from the computation without deleting it.
 5. **The image panel** updates in real time. Press C to overlay critical curves and caustics. Use the recording tab to save a PNG, WebM, or GIF.
+6. **Save and load configurations** using the Save YAML / Load YAML buttons at the bottom of the Settings tab. The file stores all planes, objects, and parameters.
 
 ---
 
@@ -215,6 +216,14 @@ $$I = \begin{cases} A & r_\text{ell} \leq \sigma \\ 0 & \text{otherwise} \end{ca
 
 A filled disc of constant brightness with radius $\sigma$. The axis ratio $q$ is fixed at 1 (always circular), so $r_\text{ell}$ reduces to the ordinary Euclidean radius.
 
+### Point source
+
+A mathematically point-like source for simulating quasars or other compact objects. The source position $(c_x, c_y)$ is specified in the source plane; the simulator finds all image positions $\{\theta_i\}$ by solving the lens equation $\beta(\theta) = (c_x, c_y)$ numerically, then draws a circle of fixed angular radius $\sigma$ at each $\theta_i$ in the image plane.
+
+Image positions are found via a two-stage algorithm: a coarse grid search using sign-change topology to locate starting guesses, followed by Newton–Raphson refinement with backtracking line search until $\lvert F(\theta)\rvert^2 \lt 10^{-14}$ arcsec². Each converged solution is deduplicated. Because the circles are drawn in the image plane with fixed size, they are not stretched or sheared by lensing — this is appropriate for modelling the PSF-limited appearance of a quasar image.
+
+> Einstein rings and arc-shaped images do not appear in this mode. Use a Gaussian or uniform circle source for extended-emission lensing. Highly demagnified images (such as the central odd image of an SIE lens) may be missed by the grid search.
+
 ### Pasted image
 
 A user-pasted image is uploaded to the GPU as a WebGL texture.
@@ -294,6 +303,7 @@ Application shell (~2500 lines).
 - **`_doRedraw()`**: packs the scene into the renderer, redraws the axis canvas, and redraws the overlay (critical curves, position markers, legend) on a 2D canvas layered above the WebGL output.
 - **Recording**: `captureSnapshot()` composites the WebGL canvas and overlay into a PNG; `startRecording()` / `stopRecording()` drive a `MediaRecorder` for WebM or a gif.js encoder for GIF.
 - **Programmatic recording**: each selected object can have an initial and final position set; `startProgrammaticRecording()` interpolates all registered objects simultaneously.
+- **Config save/load**: `configToYaml()` serialises all planes and objects to a human-readable YAML string; `parseYamlConfig()` parses it back with strict type and range validation (allowlisted model names, hex-only color strings, bounded numeric coordinates) before updating state.
 - **Tour**: `startTour()` / `showTourStep()` — spotlight-and-tooltip tutorial with mobile-aware step callbacks that open/close the plane setup drawer and switch mobile tabs as needed.
 
 ### `style.css`

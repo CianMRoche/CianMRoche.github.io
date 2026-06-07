@@ -183,8 +183,10 @@ float analyticalBrightness(int idx, vec2 beta) {
   if (u_srcModel[idx] == 1) return amp * exp(-sqrt(r2) / sig);
   if (u_srcModel[idx] == 4) {
     // Uniform circle: constant brightness inside radius sig, zero outside.
-    // No axis ratio or position angle — r2 uses the isotropic offset already computed.
     return (sqrt(r2) <= sig) ? amp : 0.0;
+  }
+  if (u_srcModel[idx] == 5) {
+    return 0.0; // rendered in overlay as fixed-size circles
   }
   return amp * exp(-r2 / (2.0 * sig * sig));
 }
@@ -400,9 +402,10 @@ export class Renderer {
         srcPlaneIdx[si]     = pi;
         srcCenter[si * 2]   = obj.cx;
         srcCenter[si * 2+1] = obj.cy;
-        srcModel[si]        = obj.model === 'exponential' ? 1
-                            : obj.model === 'pastedimage' ? 3
-                            : obj.model === 'point'       ? 4 : 0;
+        srcModel[si]        = obj.model === 'exponential'  ? 1
+                            : obj.model === 'pastedimage'  ? 3
+                            : obj.model === 'point'        ? 4
+                            : obj.model === 'pointsource'  ? 5 : 0;
         srcParams[si * 4]   = obj.params.sigma     ?? 0.3;
         srcParams[si * 4+1] = obj.params.q         ?? 1.0;
         srcParams[si * 4+2] = obj.params.phi       ?? 0.0;
