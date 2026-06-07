@@ -195,6 +195,35 @@ This follows from the lensing potential $\psi = \tfrac{\gamma_\text{ext}}{2}\lef
 
 The shear object's position in the plane panel has no effect on the lensing computation — the deflection is always computed relative to the coordinate origin. The marker and direction arrow can be repositioned freely for visual organisation.
 
+### Constant deflection
+
+Models the monopole contribution from a massive perturber far outside the field of view. All rays are deflected by the same constant angle regardless of their image-plane position:
+
+$$\hat{\alpha}_x = \alpha\cos\varphi, \qquad \hat{\alpha}_y = \alpha\sin\varphi$$
+
+This shifts caustics bodily without distorting them. It is the dominant effect of a distant perturber; at large separations shear (the quadrupole term) becomes the next-order correction.
+
+| Symbol | Meaning |
+|---|---|
+| $\alpha$ | Deflection amplitude (arcsec). |
+| $\varphi$ | Deflection direction (radians). |
+
+The object's position has no effect on the lensing.
+
+### External convergence
+
+Models a uniform mass sheet along the line of sight (e.g. an overdense filament or underdense void). The deflection is purely radial, always evaluated relative to the coordinate origin:
+
+$$\hat{\alpha}_x = \kappa\,\theta_x, \qquad \hat{\alpha}_y = \kappa\,\theta_y$$
+
+This follows from the potential $\psi = \tfrac{\kappa}{2}\lvert\boldsymbol{\theta}\rvert^2$ and is isotropic — no preferred direction.
+
+| Symbol | Meaning |
+|---|---|
+| $\kappa$ | Convergence (dimensionless). Positive for overdense structures, negative for underdense voids. |
+
+The object's position has no effect on the lensing. External convergence is related to the **mass sheet degeneracy**: a uniform sheet cannot be distinguished from a rescaling of all lens masses and source distances using image positions alone.
+
 ---
 
 ## 5. Source brightness models

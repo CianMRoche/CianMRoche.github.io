@@ -96,7 +96,16 @@ function lensDeflection(obj, ux, uy) {
   if (model === 'pointmass') return deflectPointMass(ux, uy, params.thetaE);
   if (model === 'sie')       return deflectSIE(ux, uy, params.b, params.q, params.phi);
   if (model === 'epl')       return deflectEPL(ux, uy, params.b, params.q, params.phi, params.gamma ?? 2);
-  if (model === 'shear')     return deflectShear(ux + obj.cx, uy + obj.cy, params.gamma ?? 0.05, params.phi ?? 0); // absolute θ
+  if (model === 'shear')       return deflectShear(ux + obj.cx, uy + obj.cy, params.gamma ?? 0.05, params.phi ?? 0); // absolute θ
+  if (model === 'convergence') {
+    const k = params.kappa ?? 0.05;
+    const tx = ux + obj.cx, ty = uy + obj.cy; // absolute θ
+    return [k * tx, k * ty];
+  }
+  if (model === 'deflection') {
+    const a = params.alpha ?? 0.1, p = params.phi ?? 0;
+    return [a * Math.cos(p), a * Math.sin(p)]; // constant, position-independent
+  }
   return [0, 0];
 }
 

@@ -145,6 +145,8 @@ vec2 lensDeflection(int idx, vec2 pos) {
   if (m == 1) return deflectSIE(u, p.x, p.y, p.z);
   if (m == 2) return deflectEPL(u, p.x, p.y, p.z, p.w);
   if (m == 3) return deflectShear(pos, p.x, p.y); // shear is relative to origin, not object centre
+  if (m == 4) return p.x * pos;                                      // external convergence: kappa * theta
+  if (m == 5) return vec2(p.x * cos(p.y), p.x * sin(p.y));          // constant deflection: alpha*(cos phi, sin phi)
   return vec2(0.0);
 }
 
@@ -548,6 +550,8 @@ function _modelParams(obj) {
   if (model === 'pointmass') return { model:0, p0: params.thetaE??1, p1:0, p2:0, p3:0 };
   if (model === 'sie')       return { model:1, p0: params.b??1, p1: params.q??0.8, p2: params.phi??0, p3:0 };
   if (model === 'epl')       return { model:2, p0: params.b??1, p1: params.q??0.75, p2: params.phi??0, p3: params.gamma??2 };
-  if (model === 'shear')     return { model:3, p0: params.gamma??0.05, p1: params.phi??0, p2:0, p3:0 };
+  if (model === 'shear')       return { model:3, p0: params.gamma??0.05, p1: params.phi??0, p2:0, p3:0 };
+  if (model === 'convergence') return { model:4, p0: params.kappa??0.05, p1:0, p2:0, p3:0 };
+  if (model === 'deflection')  return { model:5, p0: params.alpha??0.1, p1: params.phi??0, p2:0, p3:0 };
   return { model:0, p0:1, p1:0, p2:0, p3:0 };
 }

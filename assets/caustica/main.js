@@ -72,6 +72,7 @@ const state = {
   toneMapPower:    0.5,
   toneMapAsinh:    5.0,
   critGridN:       512,
+  psGridStep:      0.02,   // arcsec — point source grid spacing
   critZs:          null,  // null = auto (highest-z source plane)
   dist:            null,
 };
@@ -121,9 +122,11 @@ function findPointSourceImages(srcObj, srcPlane) {
   }
 
   // ── Stage 1: coarse sign-change grid for starting guesses ──────────────
-  const N    = 48;
-  const step = state.fov / (N - 1);
-  const half = state.fov / 2;
+  // Fixed grid step from settings — independent of FOV so positions don't shift on zoom.
+  const step = state.psGridStep ?? 0.005;
+  const RANGE = Math.max(state.fov * 1.1, 3.0);
+  const N    = Math.ceil(RANGE / step) + 1;
+  const half = RANGE / 2;
 
   const Fx = new Float32Array(N * N);
   const Fy = new Float32Array(N * N);
@@ -315,7 +318,7 @@ function loadConfigFromYaml(yaml) {
     for (const p of state.planes)
       p.objects.filter(o => o.model === 'pastedimage').forEach(o => renderer?.clearPastedTexture(o.id));
     const VALID_TYPES  = new Set(['lens', 'source']);
-    const VALID_MODELS = new Set(['pointmass','sie','epl','nfw','shear','gaussian','exponential','point','pointsource','pastedimage']);
+    const VALID_MODELS = new Set(['pointmass','sie','epl','nfw','shear','convergence','deflection','gaussian','exponential','point','pointsource','pastedimage']);
     const COLOR_RE     = /^#[0-9a-fA-F]{6}$/;
     state.planes = (cfg.planes || []).map(p => ({
       id: uid(), z: isFinite(p.z) ? +p.z : 0,
@@ -358,6 +361,8 @@ function defaultParams(model) {
   if (model === 'epl')         return { b: 1.0, q: 0.75, phi: 0, gamma: 2.0 };
   if (model === 'nfw')         return { kappaS: 0.5, rS: 0.4 };
   if (model === 'shear')       return { gamma: 0.05, phi: 0 };
+  if (model === 'convergence') return { kappa: 0.05 };
+  if (model === 'deflection')  return { alpha: 0.1, phi: 0 };
   if (model === 'gaussian')    return { sigma: 0.06, q: 1.0,  phi: 0, amplitude: 1.0,  color: '#ffffff' };
   if (model === 'exponential') return { sigma: 0.05, q: 0.40, phi: 0, amplitude: 2.20, color: '#ffffff' };
   if (model === 'point')       return { sigma: 0.08, amplitude: 1.0, color: '#ffffff' };
@@ -1213,6 +1218,12 @@ const LENS_INFO = {
         <b>q</b>: axis ratio (1 = circular, lower = more elliptical).<br>
         <b>φ</b>: position angle of the major axis (radians).`,
   pointmass: `<b>Strength</b>: mass scale in arcsec, equal to √(4GM / c² D<sub>L</sub>). For a fixed lens redshift D<sub>L</sub> is constant, so Strength is proportional to √M. The Einstein ring appears at Strength × √(D<sub>LS</sub> / D<sub>S</sub>).`,
+  deflection: `Models the monopole contribution from a distant perturber outside the field of view — a uniform deflection of all rays by the same angle. This shifts caustics bodily without distorting them, unlike shear (which distorts) or convergence (which scales).<br><br>
+              <b>α</b>: deflection amplitude (arcsec).<br>
+              <b>φ</b>: deflection direction (radians).<br><br>
+              The object position has no effect; the deflection is the same at every image-plane point.`,
+  convergence: `Models a uniform mass sheet along the line of sight. The deflection is radial: α = κ·θ, always computed relative to the origin regardless of object position. Moving the marker only repositions the visual indicator.<br><br>
+               <b>κ</b>: convergence (dimensionless). Positive values represent overdense structures; negative values underdense voids. Related to the mass sheet degeneracy — κ cannot be measured from image positions alone.`,
   shear: `Models an external tidal field (e.g. a nearby cluster or line-of-sight structure). The deflection is always computed relative to the coordinate origin, so the object's position has no effect on the lensing. Moving the marker only repositions the direction arrow.<br><br>
           <b>γ</b>: shear strength; typical galaxy-scale values are 0.01–0.2.<br>
           <b>φ</b>: position angle of the shear axis (radians).`,
@@ -1275,7 +1286,9 @@ function renderSidebar() {
         <option value="sie"       ${lensObj.model==='sie'       ?'selected':''}>SIE (Isothermal, γ=2)</option>
         <option value="epl"       ${lensObj.model==='epl'       ?'selected':''}>EPL (Power law)</option>
         <option value="pointmass" ${lensObj.model==='pointmass' ?'selected':''}>Point mass</option>
-        <option value="shear"     ${lensObj.model==='shear'     ?'selected':''}>External shear</option>`;
+        <option value="shear"       ${lensObj.model==='shear'       ?'selected':''}>External shear</option>
+        <option value="convergence" ${lensObj.model==='convergence' ?'selected':''}>External convergence</option>
+        <option value="deflection"  ${lensObj.model==='deflection'  ?'selected':''}>Constant deflection</option>`;
       const srcModelOpts = `
         <option value="pointsource" ${srcObj.model==='pointsource' ?'selected':''}>Point source</option>
         <option value="gaussian"    ${srcObj.model==='gaussian'    ?'selected':''}>Gaussian</option>
@@ -1321,7 +1334,9 @@ function renderSidebar() {
         ? `<option value="sie"       ${obj.model==='sie'       ?'selected':''}>SIE (Isothermal, γ=2)</option>
            <option value="epl"       ${obj.model==='epl'       ?'selected':''}>EPL (Power law)</option>
            <option value="pointmass" ${obj.model==='pointmass' ?'selected':''}>Point mass</option>
-           <option value="shear"     ${obj.model==='shear'     ?'selected':''}>External shear</option>`
+           <option value="shear"       ${obj.model==='shear'       ?'selected':''}>External shear</option>
+           <option value="convergence" ${obj.model==='convergence' ?'selected':''}>External convergence</option>
+           <option value="deflection"  ${obj.model==='deflection'  ?'selected':''}>Constant deflection</option>`
         : `<option value="pointsource" ${obj.model==='pointsource' ?'selected':''}>Point source</option>
            <option value="gaussian"    ${obj.model==='gaussian'    ?'selected':''}>Gaussian</option>
            <option value="exponential" ${obj.model==='exponential' ?'selected':''}>Exponential</option>
@@ -1405,6 +1420,17 @@ function renderSidebar() {
       <div class="sl-global-input">
         <label>Source z<sub>s</sub></label>
         <input type="number" id="sl-crit-zs" min="0.1" max="15" step="0.1" value="${ezs.toFixed(2)}">
+      </div>
+      <div class="sl-subsection-header">Point Source</div>
+      <div class="sl-global-input">
+        <label>Grid spacing</label>
+        <select id="sl-ps-grid">
+          <option value="0.1"   ${state.psGridStep===0.1   ?'selected':''}>100 mas (fastest)</option>
+          <option value="0.05"  ${state.psGridStep===0.05  ?'selected':''}>50 mas</option>
+          <option value="0.02"  ${state.psGridStep===0.02  ?'selected':''}>20 mas</option>
+          <option value="0.01"  ${state.psGridStep===0.01  ?'selected':''}>10 mas</option>
+          <option value="0.005" ${state.psGridStep===0.005 ?'selected':''}>5 mas (slowest)</option>
+        </select>
       </div>
       <div class="sl-subsection-header">Configuration</div>
       <div class="sl-capture-row">
@@ -1550,6 +1576,7 @@ function renderSidebar() {
     btn.addEventListener('click', () => removeFromProgram(btn.dataset.id));
   });
   document.getElementById('sl-crit-res')?.addEventListener('change', e => { state.critGridN = parseInt(e.target.value, 10); redraw(); });
+  document.getElementById('sl-ps-grid')?.addEventListener('change',  e => { state.psGridStep = parseFloat(e.target.value); redraw(); });
   document.getElementById('sl-crit-zs')?.addEventListener('change',  e => { const v = parseFloat(e.target.value); if (v > 0) { state.critZs = v; redraw(); } });
   document.getElementById('sl-show-crit')?.addEventListener('change', e => { state.showCritCurves = e.target.checked; redraw(); });
   document.getElementById('sl-show-caus')?.addEventListener('change', e => { state.showCaustics   = e.target.checked; redraw(); });
@@ -1701,6 +1728,15 @@ function shapeToggle(obj) {
 
 function lensParamRows(obj) {
   const p = obj.params;
+  if (obj.model === 'deflection')
+    return sliderRowLog('α (")', 'alpha', 0.005, 5.0, p.alpha ?? 0.1)
+         + sliderRow('φ (rad)', 'phi', 0, Math.PI * 2, 0.05, p.phi ?? 0)
+         + shapeToggle(obj)
+         + '<p style="font-size:11px;color:var(--muted);margin-top:4px;grid-column:1/-1">Uniform deflection of all rays. Models the monopole from a distant perturber. Object position has no effect.</p>';
+  if (obj.model === 'convergence')
+    return sliderRow('κ', 'kappa', -0.5, 0.5, 0.01, p.kappa ?? 0.05)
+         + shapeToggle(obj)
+         + '<p style="font-size:11px;color:var(--muted);margin-top:4px;grid-column:1/-1">Deflection is κ·θ relative to the coordinate origin. Object position has no effect on lensing.</p>';
   if (obj.model === 'shear')
     return sliderRowLog('γ', 'gamma', 0.001, 0.5, p.gamma ?? 0.05)
          + sliderRow   ('φ (rad)', 'phi', 0, Math.PI, 0.05, p.phi ?? 0)
@@ -1936,8 +1972,9 @@ function drawOverlay() {
 
   const hasLens     = state.planes.some(p => p.objects.some(o => o.type === 'lens'));
   const needCurve   = (state.showCritCurves || state.showCaustics) && state.dist && hasLens;
-  const needEllipse = state.planes.some(pl => pl.objects.some(o => o.showShape));
-  if (!needCurve && !state.showMarkers && !needEllipse) return;
+  const needEllipse      = state.planes.some(pl => pl.objects.some(o => o.showShape));
+  const needPointSources = state.planes.some(pl => pl.objects.some(o => o.type === 'source' && o.model === 'pointsource' && !o.hidden));
+  if (!needCurve && !state.showMarkers && !needEllipse && !needPointSources) return;
 
   const Wl = W/dpr, Hl = H/dpr;
   overlayCtx.save();
@@ -1978,6 +2015,59 @@ function drawOverlay() {
         if (!obj.showShape || obj.hidden) continue;
         const col = typeColorHex(obj.type);
         const p = obj.params;
+
+        // Constant deflection: single-headed arrow showing direction and amplitude.
+        if (obj.model === 'deflection') {
+          const alpha = p.alpha ?? 0.1, phi = p.phi ?? 0;
+          const [ox, oy] = toPixel(obj.cx, obj.cy);
+          const len = Math.min(Wl, Hl) * Math.min(alpha / state.fov, 0.45);
+          const cdx = Math.cos(phi) * len, cdy = -Math.sin(phi) * len;
+          const hl = 10, ha = Math.PI / 6;
+          const [ex, ey] = [ox + cdx, oy + cdy];
+          const ang = Math.atan2(cdy, cdx);
+          overlayCtx.strokeStyle = col;
+          overlayCtx.setLineDash([]);
+          overlayCtx.beginPath();
+          overlayCtx.moveTo(ox, oy);
+          overlayCtx.lineTo(ex, ey);
+          overlayCtx.stroke();
+          overlayCtx.beginPath();
+          overlayCtx.moveTo(ex, ey);
+          overlayCtx.lineTo(ex - hl * Math.cos(ang - ha), ey - hl * Math.sin(ang - ha));
+          overlayCtx.moveTo(ex, ey);
+          overlayCtx.lineTo(ex - hl * Math.cos(ang + ha), ey - hl * Math.sin(ang + ha));
+          overlayCtx.stroke();
+          overlayCtx.setLineDash([5, 4]);
+          continue;
+        }
+
+        // External convergence: 4 radial arrows showing isotropic deflection.
+        if (obj.model === 'convergence') {
+          const kappa = p.kappa ?? 0.05;
+          const [ox, oy] = toPixel(obj.cx, obj.cy);
+          const len = Math.min(Wl, Hl) * Math.min(Math.abs(kappa), 0.5) * 1.2;
+          const hl = 8, ha = Math.PI / 6;
+          const sign = kappa >= 0 ? 1 : -1; // outward for κ>0, inward for κ<0
+          overlayCtx.strokeStyle = col;
+          overlayCtx.setLineDash([]);
+          for (let a = 0; a < Math.PI * 2; a += Math.PI / 2) {
+            const cdx = Math.cos(a) * len, cdy = -Math.sin(a) * len;
+            const [ex, ey] = [ox + sign * cdx, oy + sign * cdy];
+            overlayCtx.beginPath();
+            overlayCtx.moveTo(ox, oy);
+            overlayCtx.lineTo(ex, ey);
+            overlayCtx.stroke();
+            const ang = Math.atan2(sign * cdy, sign * cdx);
+            overlayCtx.beginPath();
+            overlayCtx.moveTo(ex, ey);
+            overlayCtx.lineTo(ex - hl * Math.cos(ang - ha), ey - hl * Math.sin(ang - ha));
+            overlayCtx.moveTo(ex, ey);
+            overlayCtx.lineTo(ex - hl * Math.cos(ang + ha), ey - hl * Math.sin(ang + ha));
+            overlayCtx.stroke();
+          }
+          overlayCtx.setLineDash([5, 4]);
+          continue;
+        }
 
         // External shear: double-headed arrow at the origin showing φ direction.
         if (obj.model === 'shear') {
@@ -2594,7 +2684,7 @@ const TOUR_STEPS = [
     onEnter: () => { _tourClosePlaneSetup(); _tourSetMobileTab('object'); },
     arrow: 'left',
     label: 'Object Controls',
-    text: 'When an object is selected, its parameters appear here. Choose a profile from the dropdown — lens types include SIE, EPL, point mass, and external shear; source types include Gaussian, exponential, uniform circle, point source, and pasted image. The <b>ⓘ</b> button shows parameter descriptions for the chosen model. Press <kbd>H</kbd> to hide or show the selected object.',
+    text: 'When an object is selected, its parameters appear here. Choose a profile from the dropdown — lens types include SIE, EPL, point mass, external shear, external convergence, and constant deflection; source types include Gaussian, exponential, uniform circle, point source, and pasted image. The <b>ⓘ</b> button shows parameter descriptions for the chosen model. Press <kbd>H</kbd> to hide or show the selected object.',
   },
   {
     target: '#sl-image-wrap',
