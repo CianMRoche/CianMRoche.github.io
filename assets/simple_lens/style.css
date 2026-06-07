@@ -492,10 +492,13 @@ html[data-theme="light"] #sl-gl-canvas { filter: invert(1); }
 }
 .sl-hybrid-hdr:hover { background: var(--bg-soft); }
 .sl-hybrid-arrow {
-  font-size: 9px;
+  font-size: 16px;
   color: var(--muted);
   flex-shrink: 0;
-  width: 10px;
+  width: 16px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
 }
 .sl-hybrid-body {
   padding: 4px 2px 2px;
@@ -1225,7 +1228,7 @@ html[data-theme="light"] #sl-gl-canvas { filter: invert(1); }
   .sl-timeline {
     display: none;
     position: fixed;
-    bottom: 40px; /* sits above the plane setup bar */
+    bottom: 0;
     left: 0;
     right: 0;
     z-index: 200;
@@ -1287,25 +1290,34 @@ html[data-theme="light"] #sl-gl-canvas { filter: invert(1); }
     display: flex;
     position: fixed;
     bottom: 0;
-    left: 0;
-    right: 0;
+    right: 8px;
+    left: auto;
     z-index: 201;
-    height: 40px;
-    background: var(--bg-soft);
-    border-top: 1px solid var(--hairline);
-    align-items: center;
-    justify-content: center;
+    height: auto;
+    background: transparent;
+    border: none;
+    transition: bottom 0.2s ease;
   }
   .sl-plane-setup-btn {
     font-size: 13px;
     font-weight: 500;
+    line-height: 1;
     color: var(--fg-soft);
-    background: transparent;
-    border: none;
+    background: var(--bg-soft);
+    border: 1px solid var(--hairline);
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
     cursor: pointer;
-    padding: 0 16px;
-    height: 100%;
+    box-shadow: -2px -2px 8px rgba(0,0,0,0.12);
+    padding: 0 14px;
+    white-space: nowrap;
   }
+  .sl-plane-setup-btn:active { opacity: 0.75; }
 
   /* axis canvas: prevent scroll-hijack when dragging plane markers */
   .sl-axis-canvas { touch-action: none; }

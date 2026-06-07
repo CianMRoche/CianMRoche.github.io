@@ -256,8 +256,7 @@ function buildDOM() {
     <div class="app-inner">
       <div class="sl-topbar">
         <h1>simpleLens</h1>
-        <a class="sl-back-btn" href="/side_projects/">← Side projects</a>
-        <a class="sl-demo-btn" href="/simplelens-how-it-works/" target="_blank" rel="noopener">Docs</a>
+<a class="sl-demo-btn" href="/simplelens-how-it-works/" target="_blank" rel="noopener">Docs</a>
         <button class="sl-demo-btn" id="sl-demo" title="Walk through a tour of the controls">Tour</button>
         <button class="sl-theme-btn" id="sl-theme" title="Toggle dark mode" aria-label="Toggle dark mode">
           <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -369,12 +368,21 @@ function attachHandlers() {
   // Mobile plane setup toggle.
   document.getElementById('sl-plane-setup-btn').addEventListener('click', () => {
     const tl  = document.getElementById('sl-timeline');
+    const bar = document.getElementById('sl-plane-setup-bar');
     const btn = document.getElementById('sl-plane-setup-btn');
     const open = tl.classList.toggle('plane-setup-open');
     btn.textContent = open ? '▼ Plane Setup' : '▲ Plane Setup';
-    if (open) { setTimeout(drawAxisCanvas, 150); }
+    if (open) {
+      // After drawer renders, float the pill to sit on top of it.
+      setTimeout(() => {
+        const h = tl.getBoundingClientRect().height;
+        if (bar && h > 0) bar.style.bottom = `${h}px`;
+        drawAxisCanvas();
+      }, 50);
+    } else {
+      if (bar) bar.style.bottom = '';
+    }
   });
-  // Set initial caret state.
   document.getElementById('sl-plane-setup-btn').textContent = '▲ Plane Setup';
 
   // Global plane toolbar: L / S / H mode + delete selected object.
@@ -397,6 +405,18 @@ function attachHandlers() {
   document.getElementById('sl-planes-arrow-r')?.addEventListener('click', () => {
     document.getElementById('sl-planes')?.scrollBy({ left:  162, behavior: 'smooth' });
   });
+
+  // Align the plane-setup tab with the canvas right edge (canvas is inside
+  // .sl-body which has a scrollbar; fixed-positioned tab needs the extra offset).
+  function _syncSetupBarRight() {
+    const bar  = document.getElementById('sl-plane-setup-bar');
+    const body = document.querySelector('.sl-body');
+    if (!bar || !body || window.innerWidth > 640) return;
+    const sw = body.offsetWidth - body.clientWidth; // scrollbar width
+    bar.style.right = `${8 + sw}px`;
+  }
+  _syncSetupBarRight();
+  window.addEventListener('resize', _syncSetupBarRight);
 
   attachAxisHandlers();
   attachImageHandlers(document.getElementById('sl-image-wrap'));
@@ -999,7 +1019,7 @@ function renderSidebar() {
           </div>
           <div class="sl-hybrid-section">
             <button class="sl-hybrid-hdr" id="sl-hybrid-lens-hdr">
-              <span class="sl-hybrid-arrow">${lensExp ? '▾' : '▶'}</span>
+              <span class="sl-hybrid-arrow">${lensExp ? '▼' : '▶'}</span>
               <span class="sl-panel-title" style="flex:1">Lens</span>
               ${infoSection('sl-param-info-lens', LENS_INFO[lensObj.model] ?? '')}
             </button>
@@ -1010,7 +1030,7 @@ function renderSidebar() {
           </div>
           <div class="sl-hybrid-section">
             <button class="sl-hybrid-hdr" id="sl-hybrid-src-hdr">
-              <span class="sl-hybrid-arrow">${srcExp ? '▾' : '▶'}</span>
+              <span class="sl-hybrid-arrow">${srcExp ? '▼' : '▶'}</span>
               <span class="sl-panel-title" style="flex:1">Source</span>
               ${infoSection('sl-param-info-src', SOURCE_INFO)}
             </button>
@@ -2127,16 +2147,24 @@ function _initGifEncoder(fps, liveCanvas) {
 function _tourOpenPlaneSetup() {
   if (window.innerWidth > 640) return;
   const tl  = document.getElementById('sl-timeline');
+  const bar = document.getElementById('sl-plane-setup-bar');
   const btn = document.getElementById('sl-plane-setup-btn');
   tl.classList.add('plane-setup-open');
-  if (btn) btn.textContent = '▼ Plane Setup';
+  if (btn) btn.textContent = '▼';
+  setTimeout(() => {
+    const h = tl.getBoundingClientRect().height;
+    if (bar && h > 0) bar.style.bottom = `${h + 8}px`;
+    drawAxisCanvas();
+  }, 50);
 }
 function _tourClosePlaneSetup() {
   if (window.innerWidth > 640) return;
   const tl  = document.getElementById('sl-timeline');
+  const bar = document.getElementById('sl-plane-setup-bar');
   const btn = document.getElementById('sl-plane-setup-btn');
   tl.classList.remove('plane-setup-open');
-  if (btn) btn.textContent = '▲ Plane Setup';
+  if (btn) btn.textContent = '▲';
+  if (bar) bar.style.bottom = '';
 }
 function _tourSetMobileTab(tab) {
   if (window.innerWidth > 640) return;
