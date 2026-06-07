@@ -178,6 +178,23 @@ where $r_e$ is the elliptical radius from step 2 of the SIE and $\hat{\boldsymbo
 | $\gamma$ | Power-law slope: $\gamma = 2$ isothermal, $\gamma \lt 2$ steeper central density, $\gamma \gt 2$ shallower. Observed galaxies typically have $\gamma \approx 1.9$–$2.1$. |
 | $r_e$ | Elliptical radius from SIE step 2: $r_e = \sqrt{q^2(x_r^2+s^2)+y_r^2}$ |
 
+### External shear
+
+Models the tidal field from mass not explicitly included as a lens plane (e.g. a galaxy cluster along the line of sight, or neighbouring structures). The deflection is linear in the observed angle $\boldsymbol{\theta}$, always evaluated relative to the coordinate origin:
+
+$$\hat{\alpha}_x = \gamma_\text{ext}(\theta_x \cos 2\varphi + \theta_y \sin 2\varphi)$$
+
+$$\hat{\alpha}_y = \gamma_\text{ext}(\theta_x \sin 2\varphi - \theta_y \cos 2\varphi)$$
+
+This follows from the lensing potential $\psi = \tfrac{\gamma_\text{ext}}{2}\left[(\theta_x^2 - \theta_y^2)\cos 2\varphi + 2\theta_x \theta_y \sin 2\varphi\right]$.
+
+| Symbol | Meaning |
+|---|---|
+| $\gamma_\text{ext}$ | Shear strength (dimensionless). Typical values 0.01–0.2 for galaxy-scale lenses. |
+| $\varphi$ | Shear position angle (radians), aligned with the direction of the tidal field. |
+
+The shear object's position in the plane panel has no effect on the lensing computation — the deflection is always computed relative to the coordinate origin. The marker and direction arrow can be repositioned freely for visual organisation.
+
 ---
 
 ## 5. Source brightness models

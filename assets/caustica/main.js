@@ -315,7 +315,7 @@ function loadConfigFromYaml(yaml) {
     for (const p of state.planes)
       p.objects.filter(o => o.model === 'pastedimage').forEach(o => renderer?.clearPastedTexture(o.id));
     const VALID_TYPES  = new Set(['lens', 'source']);
-    const VALID_MODELS = new Set(['pointmass','sie','epl','nfw','gaussian','exponential','point','pointsource','pastedimage']);
+    const VALID_MODELS = new Set(['pointmass','sie','epl','nfw','shear','gaussian','exponential','point','pointsource','pastedimage']);
     const COLOR_RE     = /^#[0-9a-fA-F]{6}$/;
     state.planes = (cfg.planes || []).map(p => ({
       id: uid(), z: isFinite(p.z) ? +p.z : 0,
@@ -357,6 +357,7 @@ function defaultParams(model) {
   if (model === 'sie')         return { b: 1.0, q: 0.75, phi: 0 };
   if (model === 'epl')         return { b: 1.0, q: 0.75, phi: 0, gamma: 2.0 };
   if (model === 'nfw')         return { kappaS: 0.5, rS: 0.4 };
+  if (model === 'shear')       return { gamma: 0.05, phi: 0 };
   if (model === 'gaussian')    return { sigma: 0.06, q: 1.0,  phi: 0, amplitude: 1.0,  color: '#ffffff' };
   if (model === 'exponential') return { sigma: 0.05, q: 0.40, phi: 0, amplitude: 2.20, color: '#ffffff' };
   if (model === 'point')       return { sigma: 0.08, amplitude: 1.0, color: '#ffffff' };
@@ -1212,6 +1213,9 @@ const LENS_INFO = {
         <b>q</b>: axis ratio (1 = circular, lower = more elliptical).<br>
         <b>φ</b>: position angle of the major axis (radians).`,
   pointmass: `<b>Strength</b>: mass scale in arcsec, equal to √(4GM / c² D<sub>L</sub>). For a fixed lens redshift D<sub>L</sub> is constant, so Strength is proportional to √M. The Einstein ring appears at Strength × √(D<sub>LS</sub> / D<sub>S</sub>).`,
+  shear: `Models an external tidal field (e.g. a nearby cluster or line-of-sight structure). The deflection is always computed relative to the coordinate origin, so the object's position has no effect on the lensing. Moving the marker only repositions the direction arrow.<br><br>
+          <b>γ</b>: shear strength; typical galaxy-scale values are 0.01–0.2.<br>
+          <b>φ</b>: position angle of the shear axis (radians).`,
   epl: `<b>b</b>: deflection scale (arcsec), same role as in SIE.<br>
         <b>q</b>: axis ratio (1 = circular, lower = more elliptical).<br>
         <b>φ</b>: position angle of the major axis (radians).<br>
@@ -1270,7 +1274,8 @@ function renderSidebar() {
       const lensModelOpts = `
         <option value="sie"       ${lensObj.model==='sie'       ?'selected':''}>SIE (Isothermal, γ=2)</option>
         <option value="epl"       ${lensObj.model==='epl'       ?'selected':''}>EPL (Power law)</option>
-        <option value="pointmass" ${lensObj.model==='pointmass' ?'selected':''}>Point mass</option>`;
+        <option value="pointmass" ${lensObj.model==='pointmass' ?'selected':''}>Point mass</option>
+        <option value="shear"     ${lensObj.model==='shear'     ?'selected':''}>External shear</option>`;
       const srcModelOpts = `
         <option value="pointsource" ${srcObj.model==='pointsource' ?'selected':''}>Point source</option>
         <option value="gaussian"    ${srcObj.model==='gaussian'    ?'selected':''}>Gaussian</option>
@@ -1315,7 +1320,8 @@ function renderSidebar() {
       const modelOptions = isLens
         ? `<option value="sie"       ${obj.model==='sie'       ?'selected':''}>SIE (Isothermal, γ=2)</option>
            <option value="epl"       ${obj.model==='epl'       ?'selected':''}>EPL (Power law)</option>
-           <option value="pointmass" ${obj.model==='pointmass' ?'selected':''}>Point mass</option>`
+           <option value="pointmass" ${obj.model==='pointmass' ?'selected':''}>Point mass</option>
+           <option value="shear"     ${obj.model==='shear'     ?'selected':''}>External shear</option>`
         : `<option value="pointsource" ${obj.model==='pointsource' ?'selected':''}>Point source</option>
            <option value="gaussian"    ${obj.model==='gaussian'    ?'selected':''}>Gaussian</option>
            <option value="exponential" ${obj.model==='exponential' ?'selected':''}>Exponential</option>
@@ -1695,6 +1701,11 @@ function shapeToggle(obj) {
 
 function lensParamRows(obj) {
   const p = obj.params;
+  if (obj.model === 'shear')
+    return sliderRowLog('γ', 'gamma', 0.001, 0.5, p.gamma ?? 0.05)
+         + sliderRow   ('φ (rad)', 'phi', 0, Math.PI, 0.05, p.phi ?? 0)
+         + shapeToggle(obj)
+         + '<p style="font-size:11px;color:var(--muted);margin-top:4px;grid-column:1/-1">Deflection is always computed relative to the coordinate origin regardless of object position. Moving the marker only repositions the direction arrow.</p>';
   if (obj.model === 'pointmass')
     return sliderRowLog('Strength (")', 'thetaE', 0.01, 8.0, p.thetaE ?? 1)
          + shapeToggle(obj);
@@ -1957,7 +1968,7 @@ function drawOverlay() {
     }
   }
 
-  // ── 0. Shape ellipses (drawn first, behind markers) ──────────────────────────
+  // ── 0. Shape ellipses / shear arrow (drawn first, behind markers) ────────────
   if (needEllipse) {
     overlayCtx.lineWidth   = 1.5;
     overlayCtx.globalAlpha = 0.6;
@@ -1966,8 +1977,39 @@ function drawOverlay() {
       for (const obj of plane.objects) {
         if (!obj.showShape || obj.hidden) continue;
         const col = typeColorHex(obj.type);
-        const [px, py] = toPixel(obj.cx, obj.cy);
         const p = obj.params;
+
+        // External shear: double-headed arrow at the origin showing φ direction.
+        if (obj.model === 'shear') {
+          const phi = p.phi ?? 0;
+          const [ox, oy] = toPixel(obj.cx, obj.cy);
+          const len = Math.min(Wl, Hl) * Math.min(p.gamma ?? 0.05, 0.5) * 1.2;
+          const cdx = Math.cos(phi) * len, cdy = -Math.sin(phi) * len; // canvas y flipped
+          const hl = 10, ha = Math.PI / 6;
+          overlayCtx.strokeStyle = col;
+          overlayCtx.setLineDash([]);
+          // Shaft
+          overlayCtx.beginPath();
+          overlayCtx.moveTo(ox - cdx, oy - cdy);
+          overlayCtx.lineTo(ox + cdx, oy + cdy);
+          overlayCtx.stroke();
+          // Arrowheads at both ends
+          for (const [ex, ey, a] of [
+            [ox + cdx, oy + cdy, Math.atan2(cdy, cdx)],
+            [ox - cdx, oy - cdy, Math.atan2(-cdy, -cdx)],
+          ]) {
+            overlayCtx.beginPath();
+            overlayCtx.moveTo(ex, ey);
+            overlayCtx.lineTo(ex - hl * Math.cos(a - ha), ey - hl * Math.sin(a - ha));
+            overlayCtx.moveTo(ex, ey);
+            overlayCtx.lineTo(ex - hl * Math.cos(a + ha), ey - hl * Math.sin(a + ha));
+            overlayCtx.stroke();
+          }
+          overlayCtx.setLineDash([5, 4]);
+          continue;
+        }
+
+        const [px, py] = toPixel(obj.cx, obj.cy);
         let a_arc = 0, q = 1, phi = 0;
         if (obj.type === 'lens') {
           if      (obj.model === 'sie')       { a_arc = p.b ?? 1;      q = p.q ?? 0.75; phi = p.phi ?? 0; }
@@ -2552,7 +2594,7 @@ const TOUR_STEPS = [
     onEnter: () => { _tourClosePlaneSetup(); _tourSetMobileTab('object'); },
     arrow: 'left',
     label: 'Object Controls',
-    text: 'When an object is selected, its parameters appear here. Choose a profile and adjust sliders. For <b>hybrid objects</b>, two collapsible sections appear, one for the lens and one for the source. You can drag objects directly in the main image panel too. Press <kbd>H</kbd> to hide or show the selected object.',
+    text: 'When an object is selected, its parameters appear here. Choose a profile from the dropdown — lens types include SIE, EPL, point mass, and external shear; source types include Gaussian, exponential, uniform circle, point source, and pasted image. The <b>ⓘ</b> button shows parameter descriptions for the chosen model. Press <kbd>H</kbd> to hide or show the selected object.',
   },
   {
     target: '#sl-image-wrap',

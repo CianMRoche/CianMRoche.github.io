@@ -131,13 +131,20 @@ vec2 deflectEPL(vec2 u, float b, float q, float phi, float gamma) {
               sp * scale*ax_sie + cp * scale*ay_sie);
 }
 
+vec2 deflectShear(vec2 u, float gamma, float phi) {
+  float c2 = cos(2.0 * phi), s2 = sin(2.0 * phi);
+  return vec2(gamma * ( u.x * c2 + u.y * s2),
+              gamma * ( u.x * s2 - u.y * c2));
+}
+
 vec2 lensDeflection(int idx, vec2 pos) {
   vec2 u = pos - u_lensCenter[idx];
   vec4 p = u_lensParams[idx];
   int  m = u_lensModel[idx];
   if (m == 0) return deflectPointMass(u, p.x);
   if (m == 1) return deflectSIE(u, p.x, p.y, p.z);
-  if (m == 2) return deflectEPL(u, p.x, p.y, p.z, p.w);  // p.w = gamma
+  if (m == 2) return deflectEPL(u, p.x, p.y, p.z, p.w);
+  if (m == 3) return deflectShear(pos, p.x, p.y); // shear is relative to origin, not object centre
   return vec2(0.0);
 }
 
@@ -541,5 +548,6 @@ function _modelParams(obj) {
   if (model === 'pointmass') return { model:0, p0: params.thetaE??1, p1:0, p2:0, p3:0 };
   if (model === 'sie')       return { model:1, p0: params.b??1, p1: params.q??0.8, p2: params.phi??0, p3:0 };
   if (model === 'epl')       return { model:2, p0: params.b??1, p1: params.q??0.75, p2: params.phi??0, p3: params.gamma??2 };
+  if (model === 'shear')     return { model:3, p0: params.gamma??0.05, p1: params.phi??0, p2:0, p3:0 };
   return { model:0, p0:1, p1:0, p2:0, p3:0 };
 }

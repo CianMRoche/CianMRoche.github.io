@@ -85,11 +85,18 @@ export function precomputeDistances(planes) {
   return { D_obs, D_btwn, N };
 }
 
+function deflectShear(ux, uy, gamma, phi) {
+  const c2 = Math.cos(2 * phi), s2 = Math.sin(2 * phi);
+  return [gamma * ( ux * c2 + uy * s2),
+          gamma * ( ux * s2 - uy * c2)];
+}
+
 function lensDeflection(obj, ux, uy) {
   const { model, params } = obj;
   if (model === 'pointmass') return deflectPointMass(ux, uy, params.thetaE);
   if (model === 'sie')       return deflectSIE(ux, uy, params.b, params.q, params.phi);
   if (model === 'epl')       return deflectEPL(ux, uy, params.b, params.q, params.phi, params.gamma ?? 2);
+  if (model === 'shear')     return deflectShear(ux + obj.cx, uy + obj.cy, params.gamma ?? 0.05, params.phi ?? 0); // absolute θ
   return [0, 0];
 }
 
