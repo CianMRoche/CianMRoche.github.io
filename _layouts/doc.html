@@ -96,7 +96,7 @@ document.addEventListener('DOMContentLoaded', function () {
   var list     = document.getElementById('doc-toc-list');
   var content  = document.querySelector('.doc-content');
   if (!list || !content) return;
-  var headings = content.querySelectorAll('h2, h3');
+  var headings = content.querySelectorAll('h2');
   var links    = [];
 
   headings.forEach(function (h) {
