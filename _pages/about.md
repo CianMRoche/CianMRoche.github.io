@@ -262,7 +262,7 @@ When a <span style="color:#BA7517">massive object</span> sits between us and a d
 
 <p style="font-size:0.875rem; color:#6b7280; line-height:1.65; margin: 1rem 0 0.5rem;">
 Click a preset or load your own source image by pasting (Ctrl+V / Cmd+V) or dragging an image onto the left panel. Click the right panel to move the lens.
-For a much more complete lens simulator, see <a href="/assets/simple_lens/">simpleLens</a>.</p>
+For a much more complete lens simulator, see <a href="/assets/caustica/">Caustica</a>.</p>
 
 <div class="demo-wrap">
   <iframe id="lensing-iframe" src=""

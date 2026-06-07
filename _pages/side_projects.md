@@ -47,17 +47,30 @@ html[data-theme="dark"] .sp-launch:hover {
   background: #7bbfcc;
   color: #0d1117 !important;
 }
+
+@media (max-width: 600px) {
+  .sp-img-wrap {
+    float: none;
+    margin-left: 0;
+    margin-bottom: 1rem;
+    width: 100%;
+  }
+  .sp-img-wrap img {
+    width: 100%;
+    height: auto;
+  }
+}
 </style>
 
 <div style="clear: both;">
   <div class="sp-img-wrap">
-    <img class="img-light" src="/images/simplelens-prog-2pointmass-light.gif" alt="simpleLens logo" width="250" height="250">
-    <img class="img-dark"  src="/images/simplelens-prog-2pointmass.gif" alt="simpleLens logo" width="250" height="250">
+    <img class="img-light" src="/images/caustica-prog-2pointmass-light.gif" alt="Caustica logo" width="250" height="250">
+    <img class="img-dark"  src="/images/caustica-prog-2pointmass.gif" alt="Caustica logo" width="250" height="250">
   </div>
   <div>
-    <h2>simpleLens</h2>
+    <h2>Caustica</h2>
     <p>An interactive multi-plane gravitational lensing simulator and intuition-builder. Build up lens and source planes by clicking on a redshift axis. Choose from different lens mass and source light profiles. Supports critical curve and caustic overlays.</p>
-    <a class="sp-launch" href="/assets/simple_lens/">Launch simpleLens →</a>
+    <a class="sp-launch" href="/assets/caustica/">Launch Caustica →</a>
   </div>
 </div>
 

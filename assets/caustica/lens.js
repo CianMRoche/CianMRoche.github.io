@@ -1,4 +1,4 @@
-// simpleLens — lens.js
+// Caustica — lens.js
 //
 // Cosmological distances (flat ΛCDM) and gravitational lens deflection angles.
 // All angular quantities in arcseconds. Distances in Mpc.

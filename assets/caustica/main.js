@@ -1,4 +1,4 @@
-// simpleLens — main.js
+// Caustica — main.js
 
 import { Renderer }                            from './renderer.js';
 import { precomputeDistances,
@@ -191,7 +191,7 @@ function init() {
   try {
     renderer = new Renderer(glCanvas);
   } catch (err) {
-    console.error('simpleLens renderer init failed:', err);
+    console.error('Caustica renderer init failed:', err);
     showRendererError(err.message);
   }
 
@@ -255,8 +255,8 @@ function buildDOM() {
   document.getElementById('app').innerHTML = `
     <div class="app-inner">
       <div class="sl-topbar">
-        <h1>simpleLens</h1>
-<a class="sl-demo-btn" href="/simplelens-how-it-works/" target="_blank" rel="noopener">Docs</a>
+        <h1>Caustica</h1>
+<a class="sl-demo-btn" href="/caustica-documentation/" target="_blank" rel="noopener">Docs</a>
         <button class="sl-demo-btn" id="sl-demo" title="Walk through a tour of the controls">Tour</button>
         <button class="sl-theme-btn" id="sl-theme" title="Toggle dark mode" aria-label="Toggle dark mode">
           <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1819,7 +1819,7 @@ function captureSnapshot() {
     renderer.setScene(allPlanes, state.dist, state.fov, state.toneMap, activeToneMapParam());
     drawOverlay();
   }
-  buildCompositeCanvas().toBlob(blob => downloadBlob(blob, 'simplelens.png'), 'image/png');
+  buildCompositeCanvas().toBlob(blob => downloadBlob(blob, 'caustica.png'), 'image/png');
 }
 
 function setProgInitialPosition() {
@@ -1955,7 +1955,7 @@ function startProgrammaticRecording() {
       const gif = new GIF({ workers: 2, quality: 10, workerScript: 'gif.worker.js',
                             width: lc.width, height: lc.height });
       recState.gifObj = gif;
-      gif.on('finished', blob => downloadBlob(blob, 'simplelens-prog.gif'));
+      gif.on('finished', blob => downloadBlob(blob, 'caustica-prog.gif'));
       doFrame();
     };
     if (!window.GIF) {
@@ -1969,7 +1969,7 @@ function startProgrammaticRecording() {
     recState.recorder = recorder;
     recorder.ondataavailable = e => { if (e.data.size > 0) recState.chunks.push(e.data); };
     recorder.onstop = () => {
-      downloadBlob(new Blob(recState.chunks, { type: 'video/webm' }), 'simplelens-prog.webm');
+      downloadBlob(new Blob(recState.chunks, { type: 'video/webm' }), 'caustica-prog.webm');
       recState.chunks = [];
     };
     recorder.start(200);
@@ -2090,7 +2090,7 @@ function _startWebMRecording(fps, liveCanvas) {
   recorder.ondataavailable = e => { if (e.data.size > 0) recState.chunks.push(e.data); };
   recorder.onstop = () => {
     const blob = new Blob(recState.chunks, { type: 'video/webm' });
-    downloadBlob(blob, 'simplelens.webm');
+    downloadBlob(blob, 'caustica.webm');
     recState.chunks = [];
   };
   recorder.start(200); // collect data every 200ms
@@ -2108,7 +2108,7 @@ function _loadGifJs(cb) {
   script.src = 'gif.js';
   script.dataset.gifjs = '1';
   script.onload = cb;
-  script.onerror = () => console.error('simpleLens: could not load gif.js');
+  script.onerror = () => console.error('Caustica: could not load gif.js');
   document.head.appendChild(script);
 }
 
@@ -2129,7 +2129,7 @@ function _initGifEncoder(fps, liveCanvas) {
   });
   recState.gifObj = gif;
 
-  gif.on('finished', blob => downloadBlob(blob, 'simplelens.gif'));
+  gif.on('finished', blob => downloadBlob(blob, 'caustica.gif'));
 
   const delay = Math.round(1000 / fps);
   recState.frameInterval = setInterval(() => {

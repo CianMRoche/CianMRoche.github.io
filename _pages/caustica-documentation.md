@@ -1,10 +1,10 @@
 ---
 layout: doc
-title: "How simpleLens works"
-permalink: /simplelens-how-it-works/
+title: "How Caustica works"
+permalink: /caustica-documentation/
 ---
 
-A description of the gravitational lensing computation behind [simpleLens](/assets/simple_lens/).
+[Caustica](/assets/caustica/) is a tool for easily visualizing strong gravitational lensing, named after the term used by 17th century mathematicians for the curves onto which refracted light rays converge, which were capable of burning objects.
 
 ---
 
@@ -75,7 +75,7 @@ $$D(z_1, z_2) = \frac{\chi(z_2) - \chi(z_1)}{1+z_2} \qquad \text{(between two re
 
 $\chi(z)$ has no closed form and is evaluated with the **midpoint Riemann rule** at $n = 200$ steps:
 
-$$\chi(z) \;\approx\; D_H \cdot \Delta z \cdot \sum_{i=0}^{n-1} \frac{1}{E\!\left(\bigl(i+\tfrac{1}{2}\bigr)\Delta z\right)}, \qquad \Delta z = \frac{z}{n}$$
+$$\chi(z) \;\approx\; D_H \cdot \Delta z \cdot \sum_{i=0}^{n-1} \frac{1}{E\left(\bigl(i+\tfrac{1}{2}\bigr)\Delta z\right)}, \qquad \Delta z = \frac{z}{n}$$
 
 For $n = 200$ and $z \leq 5$ the relative error in $\chi$ is below $0.01\%$, negligible for lensing purposes.
 
@@ -94,7 +94,7 @@ Planes are sorted by increasing redshift.
 A ray **observed** at image-plane angle $\boldsymbol{\theta}$ (a 2-D vector in arcsec) is traced forward through each plane in order.
 Its angular position at plane $j$ is given by the *multiplane recursion* (Schneider, Ehlers & Falco 1992):
 
-$$\boldsymbol{\theta}_j \;=\; \boldsymbol{\theta} \;-\; \sum_{k\,<\,j} \frac{D_{kj}}{D_j}\;\hat{\boldsymbol{\alpha}}_k\!\left(\boldsymbol{\theta}_k\right)$$
+$$\boldsymbol{\theta}_j \;=\; \boldsymbol{\theta} \;-\; \sum_{k\,<\,j} \frac{D_{kj}}{D_j}\;\hat{\boldsymbol{\alpha}}_k\left(\boldsymbol{\theta}_k\right)$$
 
 | Symbol | Meaning |
 |---|---|
@@ -123,14 +123,14 @@ All models take the ray–lens separation $\mathbf{u} = \boldsymbol{\theta}_k - 
 
 $$\hat{\boldsymbol{\alpha}}(\mathbf{u}) = \frac{b^2}{|\mathbf{u}|^2}\,\mathbf{u}$$
 
-The deflection is radial with magnitude $b^2/|\mathbf{u}|$.
+The deflection is radial with magnitude $b^2/\lvert\mathbf{u}\rvert$.
 The parameter $b$ (labelled **Strength** in the controls, arcsec) equals $\sqrt{4GM/c^2 D_L}$, so $b \propto \sqrt{M}$ at fixed redshift.
-The Einstein ring forms at $|\boldsymbol{\theta}| = b\sqrt{D_{LS}/D_S}$, not at $b$ itself, because the multiplane weight $D_{LS}/D_S$ is applied separately.
+The Einstein ring forms at $\lvert\boldsymbol{\theta}\rvert = b\sqrt{D_{LS}/D_S}$, not at $b$ itself, because the multiplane weight $D_{LS}/D_S$ is applied separately ($D_{LS}$: lens-to-source angular diameter distance; $D_S$: observer-to-source).
 
 ### SIE (Singular Isothermal Ellipsoid)
 
 A standard model for galaxy-scale lenses (Kormann et al. 1994).
-The projected surface density falls as $1/r$.
+The projected surface density falls as $1/r_e$ (defined below).
 
 | Symbol | Meaning |
 |---|---|
@@ -144,30 +144,30 @@ $$x_r = \cos\varphi\, u_x + \sin\varphi\, u_y, \qquad y_r = -\sin\varphi\, u_x +
 
 **Step 2:** elliptical radius with softening $s = 0.001''$ to regularise the origin:
 
-$$r = \sqrt{q^2(x_r^2 + s^2) + y_r^2}$$
+$$r_e = \sqrt{q^2(x_r^2 + s^2) + y_r^2}$$
 
 **Step 3:** deflection in the principal frame, with $A = bq\,/\,\sqrt{1-q^2}$:
 
-$$\alpha_{x_r} = A\arctan\!\left(\frac{\sqrt{1-q^2}\cdot x_r}{r + s}\right), \qquad \alpha_{y_r} = A\operatorname{arctanh}\!\left(\frac{\sqrt{1-q^2}\cdot y_r}{r + q^2 s}\right)$$
+$$\alpha_{x_r} = A\arctan\left(\frac{\sqrt{1-q^2}\cdot x_r}{r_e + s}\right), \qquad \alpha_{y_r} = A\operatorname{arctanh}\left(\frac{\sqrt{1-q^2}\cdot y_r}{r_e + q^2 s}\right)$$
 
-The arctanh function is absent in GLSL ES, so the shader uses $\operatorname{arctanh}(x) = \tfrac{1}{2}\ln\!\left(\dfrac{1+x}{1-x}\right)$.
+The arctanh function is absent in GLSL ES, so the shader uses $\operatorname{arctanh}(x) = \tfrac{1}{2}\ln\left(\dfrac{1+x}{1-x}\right)$.
 
 **Step 4:** rotate back to the sky frame:
 
 $$\alpha_x = \cos\varphi\,\alpha_{x_r} - \sin\varphi\,\alpha_{y_r}, \qquad \alpha_y = \sin\varphi\,\alpha_{x_r} + \cos\varphi\,\alpha_{y_r}$$
 
-In the circular limit $q\to 1$, both arguments vanish and L'Hôpital's rule gives $|\hat{\boldsymbol{\alpha}}|\to b$: the constant-magnitude deflection of the singular isothermal sphere.
+In the circular limit $q\to 1$, both arguments vanish and L'Hôpital's rule gives $\lvert\hat{\boldsymbol{\alpha}}\rvert\to b$: the constant-magnitude deflection of the singular isothermal sphere.
 
 ### EPL (Elliptical Power Law)
 
 A generalisation of the SIE in which the density slope is a free parameter.
-The projected surface density follows $\Sigma \propto m^{1-\gamma}$, where $m$ is the elliptical radius and $\gamma$ is the power-law slope; $\gamma = 2$ recovers the SIE exactly.
+The projected surface density follows $\Sigma \propto r_e^{1-\gamma}$, where $r_e$ is the elliptical radius and $\gamma$ is the power-law slope; $\gamma = 2$ recovers the SIE exactly.
 
 The deflection is the SIE result scaled by a radial factor:
 
-$$\hat{\boldsymbol{\alpha}}_\text{EPL}(\mathbf{u}) = \left(\frac{m}{b}\right)^{2-\gamma} \hat{\boldsymbol{\alpha}}_\text{SIE}(\mathbf{u})$$
+$$\hat{\boldsymbol{\alpha}}_\text{EPL}(\mathbf{u}) = \left(\frac{r_e}{b}\right)^{2-\gamma} \hat{\boldsymbol{\alpha}}_\text{SIE}(\mathbf{u})$$
 
-where $m$ is the elliptical radius from step 2 of the SIE and $\hat{\boldsymbol{\alpha}}_\text{SIE}$ is the SIE deflection at that position.
+where $r_e$ is the elliptical radius from step 2 of the SIE and $\hat{\boldsymbol{\alpha}}_\text{SIE}$ is the SIE deflection at that position.
 
 | Symbol | Meaning |
 |---|---|
@@ -175,6 +175,7 @@ where $m$ is the elliptical radius from step 2 of the SIE and $\hat{\boldsymbol{
 | $q$ | Axis ratio $0 \lt q \leq 1$ |
 | $\varphi$ | Position angle of the major axis (radians) |
 | $\gamma$ | Power-law slope: $\gamma = 2$ isothermal, $\gamma \lt 2$ steeper central density, $\gamma \gt 2$ shallower. Observed galaxies typically have $\gamma \approx 1.9$–$2.1$. |
+| $r_e$ | Elliptical radius from SIE step 2: $r_e = \sqrt{q^2(x_r^2+s^2)+y_r^2}$ |
 
 ---
 
@@ -186,6 +187,7 @@ The elliptically-weighted separation from the source centre is:
 $$\mathbf{d} = \boldsymbol{\beta} - (c_x, c_y), \qquad \begin{pmatrix}x_r \\ y_r\end{pmatrix} = R(-\varphi)\,\mathbf{d}, \qquad r_\text{ell}^2 = x_r^2 + (y_r/q)^2$$
 
 where $R(-\varphi)$ rotates by $-\varphi$ to align with the source axes.
+Note: $r_\text{ell}$ differs from the lens elliptical radius $r_e$ by a factor of $q$, reflecting different conventions in their respective fields. For sources, $\sigma$ is the semi-major axis of the brightness isophote (the standard in galactic photometry). For lenses, the Kormann et al. (1994) convention keeps the deflection scale $b$ independent of $q$.
 
 | Symbol | Meaning |
 |---|---|
@@ -197,21 +199,21 @@ where $R(-\varphi)$ rotates by $-\varphi$ to align with the source axes.
 
 ### Gaussian
 
-$$I = A\exp\!\left(-\frac{r_\text{ell}^2}{2\sigma^2}\right)$$
+$$I = A\exp\left(-\frac{r_\text{ell}^2}{2\sigma^2}\right)$$
 
 The Show Shape ellipse is drawn at $r_\text{ell} = 2\sigma$.
 
 ### Exponential
 
-$$I = A\exp\!\left(-\frac{r_\text{ell}}{\sigma}\right)$$
+$$I = A\exp\left(-\frac{r_\text{ell}}{\sigma}\right)$$
 
 More extended than Gaussian; $\sigma$ is the exponential scale length. This is a Sérsic profile with $n=1$.
 
 ### Uniform circle
 
-$$I = A \cdot \mathbf{1}[r_\text{ell} \leq \sigma]$$
+$$I = \begin{cases} A & r_\text{ell} \leq \sigma \\ 0 & \text{otherwise} \end{cases}$$
 
-A filled disc of constant brightness; $\sigma$ is the radius.
+A filled disc of constant brightness with radius $\sigma$. The axis ratio $q$ is fixed at 1 (always circular), so $r_\text{ell}$ reduces to the ordinary Euclidean radius.
 
 ### Pasted image
 
@@ -259,7 +261,7 @@ The computation proceeds in four steps:
 
 ## 7. Code structure
 
-simpleLens is written in vanilla JavaScript with no framework. The source lives in `/assets/simple_lens/`.
+Caustica is written in vanilla JavaScript with no framework. The source lives in `/assets/caustica/`.
 
 ### `lens.js`
 

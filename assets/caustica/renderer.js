@@ -1,4 +1,4 @@
-// simpleLens — renderer.js
+// Caustica — renderer.js
 //
 // WebGL2 renderer. One fullscreen quad; the fragment shader implements the
 // complete multiplane lensing computation for every pixel in parallel.
@@ -90,7 +90,7 @@ float atanh_approx(float x) {
 
 vec2 deflectPointMass(vec2 u, float thetaE) {
   // Softened point mass: same core radius as SIE to prevent singularity.
-  // Physically negligible at the scales typical in simpleLens.
+  // Physically negligible at the scales typical in Caustica.
   float r2 = max(dot(u, u), SIE_SOFT * SIE_SOFT);
   return (thetaE * thetaE / r2) * u;
 }
