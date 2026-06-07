@@ -2364,8 +2364,10 @@ function positionTourTooltip(targetRect, preferred) {
     }
   }
   const VP = 12;
-  left = _tourClamp(left, VP, window.innerWidth  - ttW - VP);
-  top  = _tourClamp(top,  VP, window.innerHeight - ttH - VP);
+  // Ensure upper bound is never less than lower bound (happens when tooltip
+  // is wider/taller than the viewport minus padding).
+  left = _tourClamp(left, VP, Math.max(VP, window.innerWidth  - ttW - VP));
+  top  = _tourClamp(top,  VP, Math.max(VP, window.innerHeight - ttH - VP));
   tt.style.left = `${left}px`;
   tt.style.top  = `${top}px`;
   if (side) tt.classList.add(side);

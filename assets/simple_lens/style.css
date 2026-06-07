@@ -1330,6 +1330,13 @@ html[data-theme="light"] #sl-gl-canvas { filter: invert(1); }
   box-shadow: 0 12px 32px rgba(0,0,0,0.18); pointer-events: auto;
   transition: left 0.28s ease, top 0.28s ease;
 }
+@media (max-width: 640px) {
+  .tutorial-tooltip {
+    max-width: calc(100vw - 24px);
+    min-width: 0;
+    transition: none; /* avoid animating from off-screen on first show */
+  }
+}
 html[data-theme="dark"] .tutorial-tooltip { box-shadow: 0 12px 32px rgba(0,0,0,0.6); }
 .tutorial-tooltip .tt-step {
   font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase;
