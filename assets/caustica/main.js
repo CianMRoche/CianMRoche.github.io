@@ -1218,12 +1218,12 @@ const LENS_INFO = {
         <b>q</b>: axis ratio (1 = circular, lower = more elliptical).<br>
         <b>φ</b>: position angle of the major axis (radians).`,
   pointmass: `<b>Strength</b>: mass scale in arcsec, equal to √(4GM / c² D<sub>L</sub>). For a fixed lens redshift D<sub>L</sub> is constant, so Strength is proportional to √M. The Einstein ring appears at Strength × √(D<sub>LS</sub> / D<sub>S</sub>).`,
-  deflection: `Models the monopole contribution from a distant perturber outside the field of view — a uniform deflection of all rays by the same angle. This shifts caustics bodily without distorting them, unlike shear (which distorts) or convergence (which scales).<br><br>
+  deflection: `Models the monopole contribution from a distant perturber outside the field of view: a uniform deflection of all rays by the same angle. This shifts caustics bodily without distorting them, unlike shear (which distorts) or convergence (which scales).<br><br>
               <b>α</b>: deflection amplitude (arcsec).<br>
               <b>φ</b>: deflection direction (radians).<br><br>
               The object position has no effect; the deflection is the same at every image-plane point.`,
   convergence: `Models a uniform mass sheet along the line of sight. The deflection is radial: α = κ·θ, always computed relative to the origin regardless of object position. Moving the marker only repositions the visual indicator.<br><br>
-               <b>κ</b>: convergence (dimensionless). Positive values represent overdense structures; negative values underdense voids. Related to the mass sheet degeneracy — κ cannot be measured from image positions alone.`,
+               <b>κ</b>: convergence (dimensionless). Positive values represent overdense structures; negative values underdense voids. Related to the mass sheet degeneracy; κ cannot be measured from image positions alone.`,
   shear: `Models an external tidal field (e.g. a nearby cluster or line-of-sight structure). The deflection is always computed relative to the coordinate origin, so the object's position has no effect on the lensing. Moving the marker only repositions the direction arrow.<br><br>
           <b>γ</b>: shear strength; typical galaxy-scale values are 0.01–0.2.<br>
           <b>φ</b>: position angle of the shear axis (radians).`,

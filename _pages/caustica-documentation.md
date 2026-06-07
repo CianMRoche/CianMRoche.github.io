@@ -193,7 +193,7 @@ This follows from the lensing potential $\psi = \tfrac{\gamma_\text{ext}}{2}\lef
 | $\gamma_\text{ext}$ | Shear strength (dimensionless). Typical values 0.01–0.2 for galaxy-scale lenses. |
 | $\varphi$ | Shear position angle (radians), aligned with the direction of the tidal field. |
 
-The shear object's position in the plane panel has no effect on the lensing computation — the deflection is always computed relative to the coordinate origin. The marker and direction arrow can be repositioned freely for visual organisation.
+The shear object's position in the plane panel has no effect on the lensing computation; the deflection is always computed relative to the coordinate origin. The marker and direction arrow can be repositioned freely for visual organisation.
 
 ### Constant deflection
 
@@ -216,7 +216,7 @@ Models a uniform mass sheet along the line of sight (e.g. an overdense filament 
 
 $$\hat{\alpha}_x = \kappa\,\theta_x, \qquad \hat{\alpha}_y = \kappa\,\theta_y$$
 
-This follows from the potential $\psi = \tfrac{\kappa}{2}\lvert\boldsymbol{\theta}\rvert^2$ and is isotropic — no preferred direction.
+This follows from the potential $\psi = \tfrac{\kappa}{2}\lvert\boldsymbol{\theta}\rvert^2$ and is isotropic, with no preferred direction.
 
 | Symbol | Meaning |
 |---|---|
@@ -266,9 +266,11 @@ A filled disc of constant brightness with radius $\sigma$. The axis ratio $q$ is
 
 A mathematically point-like source for simulating quasars or other compact objects. The source position $(c_x, c_y)$ is specified in the source plane; the simulator finds all image positions $\{\theta_i\}$ by solving the lens equation $\beta(\theta) = (c_x, c_y)$ numerically, then draws a circle of fixed angular radius $\sigma$ at each $\theta_i$ in the image plane.
 
-Image positions are found via a two-stage algorithm: a coarse grid search using sign-change topology to locate starting guesses, followed by Newton–Raphson refinement with backtracking line search until $\lvert F(\theta)\rvert^2 \lt 10^{-14}$ arcsec². Each converged solution is deduplicated. Because the circles are drawn in the image plane with fixed size, they are not stretched or sheared by lensing — this is appropriate for modelling the PSF-limited appearance of a quasar image.
+Image positions are found via a two-stage algorithm: a coarse grid search using sign-change topology to locate starting guesses, followed by Newton–Raphson refinement with backtracking line search until $\lvert F(\theta)\rvert^2 \lt 10^{-14}$ arcsec². Each converged solution is deduplicated. Because the circles are drawn in the image plane with fixed size, they are not stretched or sheared by lensing; this is appropriate for modelling the PSF-limited appearance of a quasar image.
 
 > Einstein rings and arc-shaped images do not appear in this mode. Use a Gaussian or uniform circle source for extended-emission lensing. Highly demagnified images (such as the central odd image of an SIE lens) may be missed by the grid search.
+
+The grid spacing used for image finding is set in the Settings tab under **Point Source**. Finer spacing finds images more reliably near caustics but is slower; the default is 20 mas.
 
 ### Pasted image
 
@@ -322,8 +324,8 @@ Caustica is written in vanilla JavaScript with no framework. The source lives in
 
 Pure physics; no DOM access or rendering.
 
-- **Cosmology**: `comovingDist`, `angDiamDist`, `angDiamDistBetween` — flat ΛCDM distance integrals via midpoint Riemann sum.
-- **Deflection models**: `deflectPointMass`, `deflectSIE`, `deflectEPL` — take a ray–lens separation in arcsec and return a deflection angle in arcsec.
+- **Cosmology**: `comovingDist`, `angDiamDist`, `angDiamDistBetween`: flat ΛCDM distance integrals via midpoint Riemann sum.
+- **Deflection models**: `deflectPointMass`, `deflectSIE`, `deflectEPL`: take a ray–lens separation in arcsec and return a deflection angle in arcsec.
 - **`precomputeDistances(planes)`**: builds the $D_\text{obs}$ and $D_\text{btwn}$ arrays once per plane configuration.
 - **`traceRay(θ, planes, dist, targetIdx)`**: evaluates the multiplane recursion in JavaScript; used for critical curve sampling.
 - **`computeCriticalCurves(planes, dist, sourceIdx, fov, gridN)`**: samples an $N \times N$ ray grid, computes the Jacobian determinant via finite differences, then runs marching squares to extract critical curve and caustic segments.
@@ -341,7 +343,7 @@ WebGL2 GPU renderer.
 
 Application shell (~2500 lines).
 
-- **`state`**: single object holding all mutable app state — planes and their objects, selected IDs, display flags, add mode, tone-map settings, recording state.
+- **`state`**: single object holding all mutable app state: planes and their objects, selected IDs, display flags, add mode, tone-map settings, recording state.
 - **`buildDOM()`**: constructs the entire UI tree in one pass (image panel, sidebar tabs, redshift axis, plane boxes area, toolbar, plane setup bar).
 - **Event wiring**: `attachHandlers()` for global keyboard/tab/toolbar events; `attachAxisHandlers()` for plane-dragging on the redshift axis; `attachPlaneCanvasHandlers(canvas, plane)` per plane panel; `attachImageHandlers(wrap)` for drag-to-move in the main image.
 - **`renderSidebar()`**: rebuilds the Object Controls and settings/recording tab content. Called whenever selection or state changes.
@@ -350,7 +352,7 @@ Application shell (~2500 lines).
 - **Recording**: `captureSnapshot()` composites the WebGL canvas and overlay into a PNG; `startRecording()` / `stopRecording()` drive a `MediaRecorder` for WebM or a gif.js encoder for GIF.
 - **Programmatic recording**: each selected object can have an initial and final position set; `startProgrammaticRecording()` interpolates all registered objects simultaneously.
 - **Config save/load**: `configToYaml()` serialises all planes and objects to a human-readable YAML string; `parseYamlConfig()` parses it back with strict type and range validation (allowlisted model names, hex-only color strings, bounded numeric coordinates) before updating state.
-- **Tour**: `startTour()` / `showTourStep()` — spotlight-and-tooltip tutorial with mobile-aware step callbacks that open/close the plane setup drawer and switch mobile tabs as needed.
+- **Tour**: `startTour()` / `showTourStep()`: spotlight-and-tooltip tutorial with mobile-aware step callbacks that open/close the plane setup drawer and switch mobile tabs as needed.
 
 ### `style.css`
 
