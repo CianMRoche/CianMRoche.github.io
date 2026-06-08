@@ -48,6 +48,9 @@ uniform float u_fov;
 uniform vec2  u_res;
 uniform int   u_toneMap;
 uniform float u_toneMapParam;
+uniform int   u_vizMode;      // 0=surface brightness, 1=κ, 2=γ, 3=|μ|, 4=signed μ, 5=|α|
+uniform int   u_vizSrcIdx;    // target plane index for visualization Jacobian
+uniform int   u_isDark;       // 1 = dark theme, 0 = light theme
 
 uniform float u_D_obs [${MAX_PLANES}];
 uniform float u_D_btwn[${MAX_PLANES * MAX_PLANES}];
@@ -233,13 +236,101 @@ vec2 traceToPlane(vec2 theta, int targetIdx) {
   return result;
 }
 
+// ── Colormaps ─────────────────────────────────────────────────────────────────
+
+// Diverging colormaps.
+// Light: blue → white (neutral) → red.
+// Dark:  blue → very dark navy (neutral) → orange-red; avoids white.
+vec3 cmDiverge(float t) {
+  t = clamp(t, -1.0, 1.0);
+  if (u_isDark == 1) {
+    vec3 neg = vec3(0.25, 0.50, 1.00);
+    vec3 ctr = vec3(0.07, 0.07, 0.14);
+    vec3 pos = vec3(1.00, 0.35, 0.12);
+    if (t < 0.0) return mix(ctr, neg, -t);
+    else          return mix(ctr, pos,  t);
+  } else {
+    vec3 neg = vec3(0.22, 0.42, 0.92);
+    vec3 pos = vec3(0.92, 0.28, 0.18);
+    if (t < 0.0) return mix(vec3(1.0), neg, -t);
+    else          return mix(vec3(1.0), pos,  t);
+  }
+}
+
+// Sequential colormaps.
+// Dark:  very dark → dark purple → orange → yellow (t=0 ≈ canvas bg).
+// Light: white → orange → purple → black  (t=0 = white = canvas bg).
+vec3 cmSequential(float t) {
+  t = clamp(t, 0.0, 1.0);
+  vec3 a, b, c, d;
+  if (u_isDark == 1) {
+    a = vec3(0.00, 0.00, 0.04);
+    b = vec3(0.36, 0.00, 0.36);
+    c = vec3(0.90, 0.43, 0.00);
+    d = vec3(1.00, 0.90, 0.00);
+  } else {
+    a = vec3(1.00, 1.00, 1.00); // white — matches light canvas bg
+    b = vec3(1.00, 0.55, 0.00); // orange
+    c = vec3(0.45, 0.00, 0.55); // purple
+    d = vec3(0.00, 0.00, 0.00); // black
+  }
+  if (t < 0.33) return mix(a, b, t * 3.0);
+  if (t < 0.66) return mix(b, c, (t - 0.33) * 3.0);
+  return mix(c, d, (t - 0.66) * 3.0);
+}
+
+// ── Visualization Jacobian ────────────────────────────────────────────────────
+
+vec3 computeViz(vec2 theta) {
+  float h = u_fov * 0.004; // finite-difference step (~0.016" at fov=4)
+  int tgt = u_vizSrcIdx;
+  vec2 bpx = traceToPlane(theta + vec2(h, 0.0), tgt);
+  vec2 bmx = traceToPlane(theta - vec2(h, 0.0), tgt);
+  vec2 bpy = traceToPlane(theta + vec2(0.0, h), tgt);
+  vec2 bmy = traceToPlane(theta - vec2(0.0, h), tgt);
+
+  // Jacobian A_ij = d beta_i / d theta_j  (traceToPlane returns beta directly)
+  float A11 = (bpx.x - bmx.x) / (2.0*h);
+  float A12 = (bpy.x - bmy.x) / (2.0*h);
+  float A21 = (bpx.y - bmx.y) / (2.0*h);
+  float A22 = (bpy.y - bmy.y) / (2.0*h);
+
+  float detJ  = A11*A22 - A12*A21;
+  float kappa = 1.0 - 0.5*(A11 + A22);
+  float g1    = 0.5*(A22 - A11);
+  float g2    = -0.5*(A12 + A21);
+  float gamma = sqrt(g1*g1 + g2*g2);
+
+  if (u_vizMode == 1) { // convergence κ: sequential, clamped ≥ 0, saturates at κ ≈ 2
+    return cmSequential(max(kappa, 0.0) * 0.5);
+  }
+  if (u_vizMode == 2) { // shear |γ|: sequential, [0, 0.5]
+    return cmSequential(gamma * 2.0);
+  }
+  if (u_vizMode == 3) { // |magnification| log scale
+    float mu = 1.0 / max(abs(detJ), 0.001);
+    return cmSequential(log2(mu + 1.0) / 5.0);
+  }
+  if (u_vizMode == 4) { // signed magnification: diverging
+    float muS = clamp(1.0 / detJ, -8.0, 8.0);
+    return cmDiverge(muS * 0.15);
+  }
+  // u_vizMode == 5: deflection |α|
+  vec2 beta = (bpx + bmx) * 0.5; // ≈ traceToPlane(theta, tgt)
+  float alpha_mag = length(theta - beta);
+  return cmSequential(alpha_mag / (u_fov * 0.4));
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 void main() {
-  // v_uv.y=0 is the screen bottom (clip y=-1), v_uv.y=1 is the top.
-  // This already matches the mathematical convention (y increases upward),
-  // so no flip is needed here.
   vec2 theta = (v_uv - 0.5) * u_fov;
+
+  // Visualization modes bypass normal rendering.
+  if (u_vizMode != 0) {
+    fragColor = vec4(computeViz(theta), 1.0);
+    return;
+  }
 
   vec3 colorOut = vec3(0.0);
   for (int si = 0; si < MAX_OBJECTS; si++) {
@@ -261,7 +352,6 @@ void main() {
     float a = max(u_toneMapParam, 0.01);
     colorOut = log(a * colorOut + sqrt(a * a * colorOut * colorOut + 1.0)) / log(a + sqrt(a * a + 1.0));
   }
-  // u_toneMap == 0: linear, no-op
   fragColor = vec4(colorOut, 1.0);
 }`;
 
@@ -308,8 +398,8 @@ export class Renderer {
     if (entry) { gl.deleteTexture(entry.tex); this._pastedTexCache.delete(objId); }
   }
 
-  setScene(planes, dist, fovArcsec, toneMap = 1, toneMapParam = 0.5) {
-    this._scene = { planes, dist, fovArcsec, toneMap, toneMapParam };
+  setScene(planes, dist, fovArcsec, toneMap = 1, toneMapParam = 0.5, vizMode = 0, vizSrcIdx = -1, isDark = 1) {
+    this._scene = { planes, dist, fovArcsec, toneMap, toneMapParam, vizMode, vizSrcIdx, isDark };
     this._draw();
   }
 
@@ -336,7 +426,7 @@ export class Renderer {
 
   _draw() {
     const { gl, _prog, _locs } = this;
-    const { planes, dist, fovArcsec, toneMap, toneMapParam } = this._scene;
+    const { planes, dist, fovArcsec, toneMap, toneMapParam, vizMode, vizSrcIdx, isDark } = this._scene;
 
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     gl.useProgram(_prog);
@@ -349,6 +439,9 @@ export class Renderer {
     gl.uniform2f(_locs.u_res, this.canvas.width, this.canvas.height);
     gl.uniform1i(_locs.u_toneMap,      toneMap      ?? 1);
     gl.uniform1f(_locs.u_toneMapParam, toneMapParam ?? 0.5);
+    gl.uniform1i(_locs.u_vizMode,      vizMode   ?? 0);
+    gl.uniform1i(_locs.u_vizSrcIdx,    vizSrcIdx ?? -1);
+    gl.uniform1i(_locs.u_isDark,       isDark    ?? 1);
 
     const allPlanes = [...planes].sort((a, b) => a.z - b.z);
     const N = Math.min(allPlanes.length, MAX_PLANES);
@@ -523,6 +616,9 @@ export class Renderer {
       u_res:          u('u_res'),
       u_toneMap:      u('u_toneMap'),
       u_toneMapParam: u('u_toneMapParam'),
+      u_vizMode:      u('u_vizMode'),
+      u_vizSrcIdx:    u('u_vizSrcIdx'),
+      u_isDark:       u('u_isDark'),
       u_D_obs:        u('u_D_obs'),
       u_D_btwn:       u('u_D_btwn'),
       u_numPlanes:    u('u_numPlanes'),

@@ -75,6 +75,7 @@ const state = {
   toneMapAsinh:    5.0,
   critGridN:       512,
   psGridStep:      0.02,   // arcsec — point source grid spacing
+  vizMode:         0,      // 0=surface brightness, 1=κ, 2=γ, 3=|μ|, 4=signed μ, 5=|α|
   critZs:          null,  // null = auto (highest-z source plane)
   dist:            null,
 };
@@ -537,6 +538,23 @@ function buildDOM() {
             <canvas id="sl-gl-canvas"></canvas>
             <canvas class="sl-overlay" id="sl-overlay"></canvas>
             <div class="sl-rec-dot" id="sl-rec-dot" style="display:none"></div>
+            <div class="sl-viz-chip">
+              <select id="sl-viz-mode">
+                <option value="0">Lensed image</option>
+                <option value="1">Convergence κ</option>
+                <option value="2">Shear γ</option>
+                <option value="3">Magnification |μ|</option>
+                <option value="5">Deflection |α|</option>
+              </select>
+            </div>
+            <div class="sl-colorbar" id="sl-colorbar" style="display:none">
+              <div class="sl-colorbar-bar" id="sl-colorbar-bar"></div>
+              <div class="sl-colorbar-labels">
+                <span id="sl-colorbar-min"></span>
+                <span id="sl-colorbar-title"></span>
+                <span id="sl-colorbar-max"></span>
+              </div>
+            </div>
           </div>
           <!-- Controls group: right-justified, right-grows -->
           <div class="sl-controls-col" id="sl-controls-col" data-mobile-tab="object">
@@ -600,6 +618,7 @@ function attachHandlers() {
     document.documentElement.setAttribute('data-theme', next);
     try { localStorage.setItem('theme', next); } catch {}
     applyThemeIcons(next);
+    _updateColorbar();
     rebuildPlaneBoxes(); renderSidebar(); redraw();
   });
   applyThemeIcons(document.documentElement.getAttribute('data-theme') || 'dark');
@@ -681,6 +700,13 @@ function attachHandlers() {
   }
   _syncSetupBarRight();
   window.addEventListener('resize', _syncSetupBarRight);
+
+  document.getElementById('sl-viz-mode')?.addEventListener('change', e => {
+    state.vizMode = parseInt(e.target.value, 10);
+    glCanvas?.classList.toggle('sl-viz-active', state.vizMode !== 0);
+    _updateColorbar();
+    redraw();
+  });
 
   attachAxisHandlers();
   attachImageHandlers(document.getElementById('sl-image-wrap'));
@@ -1397,19 +1423,23 @@ function renderSidebar() {
         </button>
         ${_sg.general ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
           <div class="sl-global-input">
-            <label>Field of view</label>
+            <label>FOV (″)</label>
             <input type="number" id="sl-fov" min="0.5" max="20" step="0.5" value="${state.fov}">
             <span class="sl-unit">"</span>
           </div>
           <div class="sl-global-input">
-            <label>z max</label>
+            <label>z<sub>s</sub></label>
+            <input type="number" id="sl-crit-zs-gen" min="0.1" max="15" step="0.1" value="${ezs.toFixed(2)}">
+          </div>
+          <div class="sl-global-input">
+            <label>z<sub>max</sub></label>
             <input type="number" id="sl-zmax" min="0.1" max="10" step="0.1" value="${state.zMax}">
           </div>
           <div class="sl-checkbox-row">
             <label><input type="checkbox" id="sl-show-markers" ${state.showMarkers?'checked':''}> Show positions</label>
             <label><input type="checkbox" id="sl-show-legend"  ${state.showLegend ?'checked':''}> Show legend</label>
           </div>
-          <div class="sl-global-input">
+          <div class="sl-global-input" style="margin-top:8px">
             <label>Tone map</label>
             <select id="sl-tone-map">
               <option value="0" ${state.toneMap===0?'selected':''}>Linear</option>
@@ -1452,10 +1482,6 @@ function renderSidebar() {
               <option value="1024" ${state.critGridN===1024 ?'selected':''}>High (1024)</option>
               <option value="2048" ${state.critGridN===2048 ?'selected':''}>Very high (2048)</option>
             </select>
-          </div>
-          <div class="sl-global-input">
-            <label>Source z<sub>s</sub></label>
-            <input type="number" id="sl-crit-zs" min="0.1" max="15" step="0.1" value="${ezs.toFixed(2)}">
           </div>
         </div>` : ''}
       </div>
@@ -1628,7 +1654,8 @@ function renderSidebar() {
   });
   document.getElementById('sl-crit-res')?.addEventListener('change', e => { state.critGridN = parseInt(e.target.value, 10); redraw(); });
   document.getElementById('sl-ps-grid')?.addEventListener('change',  e => { state.psGridStep = parseFloat(e.target.value); redraw(); });
-  document.getElementById('sl-crit-zs')?.addEventListener('change',  e => { const v = parseFloat(e.target.value); if (v > 0) { state.critZs = v; redraw(); } });
+  document.getElementById('sl-crit-zs')?.addEventListener('change',     e => { const v = parseFloat(e.target.value); if (v > 0) { state.critZs = v; redraw(); } });
+  document.getElementById('sl-crit-zs-gen')?.addEventListener('change', e => { const v = parseFloat(e.target.value); if (v > 0) { state.critZs = v; redraw(); } });
   document.getElementById('sl-show-crit')?.addEventListener('change', e => { state.showCritCurves = e.target.checked; redraw(); });
   document.getElementById('sl-show-caus')?.addEventListener('change', e => { state.showCaustics   = e.target.checked; redraw(); });
   document.getElementById('sl-save-config')?.addEventListener('click', saveConfig);
@@ -2299,6 +2326,51 @@ function drawOverlay() {
 
 // ── Main redraw ───────────────────────────────────────────────────────────────
 let _raf = null;
+// ── Colorbar ──────────────────────────────────────────────────────────────────
+// [title, min-label, max-label, light-gradient, dark-gradient]
+const _VIZ_SEQ_LIGHT = 'linear-gradient(to right,#fff,#FF8C00,#722388,#000)';
+const _VIZ_SEQ_DARK  = 'linear-gradient(to right,#00000A,#5C005C,#E67200,#FFE600)';
+const _VIZ_COLORBAR = {
+  1: ['κ',   '0',  '>2',  _VIZ_SEQ_LIGHT, _VIZ_SEQ_DARK],
+  2: ['γ',   '0',  '0.5', _VIZ_SEQ_LIGHT, _VIZ_SEQ_DARK],
+  3: ['|μ|', '1',  '>30', _VIZ_SEQ_LIGHT, _VIZ_SEQ_DARK],
+  5: ['|α|', '0',  null,  _VIZ_SEQ_LIGHT, _VIZ_SEQ_DARK],
+};
+
+function _updateColorbar() {
+  const bar   = document.getElementById('sl-colorbar');
+  const strip = document.getElementById('sl-colorbar-bar');
+  const minEl = document.getElementById('sl-colorbar-min');
+  const maxEl = document.getElementById('sl-colorbar-max');
+  const ttl   = document.getElementById('sl-colorbar-title');
+  if (!bar) return;
+  const info = _VIZ_COLORBAR[state.vizMode];
+  if (!info) { bar.style.display = 'none'; return; }
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  bar.style.display      = '';
+  ttl.textContent        = info[0];
+  minEl.textContent      = info[1];
+  maxEl.textContent      = info[2] ?? (state.fov * 0.4).toFixed(2) + '″';
+  strip.style.background = dark ? info[4] : info[3];
+}
+
+// Returns { planes, dist, vizSrcIdx } — augmented with a virtual source plane at
+// effectiveCritZs() when no real plane sits exactly there, so the z_s setting
+// actually affects κ/γ/μ/|α| maps (same pattern as computeCritCurvesForZs).
+function vizPlanesAndIdx(sortedPlanes) {
+  const zs = effectiveCritZs();
+  const exact = sortedPlanes.find(p => Math.abs(p.z - zs) < 1e-6);
+  if (exact) {
+    const idx = sortedPlanes.indexOf(exact);
+    return { planes: sortedPlanes, dist: state.dist, vizSrcIdx: idx };
+  }
+  const vp       = { id: -1, z: zs, objects: [] };
+  const augmented = [...sortedPlanes, vp].sort((a, b) => a.z - b.z);
+  const augDist   = precomputeDistances(augmented);
+  const augIdx    = augmented.indexOf(vp);
+  return { planes: augmented, dist: augDist, vizSrcIdx: augIdx };
+}
+
 function activeToneMapParam() {
   if (state.toneMap === 2) return state.toneMapPower;
   if (state.toneMap === 3) return state.toneMapAsinh;
@@ -2312,8 +2384,14 @@ function redraw() {
 
 function _doRedraw() {
   if (!renderer || !state.dist) return;
-  const allPlanes = [...state.planes].sort((a, b) => a.z - b.z);
-  renderer.setScene(allPlanes, state.dist, state.fov, state.toneMap, activeToneMapParam());
+  const sorted = [...state.planes].sort((a, b) => a.z - b.z);
+  const isDark  = document.documentElement.getAttribute('data-theme') === 'dark' ? 1 : 0;
+  if (state.vizMode !== 0) {
+    const { planes, dist, vizSrcIdx } = vizPlanesAndIdx(sorted);
+    renderer.setScene(planes, dist, state.fov, state.toneMap, activeToneMapParam(), state.vizMode, vizSrcIdx, isDark);
+  } else {
+    renderer.setScene(sorted, state.dist, state.fov, state.toneMap, activeToneMapParam(), 0, 0, isDark);
+  }
   for (const plane of state.planes) redrawPlaneCanvas(plane);
   drawAxisCanvas();
   drawOverlay();
@@ -2321,16 +2399,34 @@ function _doRedraw() {
 
 // ── Capture & recording ───────────────────────────────────────────────────────
 
-// Composite the WebGL canvas and 2D overlay into an offscreen canvas.
+// Composite the WebGL canvas (always in surface brightness mode) + overlay.
 function buildCompositeCanvas() {
   const gl  = glCanvas;
   const ov  = document.getElementById('sl-overlay');
+  // Re-render in surface brightness mode so recordings always show lensed image.
+  if (state.vizMode !== 0 && renderer && state.dist) {
+    const p = [...state.planes].sort((a, b) => a.z - b.z);
+    renderer.setScene(p, state.dist, state.fov, state.toneMap, activeToneMapParam(), 0, 0);
+  }
   const off = document.createElement('canvas');
   off.width  = gl.width;
   off.height = gl.height;
   const ctx  = off.getContext('2d');
+  // Apply light-mode inversion (surface brightness always inverted in light mode)
   ctx.drawImage(gl, 0, 0);
+  if (document.documentElement.getAttribute('data-theme') !== 'dark') {
+    ctx.globalCompositeOperation = 'difference';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, off.width, off.height);
+    ctx.globalCompositeOperation = 'source-over';
+  }
   ctx.drawImage(ov, 0, 0);
+  // Restore viz mode
+  if (state.vizMode !== 0 && renderer && state.dist) {
+    const p = [...state.planes].sort((a, b) => a.z - b.z);
+    const { planes, dist, vizSrcIdx } = vizPlanesAndIdx(p);
+    renderer.setScene(planes, dist, state.fov, state.toneMap, activeToneMapParam(), state.vizMode, vizSrcIdx);
+  }
   return off;
 }
 
@@ -2347,8 +2443,14 @@ function downloadBlob(blob, filename) {
 function captureSnapshot() {
   // Ensure the frame is fully drawn first.
   if (renderer && state.dist) {
-    const allPlanes = [...state.planes].sort((a, b) => a.z - b.z);
-    renderer.setScene(allPlanes, state.dist, state.fov, state.toneMap, activeToneMapParam());
+    const isDark  = document.documentElement.getAttribute('data-theme') === 'dark' ? 1 : 0;
+    const sorted  = [...state.planes].sort((a, b) => a.z - b.z);
+    if (state.vizMode !== 0) {
+      const { planes, dist, vizSrcIdx } = vizPlanesAndIdx(sorted);
+      renderer.setScene(planes, dist, state.fov, state.toneMap, activeToneMapParam(), state.vizMode, vizSrcIdx, isDark);
+    } else {
+      renderer.setScene(sorted, state.dist, state.fov, state.toneMap, activeToneMapParam(), 0, 0, isDark);
+    }
     drawOverlay();
   }
   buildCompositeCanvas().toBlob(blob => downloadBlob(blob, 'caustica.png'), 'image/png');
@@ -2452,8 +2554,14 @@ function startProgrammaticRecording() {
     // WebM: captureStream samples at real time; slow computation causes frame
     //       duplication, so critical curves/caustics are suppressed for WebM.
     if (renderer && state.dist) {
-      const allPlanes = [...state.planes].sort((a, b) => a.z - b.z);
-      renderer.setScene(allPlanes, state.dist, state.fov, state.toneMap, activeToneMapParam());
+      const isDark   = document.documentElement.getAttribute('data-theme') === 'dark' ? 1 : 0;
+      const sorted   = [...state.planes].sort((a, b) => a.z - b.z);
+      if (state.vizMode !== 0) {
+        const { planes, dist, vizSrcIdx } = vizPlanesAndIdx(sorted);
+        renderer.setScene(planes, dist, state.fov, state.toneMap, activeToneMapParam(), state.vizMode, vizSrcIdx, isDark);
+      } else {
+        renderer.setScene(sorted, state.dist, state.fov, state.toneMap, activeToneMapParam(), 0, 0, isDark);
+      }
       const savedCrit = state.showCritCurves, savedCaus = state.showCaustics;
       if (!recState.useGif) { state.showCritCurves = false; state.showCaustics = false; }
       drawOverlay();

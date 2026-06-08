@@ -226,7 +226,7 @@ html[data-theme="dark"] .sl-theme-btn:hover { color: #fff; background: rgba(255,
 }
 
 /* In light mode, invert the lensed image so background is bright and arcs are dark. */
-html[data-theme="light"] #sl-gl-canvas { filter: invert(1); }
+html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); }
 
 /* Overlay canvas for critical curves — sits on top, pointer-events off. */
 .sl-overlay {
@@ -250,7 +250,7 @@ html[data-theme="light"] #sl-gl-canvas { filter: invert(1); }
 /* Critical-curve toggle chip — top-right of the image. */
 .sl-crit-toggle {
   position: absolute;
-  top: 8px;
+  top: 36px;
   right: 8px;
   display: flex;
   align-items: center;
@@ -268,6 +268,57 @@ html[data-theme="light"] #sl-gl-canvas { filter: invert(1); }
 }
 .sl-crit-toggle:hover { opacity: 1; }
 .sl-crit-toggle input { accent-color: var(--accent); }
+
+/* Visualization mode chip — top-right of image */
+.sl-viz-chip {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 10;
+  pointer-events: auto;
+  opacity: 0.85;
+  transition: opacity 0.15s;
+}
+.sl-viz-chip:hover { opacity: 1; }
+.sl-viz-chip select {
+  font-size: 11.5px;
+  padding: 3px 6px;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg-soft);
+  cursor: pointer;
+}
+
+/* Colorbar — bottom-left of image */
+.sl-colorbar {
+  position: absolute;
+  bottom: 12px;
+  left: 8px;
+  z-index: 10;
+  pointer-events: none;
+  opacity: 0.88;
+}
+.sl-colorbar-bar {
+  width: 110px;
+  height: 10px;
+  border-radius: 2px;
+  border: 1px solid rgba(128,128,128,0.3);
+}
+.sl-colorbar-labels {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 3px;
+  font-size: 10px;
+  color: var(--fg-soft);
+  width: 110px;
+}
+#sl-colorbar-title {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--fg-soft);
+}
 
 /* ── Right sidebar ────────────────────────────────────────────────────────── */
 
