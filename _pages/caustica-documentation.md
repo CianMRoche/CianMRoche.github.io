@@ -116,7 +116,51 @@ The position at the target plane is the **source-plane position** $\boldsymbol{\
 
 ---
 
-## 4. Lens deflection models
+## 4. Lensing quantities
+
+The **lensing-quantities view** (dropdown in the top-right of the image panel) visualises four quantities derived from the Jacobian of the lens mapping evaluated at the chosen source redshift $z_s$.
+
+### The lens mapping Jacobian
+
+For each image-plane position $\boldsymbol{\theta}$, the multiplane recursion maps it to a source-plane position $\boldsymbol{\beta}(\boldsymbol{\theta})$.
+The $2\times2$ Jacobian matrix of this mapping is:
+
+$$A_{ij} = \frac{\partial\beta_i}{\partial\theta_j}$$
+
+Caustica approximates each element using central finite differences with step $h = 0.004\times\text{fov}$:
+
+$$A_{11} \approx \frac{\beta_x(\boldsymbol{\theta}+h\hat{e}_x) - \beta_x(\boldsymbol{\theta}-h\hat{e}_x)}{2h}, \quad \text{etc.}$$
+
+Four quantities are then derived from $A$:
+
+| Quantity | Formula | Notes |
+|---|---|---|
+| Convergence $\kappa$ | $1 - \tfrac{1}{2}(A_{11}+A_{22})$ | Dimensionless projected mass density scaled by the critical surface density. $\kappa=0$ in empty space; $\kappa=1$ on the Einstein ring. |
+| Shear $\gamma$ | $\sqrt{\gamma_1^2+\gamma_2^2}$, where $\gamma_1=\tfrac{1}{2}(A_{22}-A_{11})$, $\gamma_2=-\tfrac{1}{2}(A_{12}+A_{21})$ | Tidal distortion; zero for a circularly symmetric lens at its centre. |
+| Magnification $\mu$ | $1/\lvert\det A\rvert$ | Ratio of image to source solid angle; diverges on critical curves. Displayed on a log scale. |
+| Deflection $\lvert\hat{\boldsymbol{\alpha}}\rvert$ | $\lvert\boldsymbol{\theta} - \boldsymbol{\beta}(\boldsymbol{\theta})\rvert$ | Total accumulated deflection angle in arcseconds from observer to source plane. Linear scale, saturates at 2″. |
+
+### Distance weighting and the effective shear
+
+In the multiplane recursion, a lens at plane $k$ contributes to $A$ with weight $D_{kj}/D_j$, where $j$ indexes the source plane.
+As a result, the **effective** shear and convergence seen in the map are attenuated relative to the model parameter:
+
+$$\gamma_\text{eff} = \gamma_\text{input} \cdot \frac{D_{ls}}{D_s}, \qquad \kappa_\text{eff} = \kappa_\text{input} \cdot \frac{D_{ls}}{D_s}$$
+
+For example, an external shear with $\gamma_\text{input} = 0.5$ placed at $z_l = 0.5$ with $z_s = 1.0$ will show $\gamma_\text{eff} \approx 0.21$ in the map, because $D_{ls}/D_s \approx 0.42$ for those redshifts.
+The map value equals the input value only in the limiting case $z_l \to 0$, where $D_{ls}/D_s \to 1$.
+
+This is the physically correct behaviour: the same lens produces weaker effective lensing when placed closer to the observer relative to the source.
+
+### Numerical accuracy near singular profiles
+
+The finite-difference Jacobian is accurate everywhere except very close to singular or steep profiles (point mass, EPL with large $\gamma$), where the deflection angle varies as $\sim 1/r$ or faster.
+Near such singularities the truncation error of the central-difference scheme can produce small spurious structure in the $\kappa$ map; convergence is clamped to zero in the display to suppress the most prominent artefacts.
+The shear and magnification maps are less affected.
+
+---
+
+## 5. Lens deflection models
 
 All models take the ray–lens separation $\mathbf{u} = \boldsymbol{\theta}_k - (c_x, c_y)$ (arcsec) and return a deflection angle $\hat{\boldsymbol{\alpha}}$ (arcsec).
 
@@ -195,6 +239,8 @@ This follows from the lensing potential $\psi = \tfrac{\gamma_\text{ext}}{2}\lef
 
 The shear object's position in the plane panel has no effect on the lensing computation; the deflection is always computed relative to the coordinate origin. The marker and direction arrow can be repositioned freely for visual organisation.
 
+> The effective shear visible in the lensing-quantities map is $\gamma_\text{eff} = \gamma_\text{ext} \cdot D_{ls}/D_s$, not $\gamma_\text{ext}$ itself. See §4 for details.
+
 ### Constant deflection
 
 Models the monopole contribution from a massive perturber far outside the field of view. All rays are deflected by the same constant angle regardless of their image-plane position:
@@ -226,7 +272,7 @@ The object's position has no effect on the lensing. External convergence is rela
 
 ---
 
-## 5. Source brightness models
+## 6. Source brightness models
 
 Once a ray arrives at a plane at position $\boldsymbol{\beta}$, the brightness of each source object at that plane is evaluated.
 The elliptically-weighted separation from the source centre is:
@@ -296,7 +342,7 @@ All modes satisfy $f(0)=0$ and $f(1)=1$, so the output always spans $[0,1]$.
 
 ---
 
-## 6. Critical curves and caustics
+## 7. Critical curves and caustics
 
 **Critical curves** are contours in the image plane where $\det(\partial\boldsymbol{\beta}/\partial\boldsymbol{\theta}) = 0$.
 Sources near a critical curve are highly magnified and stretched into arcs.
@@ -316,7 +362,7 @@ The computation proceeds in four steps:
 
 ---
 
-## 7. Code structure
+## 8. Code structure
 
 Caustica is written in vanilla JavaScript with no framework. The source lives in `/assets/caustica/`.
 

@@ -315,10 +315,10 @@ vec3 computeViz(vec2 theta) {
     float muS = clamp(1.0 / detJ, -8.0, 8.0);
     return cmDiverge(muS * 0.15);
   }
-  // u_vizMode == 5: deflection |α|
-  vec2 beta = (bpx + bmx) * 0.5; // ≈ traceToPlane(theta, tgt)
+  // u_vizMode == 5: deflection |α|, linear scale — saturates at 2"
+  vec2 beta = (bpx + bmx) * 0.5;
   float alpha_mag = length(theta - beta);
-  return cmSequential(alpha_mag / (u_fov * 0.4));
+  return cmSequential(alpha_mag / 2.0);
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────

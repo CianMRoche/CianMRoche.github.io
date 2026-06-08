@@ -1008,7 +1008,7 @@ function rebuildPlaneBoxes() {
         <button class="sl-plane-clear" title="Clear all objects">○</button>
         <button class="sl-plane-del" title="Delete plane">×</button>
       </div>
-      <canvas class="sl-plane-canvas" width="148" height="148"></canvas>`;
+      <canvas class="sl-plane-canvas" width="148" height="148" style="width:148px;height:148px"></canvas>`;
 
     planesEl.appendChild(box);
 
@@ -1203,8 +1203,16 @@ function redrawPlaneCanvas(plane) {
 }
 
 function drawPlaneCanvas(canvas, plane) {
-  const ctx   = canvas.getContext('2d');
-  const W = canvas.width, H = canvas.height;
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = canvas.offsetWidth  || 148;
+  const cssH = canvas.offsetHeight || 148;
+  if (canvas.width !== Math.round(cssW * dpr) || canvas.height !== Math.round(cssH * dpr)) {
+    canvas.width  = Math.round(cssW * dpr);
+    canvas.height = Math.round(cssH * dpr);
+  }
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const W = cssW, H = cssH;
   const dark  = document.documentElement.getAttribute('data-theme') === 'dark';
   const color = typeColorHex(planeEffectiveType(plane));
 
@@ -1272,7 +1280,8 @@ const LENS_INFO = {
                <b>κ</b>: convergence (dimensionless). Positive values represent overdense structures; negative values underdense voids. Related to the mass sheet degeneracy; κ cannot be measured from image positions alone.`,
   shear: `Models an external tidal field (e.g. a nearby cluster or line-of-sight structure). The deflection is always computed relative to the coordinate origin, so the object's position has no effect on the lensing. Moving the marker only repositions the direction arrow.<br><br>
           <b>γ</b>: shear strength; typical galaxy-scale values are 0.01–0.2.<br>
-          <b>φ</b>: position angle of the shear axis (radians).`,
+          <b>φ</b>: position angle of the shear axis (radians).<br><br>
+          <b>Note on the shear map:</b> the effective shear visible in the lensing-quantities view is γ × D<sub>ls</sub>/D<sub>s</sub>, where D<sub>ls</sub> is the angular diameter distance from this plane to the source redshift z<sub>s</sub> and D<sub>s</sub> is the observer-to-source distance. Setting γ = 0.5 will therefore show less than 0.5 in the map unless z<sub>l</sub> ≈ 0. The same weighting applies to convergence.`,
   epl: `<b>b</b>: deflection scale (arcsec), same role as in SIE.<br>
         <b>q</b>: axis ratio (1 = circular, lower = more elliptical).<br>
         <b>φ</b>: position angle of the major axis (radians).<br>
@@ -2334,7 +2343,7 @@ const _VIZ_COLORBAR = {
   1: ['κ',   '0',  '>2',  _VIZ_SEQ_LIGHT, _VIZ_SEQ_DARK],
   2: ['γ',   '0',  '0.5', _VIZ_SEQ_LIGHT, _VIZ_SEQ_DARK],
   3: ['|μ|', '1',  '>30', _VIZ_SEQ_LIGHT, _VIZ_SEQ_DARK],
-  5: ['|α|', '0',  null,  _VIZ_SEQ_LIGHT, _VIZ_SEQ_DARK],
+  5: ['|α|', '0',  '2″',  _VIZ_SEQ_LIGHT, _VIZ_SEQ_DARK],
 };
 
 function _updateColorbar() {
