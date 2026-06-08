@@ -40,8 +40,10 @@ function hybridLensHalf(plane, obj) {
 }
 
 // Per-hybrid panel expansion state; reset when a different hybrid is selected.
-let _hybridExpanded = { lens: false, src: false };
-let _lastHybridId   = null;
+let _hybridExpanded   = { lens: false, src: false };
+let _lastHybridId     = null;
+let _settingsExpanded = { general: true, crit: false, ps: false };
+let _progExpanded     = false;
 
 // Invert a 6-digit hex colour (#rrggbb → complement).
 function invertHexColor(hex) {
@@ -1366,73 +1368,100 @@ function renderSidebar() {
   }
 
   // ── Settings tab ─────────────────────────────────────────────────────────────
+  const _sg = _settingsExpanded;
   const settingsContent = `
     <div class="sl-panel">
-      <div class="sl-global-input">
-        <label>Field of view</label>
-        <input type="number" id="sl-fov" min="0.5" max="20" step="0.5" value="${state.fov}">
-        <span class="sl-unit">"</span>
+
+      <div class="sl-hybrid-section">
+        <button class="sl-hybrid-hdr" id="sl-settings-hdr-general">
+          <span class="sl-hybrid-arrow">${_sg.general?'▼':'▶'}</span>
+          <span class="sl-panel-title" style="flex:1">General</span>
+        </button>
+        ${_sg.general ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
+          <div class="sl-global-input">
+            <label>Field of view</label>
+            <input type="number" id="sl-fov" min="0.5" max="20" step="0.5" value="${state.fov}">
+            <span class="sl-unit">"</span>
+          </div>
+          <div class="sl-global-input">
+            <label>z max</label>
+            <input type="number" id="sl-zmax" min="0.1" max="10" step="0.1" value="${state.zMax}">
+          </div>
+          <div class="sl-checkbox-row">
+            <label><input type="checkbox" id="sl-show-markers" ${state.showMarkers?'checked':''}> Show positions</label>
+            <label><input type="checkbox" id="sl-show-legend"  ${state.showLegend ?'checked':''}> Show legend</label>
+          </div>
+          <div class="sl-global-input">
+            <label>Tone map</label>
+            <select id="sl-tone-map">
+              <option value="0" ${state.toneMap===0?'selected':''}>Linear</option>
+              <option value="1" ${state.toneMap===1?'selected':''}>Square root</option>
+              <option value="2" ${state.toneMap===2?'selected':''}>Power law</option>
+              <option value="3" ${state.toneMap===3?'selected':''}>Asinh</option>
+            </select>
+          </div>
+          ${state.toneMap === 2 ? `
+          <div class="sl-global-input">
+            <label>Power (γ)</label>
+            <input type="range" id="sl-tone-power" min="0.1" max="1.0" step="0.05" value="${state.toneMapPower}">
+            <span class="sl-tone-param-val">${state.toneMapPower.toFixed(2)}</span>
+          </div>` : ''}
+          ${state.toneMap === 3 ? `
+          <div class="sl-global-input">
+            <label>Scale (a)</label>
+            <input type="range" id="sl-tone-asinh" min="0.5" max="20" step="0.5" value="${state.toneMapAsinh}">
+            <span class="sl-tone-param-val">${state.toneMapAsinh.toFixed(1)}</span>
+          </div>` : ''}
+        </div>` : ''}
       </div>
-      <div class="sl-global-input">
-        <label>z max</label>
-        <input type="number" id="sl-zmax" min="0.1" max="10" step="0.1" value="${state.zMax}">
+
+      <div class="sl-hybrid-section">
+        <button class="sl-hybrid-hdr" id="sl-settings-hdr-crit">
+          <span class="sl-hybrid-arrow">${_sg.crit?'▼':'▶'}</span>
+          <span class="sl-panel-title" style="flex:1">Critical Curves</span>
+        </button>
+        ${_sg.crit ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
+          <p class="sl-perf-note" style="margin-bottom:6px">(Can be slow at high resolutions.)</p>
+          <div class="sl-checkbox-row">
+            <label><input type="checkbox" id="sl-show-crit" ${state.showCritCurves?'checked':''}> Critical curves</label>
+            <label><input type="checkbox" id="sl-show-caus" ${state.showCaustics   ?'checked':''}> Caustics</label>
+          </div>
+          <div class="sl-global-input">
+            <label>Resolution</label>
+            <select id="sl-crit-res">
+              <option value="256"  ${state.critGridN===256  ?'selected':''}>Low (256)</option>
+              <option value="512"  ${state.critGridN===512  ?'selected':''}>Medium (512)</option>
+              <option value="1024" ${state.critGridN===1024 ?'selected':''}>High (1024)</option>
+              <option value="2048" ${state.critGridN===2048 ?'selected':''}>Very high (2048)</option>
+            </select>
+          </div>
+          <div class="sl-global-input">
+            <label>Source z<sub>s</sub></label>
+            <input type="number" id="sl-crit-zs" min="0.1" max="15" step="0.1" value="${ezs.toFixed(2)}">
+          </div>
+        </div>` : ''}
       </div>
-      <div class="sl-checkbox-row">
-        <label><input type="checkbox" id="sl-show-markers" ${state.showMarkers?'checked':''}> Show source/lens positions</label>
-        <label><input type="checkbox" id="sl-show-legend"  ${state.showLegend ?'checked':''}> Show legend</label>
+
+      <div class="sl-hybrid-section">
+        <button class="sl-hybrid-hdr" id="sl-settings-hdr-ps">
+          <span class="sl-hybrid-arrow">${_sg.ps?'▼':'▶'}</span>
+          <span class="sl-panel-title" style="flex:1">Point Source</span>
+        </button>
+        ${_sg.ps ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
+          <div class="sl-global-input">
+            <label>Grid spacing</label>
+            <select id="sl-ps-grid">
+              <option value="0.1"   ${state.psGridStep===0.1   ?'selected':''}>100 mas (fastest)</option>
+              <option value="0.05"  ${state.psGridStep===0.05  ?'selected':''}>50 mas</option>
+              <option value="0.02"  ${state.psGridStep===0.02  ?'selected':''}>20 mas</option>
+              <option value="0.01"  ${state.psGridStep===0.01  ?'selected':''}>10 mas</option>
+              <option value="0.005" ${state.psGridStep===0.005 ?'selected':''}>5 mas (slowest)</option>
+            </select>
+          </div>
+        </div>` : ''}
       </div>
-      <div class="sl-global-input">
-        <label>Tone map</label>
-        <select id="sl-tone-map">
-          <option value="0" ${state.toneMap===0?'selected':''}>Linear</option>
-          <option value="1" ${state.toneMap===1?'selected':''}>Square root</option>
-          <option value="2" ${state.toneMap===2?'selected':''}>Power law</option>
-          <option value="3" ${state.toneMap===3?'selected':''}>Asinh</option>
-        </select>
-      </div>
-      ${state.toneMap === 2 ? `
-      <div class="sl-global-input">
-        <label>Power (γ)</label>
-        <input type="range" id="sl-tone-power" min="0.1" max="1.0" step="0.05" value="${state.toneMapPower}">
-        <span class="sl-tone-param-val">${state.toneMapPower.toFixed(2)}</span>
-      </div>` : ''}
-      ${state.toneMap === 3 ? `
-      <div class="sl-global-input">
-        <label>Scale (a)</label>
-        <input type="range" id="sl-tone-asinh" min="0.5" max="20" step="0.5" value="${state.toneMapAsinh}">
-        <span class="sl-tone-param-val">${state.toneMapAsinh.toFixed(1)}</span>
-      </div>` : ''}
-      <div class="sl-subsection-header">Critical Curves <kbd>C</kbd></div>
-      <p class="sl-perf-note">(Can be slow at high resolutions.)</p>
-      <div class="sl-checkbox-row">
-        <label><input type="checkbox" id="sl-show-crit" ${state.showCritCurves?'checked':''}> Show critical curves</label>
-        <label><input type="checkbox" id="sl-show-caus" ${state.showCaustics   ?'checked':''}> Show caustics</label>
-      </div>
-      <div class="sl-global-input">
-        <label>Resolution</label>
-        <select id="sl-crit-res">
-          <option value="256"  ${state.critGridN===256  ?'selected':''}>Low (256)</option>
-          <option value="512"  ${state.critGridN===512  ?'selected':''}>Medium (512)</option>
-          <option value="1024" ${state.critGridN===1024 ?'selected':''}>High (1024)</option>
-          <option value="2048" ${state.critGridN===2048 ?'selected':''}>Very high (2048)</option>
-        </select>
-      </div>
-      <div class="sl-global-input">
-        <label>Source z<sub>s</sub></label>
-        <input type="number" id="sl-crit-zs" min="0.1" max="15" step="0.1" value="${ezs.toFixed(2)}">
-      </div>
-      <div class="sl-subsection-header">Point Source</div>
-      <div class="sl-global-input">
-        <label>Grid spacing</label>
-        <select id="sl-ps-grid">
-          <option value="0.1"   ${state.psGridStep===0.1   ?'selected':''}>100 mas (fastest)</option>
-          <option value="0.05"  ${state.psGridStep===0.05  ?'selected':''}>50 mas</option>
-          <option value="0.02"  ${state.psGridStep===0.02  ?'selected':''}>20 mas</option>
-          <option value="0.01"  ${state.psGridStep===0.01  ?'selected':''}>10 mas</option>
-          <option value="0.005" ${state.psGridStep===0.005 ?'selected':''}>5 mas (slowest)</option>
-        </select>
-      </div>
-      <div class="sl-subsection-header">Configuration</div>
+
+      <div class="sl-subsection-header" style="margin-top:8px">Configuration</div>
       <div class="sl-capture-row">
         <button class="sl-capture-btn" id="sl-save-config">↓ Save YAML</button>
         <button class="sl-capture-btn" id="sl-load-config">↑ Load YAML</button>
@@ -1486,54 +1515,54 @@ function renderSidebar() {
                 title="Shortcut: R">${recState.active ? '■ Stop [R]' : '● Record [R]'}</button>
       </div>
 
-      <div class="sl-rec-subsection-label">Programmatic</div>
-
-      ${zLine ? `<div class="sl-rec-prog-z" style="margin-bottom:4px">${zLine}</div>` : ''}
-
-      <div class="sl-rec-prog-field">
-        <span class="sl-rec-prog-key">Initial</span>
-        <span class="sl-rec-prog-val" id="sl-prog-init-val">${initLabel}</span>
-        <button class="sl-rec-mini-btn" id="sl-prog-set-init" title="Store current position as start">Set</button>
-      </div>
-
-      <div class="sl-rec-prog-field" style="margin-top:5px">
-        <span class="sl-rec-prog-key">Final</span>
-        <span class="sl-rec-prog-val">${finalLabel}</span>
-        <button class="sl-rec-mini-btn" id="sl-prog-set-final" title="Store current position as end">Set</button>
-      </div>
-
-      <div class="sl-capture-row" style="margin-top:7px">
-        <button class="sl-capture-btn" id="sl-prog-add"
-                ${!_staging.initialPos || !_staging.finalPos ? 'disabled' : ''}
-                title="Commit this object's path to the program list">Add to program ↓</button>
-      </div>
-
-      <div class="sl-prog-list" id="sl-prog-list">
-        ${recState.progObjects.length === 0
-          ? `<div class="sl-prog-empty">No objects added yet</div>`
-          : recState.progObjects.map(e =>
-              `<div class="sl-prog-entry" data-id="${e.objId}">
-                <span class="sl-prog-entry-label">${e.label}</span>
-                <span class="sl-prog-entry-path">${e.initialPos ? `(${e.initialPos.cx.toFixed(2)},${e.initialPos.cy.toFixed(2)})` : 'current'} → (${e.finalPos.cx.toFixed(2)},${e.finalPos.cy.toFixed(2)})</span>
-                <button class="sl-rec-mini-btn sl-rec-mini-clear sl-prog-remove" data-id="${e.objId}">✕</button>
-              </div>`
-            ).join('')
-        }
-      </div>
-
-      <div class="sl-rec-prog-field" style="margin-top:8px">
-        <span class="sl-rec-prog-key">Duration</span>
-        <input type="number" id="sl-prog-duration" min="0.5" max="60" step="0.5" value="${recState.progDuration}"
-               class="sl-prog-dur-input">
-        <span class="sl-muted-note">s</span>
-      </div>
-
-      <div class="sl-capture-row" style="margin-top:8px">
-        <button class="sl-capture-btn" id="sl-prog-record"
-                ${recState.progObjects.length === 0 ? 'disabled' : ''}>● Record program</button>
-        ${recState.progObjects.length > 0
-          ? `<button class="sl-rec-mini-btn sl-rec-mini-clear" id="sl-prog-clear-all" title="Clear program list">Clear all</button>`
-          : ''}
+      <div class="sl-hybrid-section" style="margin-top:8px">
+        <button class="sl-hybrid-hdr" id="sl-prog-section-hdr">
+          <span class="sl-hybrid-arrow">${_progExpanded?'▼':'▶'}</span>
+          <span class="sl-panel-title" style="flex:1">Programmatic</span>
+        </button>
+        ${_progExpanded ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
+          ${zLine ? `<div class="sl-rec-prog-z" style="margin-bottom:4px">${zLine}</div>` : ''}
+          <div class="sl-rec-prog-field">
+            <span class="sl-rec-prog-key">Initial</span>
+            <span class="sl-rec-prog-val" id="sl-prog-init-val">${initLabel}</span>
+            <button class="sl-rec-mini-btn" id="sl-prog-set-init" title="Store current position as start">Set</button>
+          </div>
+          <div class="sl-rec-prog-field" style="margin-top:5px">
+            <span class="sl-rec-prog-key">Final</span>
+            <span class="sl-rec-prog-val">${finalLabel}</span>
+            <button class="sl-rec-mini-btn" id="sl-prog-set-final" title="Store current position as end">Set</button>
+          </div>
+          <div class="sl-capture-row" style="margin-top:7px">
+            <button class="sl-capture-btn" id="sl-prog-add"
+                    ${!_staging.initialPos || !_staging.finalPos ? 'disabled' : ''}
+                    title="Commit this object's path to the program list">Add to program ↓</button>
+          </div>
+          <div class="sl-prog-list" id="sl-prog-list">
+            ${recState.progObjects.length === 0
+              ? `<div class="sl-prog-empty">No objects added yet</div>`
+              : recState.progObjects.map(e =>
+                  `<div class="sl-prog-entry" data-id="${e.objId}">
+                    <span class="sl-prog-entry-label">${e.label}</span>
+                    <span class="sl-prog-entry-path">${e.initialPos ? `(${e.initialPos.cx.toFixed(2)},${e.initialPos.cy.toFixed(2)})` : 'current'} → (${e.finalPos.cx.toFixed(2)},${e.finalPos.cy.toFixed(2)})</span>
+                    <button class="sl-rec-mini-btn sl-rec-mini-clear sl-prog-remove" data-id="${e.objId}">✕</button>
+                  </div>`
+                ).join('')
+            }
+          </div>
+          <div class="sl-rec-prog-field" style="margin-top:8px">
+            <span class="sl-rec-prog-key">Duration</span>
+            <input type="number" id="sl-prog-duration" min="0.5" max="60" step="0.5" value="${recState.progDuration}"
+                   class="sl-prog-dur-input">
+            <span class="sl-muted-note">s</span>
+          </div>
+          <div class="sl-capture-row" style="margin-top:8px">
+            <button class="sl-capture-btn" id="sl-prog-record"
+                    ${recState.progObjects.length === 0 ? 'disabled' : ''}>● Record program</button>
+            ${recState.progObjects.length > 0
+              ? `<button class="sl-rec-mini-btn sl-rec-mini-clear" id="sl-prog-clear-all" title="Clear program list">Clear all</button>`
+              : ''}
+          </div>
+        </div>` : ''}
       </div>
     </div>`;
 
@@ -1544,6 +1573,10 @@ function renderSidebar() {
 
   document.getElementById('sl-fov')?.addEventListener('change',         e => { const v = parseFloat(e.target.value); if (v > 0) { state.fov  = v; redraw(); } });
   document.getElementById('sl-zmax')?.addEventListener('change',        e => { const v = parseFloat(e.target.value); if (v > 0) { state.zMax = v; drawAxisCanvas(); } });
+  document.getElementById('sl-prog-section-hdr')?.addEventListener('click',      () => { _progExpanded             = !_progExpanded;             renderSidebar(); });
+  document.getElementById('sl-settings-hdr-general')?.addEventListener('click', () => { _settingsExpanded.general = !_settingsExpanded.general; renderSidebar(); });
+  document.getElementById('sl-settings-hdr-crit')?.addEventListener('click',    () => { _settingsExpanded.crit    = !_settingsExpanded.crit;    renderSidebar(); });
+  document.getElementById('sl-settings-hdr-ps')?.addEventListener('click',      () => { _settingsExpanded.ps      = !_settingsExpanded.ps;      renderSidebar(); });
   document.getElementById('sl-show-markers')?.addEventListener('change',e => { state.showMarkers = e.target.checked; redraw(); });
   document.getElementById('sl-show-legend')?.addEventListener('change', e => { state.showLegend  = e.target.checked; redraw(); });
   document.getElementById('sl-tone-map')?.addEventListener('change', e => {
