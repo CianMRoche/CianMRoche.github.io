@@ -173,7 +173,11 @@ vec3 samplePasted(int idx, vec2 beta) {
   else if (slot == 2) col = texture(u_pastedTex2, uv);
   else                col = texture(u_pastedTex3, uv);
 
-  return u_srcParams[idx].w * col.rgb;
+  // Smooth fade at edges to avoid hard border artifacts.
+  vec2 edgeDist = min(uv, 1.0 - uv);
+  float fade = smoothstep(0.0, 0.015, min(edgeDist.x, edgeDist.y));
+
+  return u_srcParams[idx].w * col.rgb * fade;
 }
 
 // ── Analytical source brightness (white) ──────────────────────────────────────
@@ -434,7 +438,8 @@ export class Renderer {
         if (obj.model === 'pastedimage' && pastedCount < MAX_PASTED) {
           const slot = pastedCount++;
           pastedSlot[si]    = slot;
-          slotEntries[slot] = this._pastedTexCache.get(obj.id) ?? null;
+          const cached = this._pastedTexCache.get(obj.id) ?? null;
+          slotEntries[slot] = cached ? { ...cached, scale: obj.params.sigma ?? 1.0 } : null;
         }
         si++;
       }
@@ -455,8 +460,9 @@ export class Renderer {
       const entry = slotEntries[s];
       gl.bindTexture(gl.TEXTURE_2D, entry ? entry.tex : this._dummyTex);
       gl.uniform1i(txLocs[s], s);
-      const ar  = entry ? (entry.w / entry.h) : 1;
-      const szH = fovArcsec * 0.5;
+      const ar    = entry ? (entry.w / entry.h) : 1;
+      const scale = entry ? (entry.scale ?? 1.0) : 1.0;
+      const szH   = fovArcsec * 0.5 * scale;
       gl.uniform2f(szLocs[s], szH * ar, szH);
     }
 

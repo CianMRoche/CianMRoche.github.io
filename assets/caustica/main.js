@@ -369,7 +369,7 @@ function defaultParams(model) {
   if (model === 'exponential') return { sigma: 0.05, q: 0.40, phi: 0, amplitude: 2.20, color: '#ffffff' };
   if (model === 'point')       return { sigma: 0.08, amplitude: 1.0, color: '#ffffff' };
   if (model === 'pointsource') return { sigma: 0.05, amplitude: 1.0, color: '#ffffff' };
-  if (model === 'pastedimage') return { amplitude: 1.0 };
+  if (model === 'pastedimage') return { sigma: 1.0, amplitude: 1.0 };
   return {};
 }
 
@@ -693,23 +693,7 @@ function attachHandlers() {
     if (!items) return;
     for (const item of items) {
       if (!item.type.startsWith('image/')) continue;
-      const file = item.getAsFile();
-      if (!file) continue;
-      const url = URL.createObjectURL(file);
-      const img = new Image();
-      img.onload = () => {
-        const cvs = document.createElement('canvas');
-        cvs.width  = img.naturalWidth  || img.width;
-        cvs.height = img.naturalHeight || img.height;
-        cvs.getContext('2d').drawImage(img, 0, 0);
-        URL.revokeObjectURL(url);
-        obj.pasteCanvas = cvs;
-        renderer?.setPastedTexture(obj.id, cvs);
-        rebuildPlaneBoxes();
-        renderSidebar();
-        redraw();
-      };
-      img.src = url;
+      _applyImageFile(item.getAsFile(), obj);
       break;
     }
   });
@@ -990,9 +974,11 @@ function rebuildPlaneBoxes() {
     box.dataset.id            = plane.id;
     box.dataset.effectiveType = effType;
 
+    const hasPasted = plane.objects.some(o => o.model === 'pastedimage');
     box.innerHTML = `
       <div class="sl-plane-header">
         <span class="sl-plane-z">z = ${plane.z.toFixed(2)}</span>
+        ${hasPasted ? `<button class="sl-plane-paste" title="Load image from file"><svg width="12" height="11" viewBox="0 0 14 12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M1 3.5V10a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V4.5a1 1 0 0 0-1-1H7L5.5 2H2a1 1 0 0 0-1 1.5z"/></svg></button>` : ''}
         <button class="sl-plane-clear" title="Clear all objects">○</button>
         <button class="sl-plane-del" title="Delete plane">×</button>
       </div>
@@ -1001,6 +987,21 @@ function rebuildPlaneBoxes() {
     planesEl.appendChild(box);
 
     // Clear button removes all objects from this plane.
+    // Image button: opens file picker for pasted-image objects.
+    const pasteBtn = box.querySelector('.sl-plane-paste');
+    if (pasteBtn) {
+      const fi = document.createElement('input');
+      fi.type = 'file'; fi.accept = 'image/*'; fi.style.display = 'none';
+      box.appendChild(fi);
+      fi.addEventListener('change', e => {
+        const target = plane.objects.find(o => o.model === 'pastedimage');
+        const file = e.target.files?.[0];
+        if (file && target) { state.selectedPlaneId = plane.id; state.selectedObjId = target.id; _applyImageFile(file, target); }
+        e.target.value = '';
+      });
+      pasteBtn.addEventListener('click', () => fi.click());
+    }
+
     box.querySelector('.sl-plane-clear').addEventListener('click', () => {
       plane.objects.filter(o => o.model === 'pastedimage').forEach(o => renderer?.clearPastedTexture(o.id));
       plane.objects = [];
@@ -1101,6 +1102,23 @@ function attachPlaneCanvasHandlers(canvas, plane) {
     istate = 'idle'; hitObj = null;
     canvas.style.cursor = hitTestPlane(plane, canvas, e) ? 'grab' : 'crosshair';
   });
+}
+
+function _applyImageFile(file, obj) {
+  if (!file || !obj || obj.model !== 'pastedimage') return;
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    const cvs = document.createElement('canvas');
+    cvs.width  = img.naturalWidth  || img.width;
+    cvs.height = img.naturalHeight || img.height;
+    cvs.getContext('2d').drawImage(img, 0, 0);
+    URL.revokeObjectURL(url);
+    obj.pasteCanvas = cvs;
+    renderer?.setPastedTexture(obj.id, cvs);
+    rebuildPlaneBoxes(); renderSidebar(); redraw();
+  };
+  img.src = url;
 }
 
 function updatePlaneBoxColor(plane) {
@@ -1653,11 +1671,11 @@ function renderSidebar() {
       // Lens section model + params
       document.getElementById('sl-model-select-lens')?.addEventListener('change', e => {
         lensObj.model = e.target.value; lensObj.params = defaultParams(lensObj.model);
-        renderSidebar(); redraw();
+        rebuildPlaneBoxes(); renderSidebar(); redraw();
       });
       document.getElementById('sl-model-select-src')?.addEventListener('change', e => {
         srcObj.model = e.target.value; srcObj.params = defaultParams(srcObj.model);
-        renderSidebar(); redraw();
+        rebuildPlaneBoxes(); renderSidebar(); redraw();
       });
       document.getElementById('sl-obj-panel').querySelectorAll('[data-hybrid-section="lens"] input[type="range"][data-param]').forEach(inp => {
         const valEl = inp.parentElement.querySelector('.sl-param-val');
@@ -1694,7 +1712,7 @@ function renderSidebar() {
       document.getElementById('sl-show-shape')?.addEventListener('change', e => { obj.showShape = e.target.checked; redraw(); });
       document.getElementById('sl-model-select')?.addEventListener('change', e => {
         obj.model = e.target.value; obj.params = defaultParams(obj.model);
-        renderSidebar(); redraw();
+        rebuildPlaneBoxes(); renderSidebar(); redraw();
       });
       document.getElementById('sl-obj-panel').querySelectorAll('input[type="color"][data-param-color]').forEach(inp => {
         inp.addEventListener('input', () => {
@@ -1823,8 +1841,10 @@ function sourceParamRows(obj) {
 
   if (obj.model === 'pastedimage') {
     const hint = obj.pasteCanvas ? '' :
-      '<p style="font-size:11px;color:var(--muted);font-style:italic;margin-top:6px">Select this point, then Ctrl+V to paste an image</p>';
-    return sliderRow('Brightness', 'amplitude', 0.1, 5.0, 0.1, p.amplitude ?? 1.0) + hint;
+      '<p style="font-size:11px;color:var(--muted);font-style:italic;margin-top:6px;grid-column:1/-1">Use the image button in the plane header to load an image, or Ctrl+V with this object selected</p>';
+    return sliderRowLog('Scale', 'sigma', 0.05, 4.0, p.sigma ?? 1.0)
+         + sliderRow('Brightness', 'amplitude', 0.1, 5.0, 0.1, p.amplitude ?? 1.0)
+         + hint;
   }
   // In light mode the canvas is CSS-inverted, so show the complement in the
   // picker (what actually appears on screen) and invert back on store.
