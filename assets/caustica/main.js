@@ -241,7 +241,20 @@ function findPointSourceImages(srcObj, srcPlane) {
 // ── Config YAML ───────────────────────────────────────────────────────────────
 
 function configToYaml() {
-  let y = `fov: ${state.fov}\nzMax: ${state.zMax}\nplanes:\n`;
+  let y = `fov: ${state.fov}\nzMax: ${state.zMax}\n`;
+  y += `vizMode: ${state.vizMode}\n`;
+  y += `toneMap: ${state.toneMap}\ntoneMapPower: ${state.toneMapPower}\ntoneMapAsinh: ${state.toneMapAsinh}\n`;
+  y += `showCritCurves: ${state.showCritCurves}\nshowCaustics: ${state.showCaustics}\n`;
+  y += `fermatUseSourcePos: ${state.fermatUseSourcePos}\n`;
+  if (state.lastFermatSource) {
+    const fsp = state.planes.find(p => p.id === state.lastFermatSource.planeId);
+    if (fsp) {
+      y += `fermatBetaX: ${+state.lastFermatSource.cx.toFixed(6)}\n`;
+      y += `fermatBetaY: ${+state.lastFermatSource.cy.toFixed(6)}\n`;
+      y += `fermatSrcPlaneZ: ${fsp.z.toFixed(4)}\n`;
+    }
+  }
+  y += `planes:\n`;
   for (const plane of state.planes) {
     y += `  - z: ${plane.z.toFixed(3)}\n    objects:\n`;
     for (const obj of plane.objects) {
@@ -352,6 +365,22 @@ function loadConfigFromYaml(yaml) {
     state.planes.sort((a, b) => a.z - b.z);
     state.selectedPlaneId = state.planes[0]?.id ?? null;
     state.selectedObjId   = state.planes[0]?.objects[0]?.id ?? null;
+    if (cfg.vizMode       !== undefined) state.vizMode       = typeof cfg.vizMode  === 'number' ? cfg.vizMode  : 0;
+    if (cfg.toneMap       !== undefined) state.toneMap       = typeof cfg.toneMap  === 'number' ? cfg.toneMap  : 1;
+    if (isFinite(cfg.toneMapPower)) state.toneMapPower = cfg.toneMapPower;
+    if (isFinite(cfg.toneMapAsinh)) state.toneMapAsinh = cfg.toneMapAsinh;
+    if (cfg.showCritCurves !== undefined) state.showCritCurves = cfg.showCritCurves === true;
+    if (cfg.showCaustics   !== undefined) state.showCaustics   = cfg.showCaustics   === true;
+    if (cfg.fermatUseSourcePos !== undefined) state.fermatUseSourcePos = cfg.fermatUseSourcePos === true;
+    if (isFinite(cfg.fermatBetaX) && isFinite(cfg.fermatBetaY) && isFinite(cfg.fermatSrcPlaneZ)) {
+      const fsp = state.planes.find(p => Math.abs(p.z - cfg.fermatSrcPlaneZ) < 1e-4);
+      state.lastFermatSource = fsp ? { cx: cfg.fermatBetaX, cy: cfg.fermatBetaY, planeId: fsp.id } : null;
+    } else {
+      state.lastFermatSource = null;
+    }
+    const _vizSel = document.getElementById('sl-viz-mode');
+    if (_vizSel) _vizSel.value = state.vizMode;
+    glCanvas?.classList.toggle('sl-viz-active', state.vizMode !== 0);
     invalidateDistances();
     rebuildPlaneBoxes(); renderSidebar(); redraw();
   } catch (err) {
@@ -705,11 +734,22 @@ function attachHandlers() {
   _syncSetupBarRight();
   window.addEventListener('resize', _syncSetupBarRight);
 
+  const _VIZ_LABELS = { '0':'Lensed image','1':'Convergence κ','2':'Shear γ','3':'Magnification |μ|','5':'Deflection |α|','6':'Fermat potential φ' };
+  const _VIZ_LABELS_SHORT = { '0':'[I] Lensed image','1':'[K] Convergence κ','2':'[G] Shear γ','3':'[M] Magnification |μ|','5':'[A] Deflection |α|','6':'[T] Fermat potential φ' };
+  function _setVizOptionLabels(withShortcuts) {
+    const sel = document.getElementById('sl-viz-mode');
+    if (!sel) return;
+    const map = withShortcuts ? _VIZ_LABELS_SHORT : _VIZ_LABELS;
+    for (const opt of sel.options) if (map[opt.value]) opt.textContent = map[opt.value];
+  }
+  document.getElementById('sl-viz-mode')?.addEventListener('mousedown', () => _setVizOptionLabels(true));
   document.getElementById('sl-viz-mode')?.addEventListener('change', e => {
+    _setVizOptionLabels(false);
     state.vizMode = parseInt(e.target.value, 10);
     glCanvas?.classList.toggle('sl-viz-active', state.vizMode !== 0);
     _updateColorbar(); renderSidebar(); redraw();
   });
+  document.getElementById('sl-viz-mode')?.addEventListener('blur', () => _setVizOptionLabels(false));
 
   attachAxisHandlers();
   attachImageHandlers(document.getElementById('sl-image-wrap'));
@@ -3196,9 +3236,30 @@ const TOUR_STEPS = [
     text: 'This panel shows what an observer at z = 0 would see. Light from source objects is bent by all intervening lenses using full multiplane gravitational lensing. Drag objects directly here or in the plane panels; the image updates in real time.',
   },
   {
+    target: '#sl-viz-mode',
+    onEnter: () => {
+      _tourClosePlaneSetup();
+      state.vizMode = 6;
+      const sel = document.getElementById('sl-viz-mode');
+      if (sel) sel.value = 6;
+      glCanvas?.classList.toggle('sl-viz-active', true);
+      _updateColorbar(); renderSidebar(); redraw();
+    },
+    arrow: 'below',
+    label: 'Lensing quantities',
+    text: 'The <b>quantity dropdown</b> maps lensing quantities across the field of view — convergence κ, shear γ, magnification |μ|, deflection |α|, and the <b>Fermat potential φ</b> shown now. Contour lines trace the arrival-time surface; stationary points are the images of a source at the origin, classified as minimum (○), saddle (◇), or maximum (△) by their Jacobian type. The highlighted contour passes through the saddle image. Press <kbd>I</kbd> to return to the lensed image at any time.',
+  },
+  {
     target: '.sl-tab-btn[data-tab="settings"]',
     mobileTarget: '.sl-mobile-tab-btn[data-tab="settings"]',
-    onEnter: () => { _tourClosePlaneSetup(); _tourSetMobileTab('settings'); },
+    onEnter: () => {
+      _tourClosePlaneSetup(); _tourSetMobileTab('settings');
+      state.vizMode = 0;
+      const sel = document.getElementById('sl-viz-mode');
+      if (sel) sel.value = 0;
+      glCanvas?.classList.toggle('sl-viz-active', false);
+      _updateColorbar(); renderSidebar(); redraw();
+    },
     arrow: 'left',
     label: 'Settings',
     text: 'The <b>Settings tab</b> controls field of view, maximum redshift, and tone mapping. The Critical Curves section overlays contours where image count changes (press <kbd>C</kbd>). The Resolution dropdown controls curve detail.',
