@@ -53,6 +53,22 @@ export function deflectSIE(ux, uy, b, q, phi) {
   return [cp * ax - sp * ay, sp * ax + cp * ay];
 }
 
+// NIE — Nonsingular Isothermal Ellipsoid: SIE with a user-specified core radius rc.
+export function deflectNIE(ux, uy, b, q, phi, rc) {
+  const cp = Math.cos(phi), sp = Math.sin(phi);
+  const xr =  cp * ux + sp * uy;
+  const yr = -sp * ux + cp * uy;
+  const qs  = Math.max(q, 0.001);
+  const sqf = Math.sqrt(Math.max(1 - qs * qs, EPS));
+  const s   = Math.max(rc, SIE_SOFT);
+  const r   = Math.sqrt(qs * qs * (xr * xr + s * s) + yr * yr);
+  const A   = b * qs / sqf;
+  const ax  = A * Math.atan2(sqf * xr, r + s);
+  const ay  = A * 0.5 * Math.log((1 + sqf * yr / (r + qs * qs * s)) /
+                                  Math.max(1 - sqf * yr / (r + qs * qs * s), EPS));
+  return [cp * ax - sp * ay, sp * ax + cp * ay];
+}
+
 // EPL — same formulation as the shader: SIE deflections scaled by (m/b)^(2-gamma).
 export function deflectEPL(ux, uy, b, q, phi, gamma) {
   const cp = Math.cos(phi), sp = Math.sin(phi);
@@ -95,6 +111,7 @@ function lensDeflection(obj, ux, uy) {
   const { model, params } = obj;
   if (model === 'pointmass') return deflectPointMass(ux, uy, params.thetaE);
   if (model === 'sie')       return deflectSIE(ux, uy, params.b, params.q, params.phi);
+  if (model === 'nie')       return deflectNIE(ux, uy, params.b, params.q, params.phi, params.rc ?? 0.2);
   if (model === 'epl')       return deflectEPL(ux, uy, params.b, params.q, params.phi, params.gamma ?? 2);
   if (model === 'shear')       return deflectShear(ux + obj.cx, uy + obj.cy, params.gamma ?? 0.05, params.phi ?? 0); // absolute θ
   if (model === 'convergence') {

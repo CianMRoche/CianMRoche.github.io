@@ -70,14 +70,16 @@ const state = {
   showMarkers:     true,
   showLegend:      true,
   addMode:         'lens',   // 'lens' | 'source' | 'hybrid': global tool state
-  toneMap:         1,   // 0=linear, 1=sqrt, 2=power, 3=asinh
-  toneMapPower:    0.5,
-  toneMapAsinh:    5.0,
-  critGridN:       512,
-  psGridStep:      0.02,   // arcsec — point source grid spacing
-  vizMode:         0,      // 0=surface brightness, 1=κ, 2=γ, 3=|μ|, 4=signed μ, 5=|α|
-  critZs:          null,  // null = auto (highest-z source plane)
-  dist:            null,
+  toneMap:             1,   // 0=linear, 1=sqrt, 2=power, 3=asinh
+  toneMapPower:        0.5,
+  toneMapAsinh:        5.0,
+  critGridN:           512,
+  psGridStep:          0.02,   // arcsec — point source grid spacing
+  vizMode:             0,      // 0=surface brightness, 1=κ, 2=γ, 3=|μ|, 4=signed μ, 5=|α|, 6=φ (Fermat)
+  critZs:              null,  // null = auto (highest-z source plane)
+  dist:                null,
+  fermatUseSourcePos:  false,  // when true, use lastFermatSource for Fermat β_s and source plane
+  lastFermatSource:    null,   // { cx, cy, planeId } of last selected source object
 };
 
 // Draw a type-specific marker shape centred at (px, py) with circumradius r.
@@ -321,7 +323,7 @@ function loadConfigFromYaml(yaml) {
     for (const p of state.planes)
       p.objects.filter(o => o.model === 'pastedimage').forEach(o => renderer?.clearPastedTexture(o.id));
     const VALID_TYPES  = new Set(['lens', 'source']);
-    const VALID_MODELS = new Set(['pointmass','sie','epl','nfw','shear','convergence','deflection','gaussian','exponential','point','pointsource','pastedimage']);
+    const VALID_MODELS = new Set(['pointmass','sie','nie','epl','nfw','shear','convergence','deflection','gaussian','exponential','point','pointsource','pastedimage']);
     const COLOR_RE     = /^#[0-9a-fA-F]{6}$/;
     state.planes = (cfg.planes || []).map(p => ({
       id: uid(), z: isFinite(p.z) ? +p.z : 0,
@@ -361,6 +363,7 @@ function loadConfigFromYaml(yaml) {
 function defaultParams(model) {
   if (model === 'pointmass')   return { thetaE: 1.0 };
   if (model === 'sie')         return { b: 1.0, q: 0.75, phi: 0 };
+  if (model === 'nie')         return { b: 1.0, q: 0.75, phi: 0, rc: 0.2 };
   if (model === 'epl')         return { b: 1.0, q: 0.75, phi: 0, gamma: 2.0 };
   if (model === 'nfw')         return { kappaS: 0.5, rS: 0.4 };
   if (model === 'shear')       return { gamma: 0.05, phi: 0 };
@@ -545,6 +548,7 @@ function buildDOM() {
                 <option value="2">Shear γ</option>
                 <option value="3">Magnification |μ|</option>
                 <option value="5">Deflection |α|</option>
+                <option value="6">Fermat potential φ</option>
               </select>
             </div>
             <div class="sl-colorbar" id="sl-colorbar" style="display:none">
@@ -704,8 +708,7 @@ function attachHandlers() {
   document.getElementById('sl-viz-mode')?.addEventListener('change', e => {
     state.vizMode = parseInt(e.target.value, 10);
     glCanvas?.classList.toggle('sl-viz-active', state.vizMode !== 0);
-    _updateColorbar();
-    redraw();
+    _updateColorbar(); renderSidebar(); redraw();
   });
 
   attachAxisHandlers();
@@ -800,6 +803,17 @@ function attachHandlers() {
       state.showCritCurves = !either;
       state.showCaustics   = !either;
       renderSidebar(); redraw();
+      return;
+    }
+    // Visualization mode shortcuts: toggle on/off; pressing the same key again returns to image.
+    const VIZ_KEYS = { k: 1, K: 1, g: 2, G: 2, m: 3, M: 3, a: 5, A: 5, i: 0, I: 0, t: 6, T: 6 };
+    if (e.key in VIZ_KEYS) {
+      const mode = VIZ_KEYS[e.key];
+      state.vizMode = mode;
+      const sel = document.getElementById('sl-viz-mode');
+      if (sel) sel.value = state.vizMode;
+      glCanvas?.classList.toggle('sl-viz-active', state.vizMode !== 0);
+      _updateColorbar(); renderSidebar(); redraw();
       return;
     }
     if (e.key === 'Escape') {
@@ -1271,6 +1285,11 @@ const LENS_INFO = {
   sie: `<b>b</b>: deflection scale (arcsec), equal to 4πσ<sub>v</sub>²/c². Proportional to velocity dispersion squared; independent of distances. The Einstein ring appears at roughly b × (D<sub>LS</sub>/D<sub>S</sub>).<br>
         <b>q</b>: axis ratio (1 = circular, lower = more elliptical).<br>
         <b>φ</b>: position angle of the major axis (radians).`,
+  nie: `Nonsingular Isothermal Ellipsoid: identical to SIE but with a finite core radius r<sub>c</sub> that removes the central singularity, producing a flat central surface density instead of a diverging cusp. Reduces exactly to SIE as r<sub>c</sub> → 0.<br><br>
+        <b>b</b>: deflection scale (arcsec), same role as in SIE.<br>
+        <b>q</b>: axis ratio (1 = circular, lower = more elliptical).<br>
+        <b>φ</b>: position angle of the major axis (radians).<br>
+        <b>r<sub>c</sub></b>: core radius (arcsec). Typical galaxy-scale values 0.05–0.5″. Larger values produce a more prominent flat core and reduce central magnification.`,
   pointmass: `<b>Strength</b>: mass scale in arcsec, equal to √(4GM / c² D<sub>L</sub>). For a fixed lens redshift D<sub>L</sub> is constant, so Strength is proportional to √M. The Einstein ring appears at Strength × √(D<sub>LS</sub> / D<sub>S</sub>).`,
   deflection: `Models the monopole contribution from a distant perturber outside the field of view: a uniform deflection of all rays by the same angle. This shifts caustics bodily without distorting them, unlike shear (which distorts) or convergence (which scales).<br><br>
               <b>α</b>: deflection amplitude (arcsec).<br>
@@ -1339,6 +1358,7 @@ function renderSidebar() {
 
       const lensModelOpts = `
         <option value="sie"       ${lensObj.model==='sie'       ?'selected':''}>SIE (Isothermal, γ=2)</option>
+        <option value="nie"       ${lensObj.model==='nie'       ?'selected':''}>NIE (Nonsingular isothermal)</option>
         <option value="epl"       ${lensObj.model==='epl'       ?'selected':''}>EPL (Power law)</option>
         <option value="pointmass" ${lensObj.model==='pointmass' ?'selected':''}>Point mass</option>
         <option value="shear"       ${lensObj.model==='shear'       ?'selected':''}>External shear</option>
@@ -1387,6 +1407,7 @@ function renderSidebar() {
       const isLens = obj.type === 'lens';
       const modelOptions = isLens
         ? `<option value="sie"       ${obj.model==='sie'       ?'selected':''}>SIE (Isothermal, γ=2)</option>
+           <option value="nie"       ${obj.model==='nie'       ?'selected':''}>NIE (Nonsingular isothermal)</option>
            <option value="epl"       ${obj.model==='epl'       ?'selected':''}>EPL (Power law)</option>
            <option value="pointmass" ${obj.model==='pointmass' ?'selected':''}>Point mass</option>
            <option value="shear"       ${obj.model==='shear'       ?'selected':''}>External shear</option>
@@ -1448,6 +1469,7 @@ function renderSidebar() {
             <label><input type="checkbox" id="sl-show-markers" ${state.showMarkers?'checked':''}> Show positions</label>
             <label><input type="checkbox" id="sl-show-legend"  ${state.showLegend ?'checked':''}> Show legend</label>
           </div>
+          ${state.vizMode === 0 ? `
           <div class="sl-global-input" style="margin-top:8px">
             <label>Tone map</label>
             <select id="sl-tone-map">
@@ -1468,7 +1490,15 @@ function renderSidebar() {
             <label>Scale (a)</label>
             <input type="range" id="sl-tone-asinh" min="0.5" max="20" step="0.5" value="${state.toneMapAsinh}">
             <span class="sl-tone-param-val">${state.toneMapAsinh.toFixed(1)}</span>
-          </div>` : ''}
+          </div>` : ''}` : ''}
+          ${state.vizMode === 6 ? `
+          <div class="sl-checkbox-row" style="margin-top:8px">
+            <label><input type="checkbox" id="sl-fermat-use-src" ${state.fermatUseSourcePos?'checked':''}> Use last selected source for Fermat potential source position/redshift</label>
+          </div>
+          ${state.fermatUseSourcePos && state.lastFermatSource ? `
+          <p style="font-size:11px;color:var(--muted);margin:3px 0 0">
+            &beta; = (${state.lastFermatSource.cx.toFixed(3)}&Prime;, ${state.lastFermatSource.cy.toFixed(3)}&Prime;)
+          </p>` : ''}` : ''}
         </div>` : ''}
       </div>
 
@@ -1647,6 +1677,10 @@ function renderSidebar() {
     const v = e.target.parentElement.querySelector('.sl-tone-param-val');
     if (v) v.textContent = state.toneMapAsinh.toFixed(1);
     redraw();
+  });
+  document.getElementById('sl-fermat-use-src')?.addEventListener('change', e => {
+    state.fermatUseSourcePos = e.target.checked;
+    renderSidebar(); redraw();
   });
   document.getElementById('sl-snapshot-btn')?.addEventListener('click', captureSnapshot);
   document.getElementById('sl-rec-btn')?.addEventListener('click', () => { recState.active ? stopRecording() : startRecording(); });
@@ -1837,12 +1871,19 @@ function lensParamRows(obj) {
          + sliderRow   ('q',       'q',   0.05, 1.0,   0.05, p.q   ?? 0.75)
          + sliderRow   ('φ (rad)', 'phi', 0,   Math.PI, 0.05, p.phi ?? 0)
          + shapeToggle(obj);
+  if (obj.model === 'nie')
+    return sliderRowLog('b (")',    'b',   0.01, 8.0,   p.b   ?? 1)
+         + sliderRow   ('q',        'q',   0.05, 1.0,   0.05, p.q   ?? 0.75)
+         + sliderRow   ('φ (rad)',  'phi', 0,   Math.PI, 0.05, p.phi ?? 0)
+         + sliderRowLog('r<sub>c</sub> (")', 'rc', 0.005, 2.0, p.rc ?? 0.2)
+         + shapeToggle(obj);
   if (obj.model === 'epl')
     return sliderRowLog('b (")',   'b',     0.01, 8.0,   p.b     ?? 1)
          + sliderRow   ('q',       'q',     0.05, 1.0,   0.05, p.q     ?? 0.75)
          + sliderRow   ('φ (rad)', 'phi',   0,   Math.PI, 0.05, p.phi   ?? 0)
          + sliderRow   ('γ',       'gamma', 0.5, 3.0,     0.05, p.gamma ?? 2.0)
-         + shapeToggle(obj);
+         + shapeToggle(obj)
+         + '<p style="font-size:11px;color:var(--muted);margin-top:4px;grid-column:1/-1">Fermat potential (T) uses the geometric term only for EPL: the potential has no closed form for the scaled-SIE approximation.</p>';
   if (obj.model === 'nfw')
     return sliderRowLog('κ<sub>s</sub>',     'kappaS', 0.01, 5.0, p.kappaS ?? 0.5)
          + sliderRowLog('r<sub>s</sub> (")', 'rS',     0.01, 5.0, p.rS     ?? 0.4)
@@ -2050,6 +2091,144 @@ function computeCritCurvesForZs(planes, dist, zs, fovArcsec, gridN) {
 }
 
 // ── Overlay: critical curves, caustics, position markers, legend ──────────────
+
+// CPU-side analytic lensing potential — mirrors GLSL lensPotential().
+// posX, posY are absolute image-plane coordinates (arcsec).
+function _lensPotentialJS(obj, posX, posY) {
+  const EPS = 1e-12, SOFT = 0.001;
+  const { model, params } = obj;
+  const ux = posX - obj.cx, uy = posY - obj.cy;
+  if (model === 'pointmass') {
+    return (params.thetaE ?? 1) ** 2 * Math.log(Math.max(Math.sqrt(ux*ux + uy*uy), SOFT));
+  }
+  if (model === 'sie' || model === 'nie') {
+    const b = params.b ?? 1, q = Math.max(params.q ?? 0.8, 0.001);
+    const p = params.phi ?? 0, cp = Math.cos(p), sp = Math.sin(p);
+    const xr =  cp*ux + sp*uy, yr = -sp*ux + cp*uy;
+    const sqf = Math.sqrt(Math.max(1 - q*q, EPS));
+    const s = model === 'nie' ? Math.max(params.rc ?? 0.2, SOFT) : SOFT;
+    const r = Math.sqrt(q*q*(xr*xr + s*s) + yr*yr);
+    const A = b * q / sqf;
+    const n = 1 + sqf*yr / (r + q*q*s), d = Math.max(1 - sqf*yr / (r + q*q*s), EPS);
+    return A * (xr * Math.atan2(sqf*xr, r + s) + yr * 0.5 * Math.log(n / d));
+  }
+  if (model === 'epl') return 0;
+  if (model === 'shear') {
+    const c2 = Math.cos(2*(params.phi ?? 0)), s2 = Math.sin(2*(params.phi ?? 0));
+    return 0.5 * (params.gamma ?? 0.05) * ((posX*posX - posY*posY)*c2 + 2*posX*posY*s2);
+  }
+  if (model === 'convergence') return 0.5 * (params.kappa ?? 0.05) * (posX*posX + posY*posY);
+  if (model === 'deflection') {
+    return (params.alpha ?? 0.1) * (posX*Math.cos(params.phi ?? 0) + posY*Math.sin(params.phi ?? 0));
+  }
+  return 0;
+}
+
+// CPU-side effective lensing potential accumulated along the ray to srcIdx.
+// Mirrors GLSL traceToPlaneWithPsi. Uses traceRay for intermediate positions.
+function _computePsiEff(tx, ty, planes, dist, srcIdx) {
+  const { D_obs, D_btwn, N } = dist;
+  const Ds = D_obs[srcIdx];
+  if (Ds < 1e-9) return 0;
+  let psiEff = 0;
+  for (let j = 0; j < srcIdx; j++) {
+    if (!planes[j].objects.some(o => !o.hidden && o.type === 'lens')) continue;
+    const Djs = D_btwn[j * N + srcIdx];
+    if (Djs < 1e-9) continue;
+    const wPsi = Djs / Ds;
+    const [px, py] = traceRay(tx, ty, planes, dist, j);
+    for (const obj of planes[j].objects) {
+      if (obj.hidden || obj.type !== 'lens') continue;
+      psiEff += wPsi * _lensPotentialJS(obj, px, py);
+    }
+  }
+  return psiEff;
+}
+
+// Find stationary points of the Fermat potential φ(θ; β_s) = ½|θ−β_s|² − ψ_eff(θ).
+// These are the images of a source at β_s: ∇φ = β(θ) − β_s = 0.
+// betaS defaults to [0,0] (source at origin).
+// Returns array of { tx, ty, type, phiVal } where type 1=min, 2=saddle, 3=max.
+function findStationaryPoints(planes, dist, srcIdx, fov, betaS = [0, 0], gridN = 56) {
+  const step = fov / (gridN - 1);
+  const half = fov / 2;
+  const h = fov * 0.004;
+  const [bsx, bsy] = betaS;
+
+  const bxG = new Float32Array(gridN * gridN);
+  const byG = new Float32Array(gridN * gridN);
+  for (let iy = 0; iy < gridN; iy++) {
+    for (let ix = 0; ix < gridN; ix++) {
+      const [sx, sy] = traceRay(-half + ix*step, -half + iy*step, planes, dist, srcIdx);
+      bxG[iy*gridN+ix] = sx;
+      byG[iy*gridN+ix] = sy;
+    }
+  }
+
+  // Collect cell centres where both (β_x − β_sx) and (β_y − β_sy) span zero
+  const seeds = [];
+  for (let iy = 0; iy < gridN-1; iy++) {
+    for (let ix = 0; ix < gridN-1; ix++) {
+      const b00x = bxG[iy*gridN+ix], b10x = bxG[iy*gridN+ix+1];
+      const b01x = bxG[(iy+1)*gridN+ix], b11x = bxG[(iy+1)*gridN+ix+1];
+      const b00y = byG[iy*gridN+ix], b10y = byG[iy*gridN+ix+1];
+      const b01y = byG[(iy+1)*gridN+ix], b11y = byG[(iy+1)*gridN+ix+1];
+      const xSpan = Math.min(b00x,b10x,b01x,b11x) < bsx && Math.max(b00x,b10x,b01x,b11x) > bsx;
+      const ySpan = Math.min(b00y,b10y,b01y,b11y) < bsy && Math.max(b00y,b10y,b01y,b11y) > bsy;
+      if (xSpan && ySpan) seeds.push([-half+(ix+0.5)*step, -half+(iy+0.5)*step]);
+    }
+  }
+
+  const results = [];
+  for (const [sx0, sy0] of seeds) {
+    let tx = sx0, ty = sy0;
+    let converged = false;
+    for (let iter = 0; iter < 10; iter++) {
+      const [bx, by] = traceRay(tx, ty, planes, dist, srcIdx);
+      const fx = bx - bsx, fy = by - bsy;
+      if (fx*fx + fy*fy < 1e-14) { converged = true; break; }
+      const [bxhp, byhp] = traceRay(tx+h, ty,   planes, dist, srcIdx);
+      const [bxhm, byhm] = traceRay(tx-h, ty,   planes, dist, srcIdx);
+      const [bxvp, byvp] = traceRay(tx,   ty+h, planes, dist, srcIdx);
+      const [bxvm, byvm] = traceRay(tx,   ty-h, planes, dist, srcIdx);
+      const A11 = (bxhp - bxhm) / (2*h);
+      const A12 = (bxvp - bxvm) / (2*h);
+      const A21 = (byhp - byhm) / (2*h);
+      const A22 = (byvp - byvm) / (2*h);
+      const det = A11*A22 - A12*A21;
+      if (Math.abs(det) < 1e-9) break;
+      tx -= (A22*fx - A12*fy) / det;
+      ty -= (-A21*fx + A11*fy) / det;
+      if (Math.abs(tx) > half*1.5 || Math.abs(ty) > half*1.5) break;
+    }
+    if (!converged) {
+      const [bxf, byf] = traceRay(tx, ty, planes, dist, srcIdx);
+      const fxf = bxf - bsx, fyf = byf - bsy;
+      if (fxf*fxf + fyf*fyf < (h * 0.05)**2) converged = true;
+    }
+    if (!converged) continue;
+    if (Math.abs(tx) > half || Math.abs(ty) > half) continue;
+    if (results.some(r => (r.tx-tx)**2 + (r.ty-ty)**2 < (h*0.8)**2)) continue;
+
+    // Classify by Jacobian at converged point
+    const [bxhp, byhp] = traceRay(tx+h, ty, planes, dist, srcIdx);
+    const [bxhm, byhm] = traceRay(tx-h, ty, planes, dist, srcIdx);
+    const [bxvp, byvp] = traceRay(tx, ty+h, planes, dist, srcIdx);
+    const [bxvm, byvm] = traceRay(tx, ty-h, planes, dist, srcIdx);
+    const A11 = (bxhp - bxhm) / (2*h);
+    const A12 = (bxvp - bxvm) / (2*h);
+    const A21 = (byhp - byhm) / (2*h);
+    const A22 = (byvp - byvm) / (2*h);
+    const detJ  = A11*A22 - A12*A21;
+    const kappa = 1 - 0.5*(A11 + A22);
+    const type   = detJ < 0 ? 2 : (kappa > 1 ? 3 : 1);
+    const dx = tx - bsx, dy = ty - bsy;
+    const phiVal = 0.5*(dx*dx + dy*dy) - _computePsiEff(tx, ty, planes, dist, srcIdx);
+    results.push({ tx, ty, type, phiVal });
+  }
+  return results;
+}
+
 function drawOverlay() {
   const overlay = document.getElementById('sl-overlay');
   const r   = overlay.getBoundingClientRect();
@@ -2063,7 +2242,8 @@ function drawOverlay() {
   const needCurve   = (state.showCritCurves || state.showCaustics) && state.dist && hasLens;
   const needEllipse      = state.planes.some(pl => pl.objects.some(o => o.showShape));
   const needPointSources = state.planes.some(pl => pl.objects.some(o => o.type === 'source' && o.model === 'pointsource' && !o.hidden));
-  if (!needCurve && !state.showMarkers && !needEllipse && !needPointSources) return;
+  const needFermatPts = state.fermatPoints && state.fermatPoints.length > 0;
+  if (!needCurve && !state.showMarkers && !needEllipse && !needPointSources && !needFermatPts) return;
 
   const Wl = W/dpr, Hl = H/dpr;
   overlayCtx.save();
@@ -2192,6 +2372,7 @@ function drawOverlay() {
         let a_arc = 0, q = 1, phi = 0;
         if (obj.type === 'lens') {
           if      (obj.model === 'sie')       { a_arc = p.b ?? 1;      q = p.q ?? 0.75; phi = p.phi ?? 0; }
+          else if (obj.model === 'nie')       { a_arc = p.b ?? 1;      q = p.q ?? 0.75; phi = p.phi ?? 0; }
           else if (obj.model === 'epl')       { a_arc = p.b ?? 1;      q = p.q ?? 0.75; phi = p.phi ?? 0; }
           else if (obj.model === 'pointmass') { a_arc = p.thetaE ?? 1; }
         } else if (obj.model === 'point') {
@@ -2330,6 +2511,124 @@ function drawOverlay() {
     });
   }
 
+  // ── 4. Fermat potential stationary point markers + legend ─────────────────────
+  // Type 1 = minimum (circle), Type 2 = saddle (diamond), Type 3 = maximum (triangle)
+  if (state.vizMode === 6) {
+    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const typeColor = t => t === 2 ? '#FF6B35' : (t === 3 ? '#CC44FF' : (dark ? '#FFE600' : '#1144DD'));
+    const typeLabel = t => t === 2 ? 'II' : (t === 3 ? 'III' : 'I');
+
+    // ── secondary legend (bottom-right) ──────────────────────────────────────
+    const legendTypes = [
+      { type: 1, word: 'Type I'   },
+      { type: 2, word: 'Type II'  },
+      { type: 3, word: 'Type III' },
+    ].filter(e => state.fermatPoints?.some(p => p.type === e.type));
+
+    if (legendTypes.length > 0) {
+      const _mob   = window.innerWidth <= 640;
+      const fsize  = _mob ? 12 : 14;
+      const lineH  = _mob ? 22 : 28;
+      const padV   = _mob ?  6 : 8;
+      const padH   = _mob ?  8 : 10;
+      const r_leg  = _mob ?  7 : 9;
+      const gap    = _mob ?  8 : 10; // gap between text and marker
+
+      overlayCtx.font = `${fsize}px system-ui, -apple-system, sans-serif`;
+      const textW  = Math.max(...legendTypes.map(e => overlayCtx.measureText(e.word).width));
+      const rowW   = textW + gap + r_leg * 2 + 2;
+      const boxW   = padH * 2 + rowW;
+      const boxH   = legendTypes.length * lineH + padV * 2;
+      const bx     = Wl - boxW - 8;
+      const by     = Hl - boxH - 8;
+
+      overlayCtx.textBaseline = 'middle';
+      overlayCtx.textAlign    = 'left';
+      for (let i = 0; i < legendTypes.length; i++) {
+        const { type, word } = legendTypes[i];
+        const iy  = by + padV + i * lineH + lineH / 2;
+        const col = typeColor(type);
+
+        overlayCtx.fillStyle = dark ? 'rgba(255,255,255,0.88)' : 'rgba(0,0,0,0.75)';
+        overlayCtx.fillText(word, bx + padH, iy);
+
+        const mx = bx + padH + textW + gap + r_leg + 1;
+        overlayCtx.strokeStyle = col;
+        overlayCtx.fillStyle   = dark ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.7)';
+        overlayCtx.lineWidth   = 2.0;
+        overlayCtx.setLineDash([]);
+        if (type === 1) {
+          overlayCtx.beginPath(); overlayCtx.arc(mx, iy, r_leg, 0, Math.PI*2);
+          overlayCtx.fill(); overlayCtx.stroke();
+        } else if (type === 2) {
+          overlayCtx.beginPath();
+          overlayCtx.moveTo(mx, iy - r_leg*1.3); overlayCtx.lineTo(mx + r_leg, iy);
+          overlayCtx.lineTo(mx, iy + r_leg*1.3); overlayCtx.lineTo(mx - r_leg, iy);
+          overlayCtx.closePath(); overlayCtx.fill(); overlayCtx.stroke();
+        } else {
+          overlayCtx.beginPath();
+          overlayCtx.moveTo(mx,            iy - r_leg*1.3);
+          overlayCtx.lineTo(mx + r_leg*1.1, iy + r_leg*0.8);
+          overlayCtx.lineTo(mx - r_leg*1.1, iy + r_leg*0.8);
+          overlayCtx.closePath(); overlayCtx.fill(); overlayCtx.stroke();
+        }
+        overlayCtx.fillStyle = col;
+        overlayCtx.font = `bold ${Math.round(r_leg * 0.9)}px system-ui, sans-serif`;
+        overlayCtx.textAlign = 'center';
+        overlayCtx.fillText(typeLabel(type), mx, iy + 0.5);
+        overlayCtx.font = `${fsize}px system-ui, -apple-system, sans-serif`;
+        overlayCtx.textAlign = 'left';
+      }
+    }
+  }
+
+  if (needFermatPts) {
+    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const r_m = Math.max(Wl, Hl) * 0.022; // marker radius ~2.2% of canvas
+    const typeColor = t => t === 2 ? '#FF6B35' : (t === 3 ? '#CC44FF' : (dark ? '#FFE600' : '#1144DD'));
+    const typeLabel = t => t === 2 ? 'II' : (t === 3 ? 'III' : 'I');
+
+    for (const { tx, ty, type } of state.fermatPoints) {
+      const [px, py] = toPixel(tx, ty);
+      const col = typeColor(type);
+      overlayCtx.strokeStyle = col;
+      overlayCtx.fillStyle   = dark ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.7)';
+      overlayCtx.lineWidth   = 2.2;
+      overlayCtx.setLineDash([]);
+
+      if (type === 1) {        // minimum: circle
+        overlayCtx.beginPath();
+        overlayCtx.arc(px, py, r_m, 0, Math.PI * 2);
+        overlayCtx.fill();
+        overlayCtx.stroke();
+      } else if (type === 2) { // saddle: diamond
+        overlayCtx.beginPath();
+        overlayCtx.moveTo(px,        py - r_m * 1.3);
+        overlayCtx.lineTo(px + r_m,  py);
+        overlayCtx.lineTo(px,        py + r_m * 1.3);
+        overlayCtx.lineTo(px - r_m,  py);
+        overlayCtx.closePath();
+        overlayCtx.fill();
+        overlayCtx.stroke();
+      } else {                 // maximum: triangle
+        overlayCtx.beginPath();
+        overlayCtx.moveTo(px,               py - r_m * 1.3);
+        overlayCtx.lineTo(px + r_m * 1.1,  py + r_m * 0.8);
+        overlayCtx.lineTo(px - r_m * 1.1,  py + r_m * 0.8);
+        overlayCtx.closePath();
+        overlayCtx.fill();
+        overlayCtx.stroke();
+      }
+
+      // Type label (I / II / III) centred inside the marker
+      overlayCtx.fillStyle   = col;
+      overlayCtx.font        = `bold ${Math.round(r_m * 0.95)}px system-ui, sans-serif`;
+      overlayCtx.textAlign   = 'center';
+      overlayCtx.textBaseline = 'middle';
+      overlayCtx.fillText(typeLabel(type), px, py + 0.5);
+    }
+  }
+
   overlayCtx.restore();
 }
 
@@ -2366,6 +2665,24 @@ function _updateColorbar() {
 // Returns { planes, dist, vizSrcIdx } — augmented with a virtual source plane at
 // effectiveCritZs() when no real plane sits exactly there, so the z_s setting
 // actually affects κ/γ/μ/|α| maps (same pattern as computeCritCurvesForZs).
+// Extends vizPlanesAndIdx to also return fermatBeta, routing through the source
+// position when the Fermat-use-source checkbox is enabled.
+function vizArgs(sortedPlanes) {
+  if (state.vizMode === 6 && state.fermatUseSourcePos && state.lastFermatSource) {
+    const sp = sortedPlanes.find(p => p.id === state.lastFermatSource.planeId);
+    if (sp) {
+      return {
+        planes:      sortedPlanes,
+        dist:        state.dist,
+        vizSrcIdx:   sortedPlanes.indexOf(sp),
+        fermatBeta:  [state.lastFermatSource.cx, state.lastFermatSource.cy],
+      };
+    }
+  }
+  const { planes, dist, vizSrcIdx } = vizPlanesAndIdx(sortedPlanes);
+  return { planes, dist, vizSrcIdx, fermatBeta: [0, 0] };
+}
+
 function vizPlanesAndIdx(sortedPlanes) {
   const zs = effectiveCritZs();
   const exact = sortedPlanes.find(p => Math.abs(p.z - zs) < 1e-6);
@@ -2395,11 +2712,26 @@ function _doRedraw() {
   if (!renderer || !state.dist) return;
   const sorted = [...state.planes].sort((a, b) => a.z - b.z);
   const isDark  = document.documentElement.getAttribute('data-theme') === 'dark' ? 1 : 0;
+
+  // Keep lastFermatSource synced: if a source is selected, update it (including position changes).
+  const _so = selectedObj(), _sp = selectedPlane();
+  if (_so && _so.type === 'source' && _sp) {
+    state.lastFermatSource = { cx: _so.cx, cy: _so.cy, planeId: _sp.id };
+  }
+
   if (state.vizMode !== 0) {
-    const { planes, dist, vizSrcIdx } = vizPlanesAndIdx(sorted);
-    renderer.setScene(planes, dist, state.fov, state.toneMap, activeToneMapParam(), state.vizMode, vizSrcIdx, isDark);
+    const { planes, dist, vizSrcIdx, fermatBeta } = vizArgs(sorted);
+    let saddlePhis = [];
+    if (state.vizMode === 6) {
+      state.fermatPoints = findStationaryPoints(planes, dist, vizSrcIdx, state.fov, fermatBeta);
+      saddlePhis = state.fermatPoints.filter(p => p.type === 2).map(p => p.phiVal);
+    } else {
+      state.fermatPoints = null;
+    }
+    renderer.setScene(planes, dist, state.fov, state.toneMap, activeToneMapParam(), state.vizMode, vizSrcIdx, isDark, saddlePhis, fermatBeta);
   } else {
-    renderer.setScene(sorted, state.dist, state.fov, state.toneMap, activeToneMapParam(), 0, 0, isDark);
+    renderer.setScene(sorted, state.dist, state.fov, state.toneMap, activeToneMapParam(), 0, 0, isDark, [], [0, 0]);
+    state.fermatPoints = null;
   }
   for (const plane of state.planes) redrawPlaneCanvas(plane);
   drawAxisCanvas();
@@ -2433,8 +2765,8 @@ function buildCompositeCanvas() {
   // Restore viz mode
   if (state.vizMode !== 0 && renderer && state.dist) {
     const p = [...state.planes].sort((a, b) => a.z - b.z);
-    const { planes, dist, vizSrcIdx } = vizPlanesAndIdx(p);
-    renderer.setScene(planes, dist, state.fov, state.toneMap, activeToneMapParam(), state.vizMode, vizSrcIdx);
+    const { planes, dist, vizSrcIdx, fermatBeta } = vizArgs(p);
+    renderer.setScene(planes, dist, state.fov, state.toneMap, activeToneMapParam(), state.vizMode, vizSrcIdx, undefined, undefined, fermatBeta);
   }
   return off;
 }
@@ -2455,8 +2787,8 @@ function captureSnapshot() {
     const isDark  = document.documentElement.getAttribute('data-theme') === 'dark' ? 1 : 0;
     const sorted  = [...state.planes].sort((a, b) => a.z - b.z);
     if (state.vizMode !== 0) {
-      const { planes, dist, vizSrcIdx } = vizPlanesAndIdx(sorted);
-      renderer.setScene(planes, dist, state.fov, state.toneMap, activeToneMapParam(), state.vizMode, vizSrcIdx, isDark);
+      const { planes, dist, vizSrcIdx, fermatBeta } = vizArgs(sorted);
+      renderer.setScene(planes, dist, state.fov, state.toneMap, activeToneMapParam(), state.vizMode, vizSrcIdx, isDark, undefined, fermatBeta);
     } else {
       renderer.setScene(sorted, state.dist, state.fov, state.toneMap, activeToneMapParam(), 0, 0, isDark);
     }
@@ -2566,8 +2898,8 @@ function startProgrammaticRecording() {
       const isDark   = document.documentElement.getAttribute('data-theme') === 'dark' ? 1 : 0;
       const sorted   = [...state.planes].sort((a, b) => a.z - b.z);
       if (state.vizMode !== 0) {
-        const { planes, dist, vizSrcIdx } = vizPlanesAndIdx(sorted);
-        renderer.setScene(planes, dist, state.fov, state.toneMap, activeToneMapParam(), state.vizMode, vizSrcIdx, isDark);
+        const { planes, dist, vizSrcIdx, fermatBeta } = vizArgs(sorted);
+        renderer.setScene(planes, dist, state.fov, state.toneMap, activeToneMapParam(), state.vizMode, vizSrcIdx, isDark, undefined, fermatBeta);
       } else {
         renderer.setScene(sorted, state.dist, state.fov, state.toneMap, activeToneMapParam(), 0, 0, isDark);
       }

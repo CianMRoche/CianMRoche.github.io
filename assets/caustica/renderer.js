@@ -48,9 +48,12 @@ uniform float u_fov;
 uniform vec2  u_res;
 uniform int   u_toneMap;
 uniform float u_toneMapParam;
-uniform int   u_vizMode;      // 0=surface brightness, 1=κ, 2=γ, 3=|μ|, 4=signed μ, 5=|α|
+uniform int   u_vizMode;      // 0=surface brightness, 1=κ, 2=γ, 3=|μ|, 4=signed μ, 5=|α|, 6=φ (Fermat)
 uniform int   u_vizSrcIdx;    // target plane index for visualization Jacobian
 uniform int   u_isDark;       // 1 = dark theme, 0 = light theme
+uniform float u_saddlePhi[8]; // φ values at Type-II saddle images (Fermat mode)
+uniform int   u_nSaddle;      // number of valid entries in u_saddlePhi
+uniform vec2  u_fermatBeta;   // source position β_s for Fermat potential (arcsec)
 
 uniform float u_D_obs [${MAX_PLANES}];
 uniform float u_D_btwn[${MAX_PLANES * MAX_PLANES}];
@@ -112,6 +115,23 @@ vec2 deflectSIE(vec2 u, float b, float q, float phi) {
   return vec2(cp * ax - sp * ay, sp * ax + cp * ay);
 }
 
+// NIE — Nonsingular Isothermal Ellipsoid.
+// Identical to SIE but with a user-specified core radius rc instead of the
+// numerical softening floor, producing a finite central surface density.
+vec2 deflectNIE(vec2 u, float b, float q, float phi, float rc) {
+  float cp = cos(phi), sp = sin(phi);
+  float xr =  cp * u.x + sp * u.y;
+  float yr = -sp * u.x + cp * u.y;
+  float qs = max(q, 0.001);
+  float sqf = sqrt(max(1.0 - qs * qs, EPS));
+  float s = max(rc, SIE_SOFT);
+  float r = sqrt(qs * qs * (xr * xr + s * s) + yr * yr);
+  float A = b * qs / sqf;
+  float ax = A * atan(sqf * xr / (r + s));
+  float ay = A * atanh_approx(sqf * yr / (r + qs * qs * s));
+  return vec2(cp * ax - sp * ay, sp * ax + cp * ay);
+}
+
 // EPL — Elliptical Power Law.
 // Computed as SIE deflections scaled by the radial power (m/b)^(2-gamma).
 // At gamma=2 this reduces exactly to the SIE; other values adjust the
@@ -147,10 +167,105 @@ vec2 lensDeflection(int idx, vec2 pos) {
   if (m == 0) return deflectPointMass(u, p.x);
   if (m == 1) return deflectSIE(u, p.x, p.y, p.z);
   if (m == 2) return deflectEPL(u, p.x, p.y, p.z, p.w);
+  if (m == 6) return deflectNIE(u, p.x, p.y, p.z, p.w);
   if (m == 3) return deflectShear(pos, p.x, p.y); // shear is relative to origin, not object centre
   if (m == 4) return p.x * pos;                                      // external convergence: kappa * theta
   if (m == 5) return vec2(p.x * cos(p.y), p.x * sin(p.y));          // constant deflection: alpha*(cos phi, sin phi)
   return vec2(0.0);
+}
+
+// ── Lensing potentials (analytic ψ per model) ────────────────────────────────
+// Returns ψ(pos) such that ∇ψ = α (the deflection angle) for each model.
+// Used to compute the Fermat potential φ = ½|θ|² − Σ_k (D_{k,s}/D_s) ψ_k(θ_k).
+// EPL returns 0 (potential has no closed form for the scaled-SIE approximation).
+
+float lensPotential(int idx, vec2 pos) {
+  vec2 u = pos - u_lensCenter[idx];
+  vec4 p = u_lensParams[idx];
+  int  m = u_lensModel[idx];
+
+  // Point mass: ψ = θ_E² · ln |u|
+  if (m == 0) {
+    return p.x * p.x * log(max(length(u), SIE_SOFT));
+  }
+
+  // SIE (m=1) or NIE (m=6): ψ = A · [xr·atan(…) + yr·atanh(…)]
+  // This satisfies ∇ψ = α exactly for isothermal-family models.
+  if (m == 1 || m == 6) {
+    float b = p.x, phi = p.z;
+    float qs  = max(p.y, 0.001);
+    float s   = (m == 6) ? max(p.w, SIE_SOFT) : SIE_SOFT;
+    float sqf = sqrt(max(1.0 - qs * qs, EPS));
+    float cp = cos(phi), sp = sin(phi);
+    float xr =  cp * u.x + sp * u.y;
+    float yr = -sp * u.x + cp * u.y;
+    float r  = sqrt(qs * qs * (xr * xr + s * s) + yr * yr);
+    float A  = b * qs / sqf;
+    return A * (xr * atan(sqf * xr / (r + s))
+              + yr * atanh_approx(sqf * yr / (r + qs * qs * s)));
+  }
+
+  // EPL: scaled-SIE deflections do not admit a closed-form potential.
+  if (m == 2) return 0.0;
+
+  // External shear: ψ = γ/2 · [(x²−y²)·cos2φ + 2xy·sin2φ]  (absolute pos)
+  if (m == 3) {
+    float c2 = cos(2.0 * p.y), s2 = sin(2.0 * p.y);
+    return 0.5 * p.x * ((pos.x * pos.x - pos.y * pos.y) * c2
+                       + 2.0 * pos.x * pos.y * s2);
+  }
+
+  // External convergence: ψ = κ/2 · |θ|²  (absolute pos)
+  if (m == 4) return 0.5 * p.x * dot(pos, pos);
+
+  // Uniform deflection: ψ = α · (x·cosφ + y·sinφ)  (absolute pos)
+  if (m == 5) return p.x * (pos.x * cos(p.y) + pos.y * sin(p.y));
+
+  return 0.0;
+}
+
+// Variant of traceToPlane that also accumulates the multiplane effective
+// lensing potential  ψ_eff = Σ_k (D_{k,s}/D_s) · ψ_k(θ_k).
+vec2 traceToPlaneWithPsi(vec2 theta, int targetIdx, inout float psiEff) {
+  float Ds = u_D_obs[targetIdx];
+  vec2 pos[${MAX_PLANES}];
+  for (int j = 0; j < MAX_PLANES; j++) pos[j] = theta;
+
+  psiEff = 0.0;
+  vec2 result = theta;
+  for (int j = 0; j < MAX_PLANES; j++) {
+    if (j >= u_numPlanes) break;
+    float Dj = u_D_obs[j];
+    vec2 totalDefl = vec2(0.0);
+    for (int k = 0; k < MAX_PLANES; k++) {
+      if (k >= j) break;
+      if (u_planeType[k] != 0) continue;
+      float Dkj = u_D_btwn[k * MAX_PLANES + j];
+      if (Dj < EPS || Dkj < EPS) continue;
+      float wt = Dkj / Dj;
+      for (int li = 0; li < MAX_OBJECTS; li++) {
+        if (li >= u_numLenses) break;
+        if (u_lensPlaneIdx[li] != k) continue;
+        totalDefl += wt * lensDeflection(li, pos[k]);
+      }
+    }
+    pos[j] = theta - totalDefl;
+    if (j == targetIdx) { result = pos[j]; break; }
+
+    // Accumulate potential at each lens plane weighted by D_{j,s}/D_s
+    if (u_planeType[j] == 0 && Ds > EPS) {
+      float Djs = u_D_btwn[j * MAX_PLANES + targetIdx];
+      if (Djs > EPS) {
+        float wPsi = Djs / Ds;
+        for (int li = 0; li < MAX_OBJECTS; li++) {
+          if (li >= u_numLenses) break;
+          if (u_lensPlaneIdx[li] != j) continue;
+          psiEff += wPsi * lensPotential(li, pos[j]);
+        }
+      }
+    }
+  }
+  return result;
 }
 
 // ── Pasted image sampling ─────────────────────────────────────────────────────
@@ -240,15 +355,19 @@ vec2 traceToPlane(vec2 theta, int targetIdx) {
 
 // Diverging colormaps.
 // Light: blue → white (neutral) → red.
-// Dark:  blue → very dark navy (neutral) → orange-red; avoids white.
+// Dark:  black → blue → dark navy (neutral) → orange-red; matches seismic at the extremes.
 vec3 cmDiverge(float t) {
   t = clamp(t, -1.0, 1.0);
   if (u_isDark == 1) {
-    vec3 neg = vec3(0.25, 0.50, 1.00);
     vec3 ctr = vec3(0.07, 0.07, 0.14);
+    vec3 neg = vec3(0.25, 0.50, 1.00);
     vec3 pos = vec3(1.00, 0.35, 0.12);
-    if (t < 0.0) return mix(ctr, neg, -t);
-    else          return mix(ctr, pos,  t);
+    if (t < 0.0) {
+      float s = -t; // 0..1 for negative half
+      if (s < 0.5) return mix(ctr, neg, s * 2.0);
+      else         return mix(neg, vec3(0.0), (s - 0.5) * 2.0);
+    }
+    return mix(ctr, pos, t);
   } else {
     vec3 neg = vec3(0.22, 0.42, 0.92);
     vec3 pos = vec3(0.92, 0.28, 0.18);
@@ -282,8 +401,46 @@ vec3 cmSequential(float t) {
 // ── Visualization Jacobian ────────────────────────────────────────────────────
 
 vec3 computeViz(vec2 theta) {
-  float h = u_fov * 0.004; // finite-difference step (~0.016" at fov=4)
   int tgt = u_vizSrcIdx;
+
+  // Fermat potential — contour lines of φ = ½|θ|² − ψ_eff.
+  // Single blue line color; fades toward the edge; saddle-level contours
+  // are thicker and brighter. fwidth() auto-fades where contours are too
+  // dense to resolve (outer field far from lens).
+  if (u_vizMode == 6) {
+    float psiEff = 0.0;
+    traceToPlaneWithPsi(theta, tgt, psiEff);
+    vec2  dtheta   = theta - u_fermatBeta;
+    float phi      = 0.5 * dot(dtheta, dtheta) - psiEff;
+    float interval = max(u_fov * u_fov * 0.002, EPS);
+    float phi_n    = phi / interval;
+    float fw       = fwidth(phi_n) * 0.5;
+    float d        = min(fract(phi_n), 1.0 - fract(phi_n));
+
+    // Identify whether this contour level matches a Type-II saddle image.
+    float phi_level = floor(phi_n + 0.5);
+    bool isSaddle = false;
+    for (int i = 0; i < 8; i++) {
+      if (i >= u_nSaddle) break;
+      if (abs(phi_level - floor(u_saddlePhi[i] / interval + 0.5)) < 0.5) {
+        isSaddle = true; break;
+      }
+    }
+
+    float lineW  = isSaddle ? fw * 6.0 : fw * 2.0;
+    float alpha  = fw < 0.5 ? (1.0 - smoothstep(fw, lineW, d)) : 0.0;
+
+    // Fade toward the FOV edge (starts at 60% of half-FOV, reaches zero at 105%).
+    float edgeFade = 1.0 - smoothstep(0.60, 1.05, length(theta) / (u_fov * 0.5));
+
+    vec3  bg      = u_isDark == 1 ? vec3(0.05, 0.04, 0.07) : vec3(0.95, 0.95, 0.95);
+    vec3  lineCol = isSaddle
+      ? (u_isDark == 1 ? vec3(0.95, 0.98, 1.00) : vec3(0.02, 0.04, 0.08))
+      : (u_isDark == 1 ? vec3(0.50, 0.75, 1.00) : vec3(0.15, 0.35, 0.78));
+    return mix(bg, lineCol, alpha * edgeFade);
+  }
+
+  float h = u_fov * 0.004; // finite-difference step (~0.016" at fov=4)
   vec2 bpx = traceToPlane(theta + vec2(h, 0.0), tgt);
   vec2 bmx = traceToPlane(theta - vec2(h, 0.0), tgt);
   vec2 bpy = traceToPlane(theta + vec2(0.0, h), tgt);
@@ -315,10 +472,9 @@ vec3 computeViz(vec2 theta) {
     float muS = clamp(1.0 / detJ, -8.0, 8.0);
     return cmDiverge(muS * 0.15);
   }
-  // u_vizMode == 5: deflection |α|, linear scale — saturates at 2"
+  // u_vizMode == 5: deflection |α|, linear scale — saturates at 2″
   vec2 beta = (bpx + bmx) * 0.5;
-  float alpha_mag = length(theta - beta);
-  return cmSequential(alpha_mag / 2.0);
+  return cmSequential(length(theta - beta) / 2.0);
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -398,8 +554,8 @@ export class Renderer {
     if (entry) { gl.deleteTexture(entry.tex); this._pastedTexCache.delete(objId); }
   }
 
-  setScene(planes, dist, fovArcsec, toneMap = 1, toneMapParam = 0.5, vizMode = 0, vizSrcIdx = -1, isDark = 1) {
-    this._scene = { planes, dist, fovArcsec, toneMap, toneMapParam, vizMode, vizSrcIdx, isDark };
+  setScene(planes, dist, fovArcsec, toneMap = 1, toneMapParam = 0.5, vizMode = 0, vizSrcIdx = -1, isDark = 1, saddlePhis = [], fermatBeta = [0, 0]) {
+    this._scene = { planes, dist, fovArcsec, toneMap, toneMapParam, vizMode, vizSrcIdx, isDark, saddlePhis, fermatBeta };
     this._draw();
   }
 
@@ -426,7 +582,7 @@ export class Renderer {
 
   _draw() {
     const { gl, _prog, _locs } = this;
-    const { planes, dist, fovArcsec, toneMap, toneMapParam, vizMode, vizSrcIdx, isDark } = this._scene;
+    const { planes, dist, fovArcsec, toneMap, toneMapParam, vizMode, vizSrcIdx, isDark, saddlePhis, fermatBeta } = this._scene;
 
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     gl.useProgram(_prog);
@@ -442,6 +598,14 @@ export class Renderer {
     gl.uniform1i(_locs.u_vizMode,      vizMode   ?? 0);
     gl.uniform1i(_locs.u_vizSrcIdx,    vizSrcIdx ?? -1);
     gl.uniform1i(_locs.u_isDark,       isDark    ?? 1);
+
+    const _saddles = saddlePhis ?? [];
+    const _saddleArr = new Float32Array(8);
+    for (let i = 0; i < Math.min(_saddles.length, 8); i++) _saddleArr[i] = _saddles[i];
+    gl.uniform1fv(_locs.u_saddlePhi, _saddleArr);
+    gl.uniform1i (_locs.u_nSaddle,   Math.min(_saddles.length, 8));
+    const _fb = fermatBeta ?? [0, 0];
+    gl.uniform2f(_locs.u_fermatBeta, _fb[0] ?? 0, _fb[1] ?? 0);
 
     const allPlanes = [...planes].sort((a, b) => a.z - b.z);
     const N = Math.min(allPlanes.length, MAX_PLANES);
@@ -643,6 +807,9 @@ export class Renderer {
       u_pastedSz1:    u('u_pastedSz1'),
       u_pastedSz2:    u('u_pastedSz2'),
       u_pastedSz3:    u('u_pastedSz3'),
+      u_saddlePhi:    u('u_saddlePhi'),
+      u_nSaddle:      u('u_nSaddle'),
+      u_fermatBeta:   u('u_fermatBeta'),
     };
   }
 }
@@ -655,5 +822,6 @@ function _modelParams(obj) {
   if (model === 'shear')       return { model:3, p0: params.gamma??0.05, p1: params.phi??0, p2:0, p3:0 };
   if (model === 'convergence') return { model:4, p0: params.kappa??0.05, p1:0, p2:0, p3:0 };
   if (model === 'deflection')  return { model:5, p0: params.alpha??0.1, p1: params.phi??0, p2:0, p3:0 };
+  if (model === 'nie')         return { model:6, p0: params.b??1, p1: params.q??0.8, p2: params.phi??0, p3: params.rc??0.2 };
   return { model:0, p0:1, p1:0, p2:0, p3:0 };
 }

@@ -25,6 +25,12 @@ permalink: /caustica-documentation/
 |---|---|
 | `1` / `2` / `3` | Select add mode: Lens / Source / Hybrid |
 | `C` | Toggle critical curves and caustics |
+| `I` | Show lensed image (exit any quantity map) |
+| `K` | Convergence κ map |
+| `G` | Shear γ map |
+| `M` | Magnification \|μ\| map |
+| `A` | Deflection \|α\| map |
+| `T` | Fermat potential φ contour map |
 | `H` | Hide / show the selected object |
 | `O` | Clear all objects from the selected plane |
 | `X` | Delete the selected plane |
@@ -118,7 +124,7 @@ The position at the target plane is the **source-plane position** $\boldsymbol{\
 
 ## 4. Lensing quantities
 
-The **lensing-quantities view** (dropdown in the top-right of the image panel) visualises four quantities derived from the Jacobian of the lens mapping evaluated at the chosen source redshift $z_s$.
+The **lensing-quantities view** (dropdown in the top-right of the image panel) visualises several quantities derived from the lens mapping at the chosen source redshift $z_s$.
 
 ### The lens mapping Jacobian
 
@@ -131,7 +137,7 @@ Caustica approximates each element using central finite differences with step $h
 
 $$A_{11} \approx \frac{\beta_x(\boldsymbol{\theta}+h\hat{e}_x) - \beta_x(\boldsymbol{\theta}-h\hat{e}_x)}{2h}, \quad \text{etc.}$$
 
-Four quantities are then derived from $A$:
+Four Jacobian-derived quantities are available:
 
 | Quantity | Formula | Notes |
 |---|---|---|
@@ -157,6 +163,57 @@ This is the physically correct behaviour: the same lens produces weaker effectiv
 The finite-difference Jacobian is accurate everywhere except very close to singular or steep profiles (point mass, EPL with large $\gamma$), where the deflection angle varies as $\sim 1/r$ or faster.
 Near such singularities the truncation error of the central-difference scheme can produce small spurious structure in the $\kappa$ map; convergence is clamped to zero in the display to suppress the most prominent artefacts.
 The shear and magnification maps are less affected.
+
+### Fermat potential (key `T`)
+
+The **Fermat potential** (also called the arrival-time surface) maps each image-plane position $\boldsymbol{\theta}$ to the light-travel time relative to an undeflected path, for a source at position $\boldsymbol{\beta}_s$ in the source plane:
+
+$$\varphi(\boldsymbol{\theta};\boldsymbol{\beta}_s) = \frac{1}{2}|\boldsymbol{\theta} - \boldsymbol{\beta}_s|^2 - \psi_\text{eff}(\boldsymbol{\theta})$$
+
+By default $\boldsymbol{\beta}_s = 0$ (source at the coordinate origin). When the **Use last selected source for Fermat potential source position/redshift** checkbox in the General settings panel is enabled, the position and source-plane redshift of the most recently selected source object are used instead, so the arrival-time surface and image markers reflect the actual source being lensed.
+
+$\psi_\text{eff}$ is the effective multiplane lensing potential:
+
+$$\psi_\text{eff}(\boldsymbol{\theta}) = \sum_k \frac{D_{k,s}}{D_s}\,\psi_k\!\left(\boldsymbol{\theta}_k\right)$$
+
+$D_{k,s}$ is the angular diameter distance from lens plane $k$ to the source, $D_s$ is the observer-to-source distance, and $\psi_k$ is the analytic lensing potential of plane $k$ evaluated at the ray's position $\boldsymbol{\theta}_k$ in that plane.
+
+The physical time delay between an image at $\boldsymbol{\theta}$ and a reference position is proportional to $\varphi(\boldsymbol{\theta};\boldsymbol{\beta}_s)$. Images of the source at $\boldsymbol{\beta}_s$ form at **stationary points** of $\varphi$, i.e. where $\nabla\varphi = \boldsymbol{\beta}(\boldsymbol{\theta}) - \boldsymbol{\beta}_s = 0$.
+
+#### Image type classification
+
+The nature of each stationary point is determined by the Jacobian $A$ at that location:
+
+| Type | Criterion | Character |
+|---|---|---|
+| I (minimum) | $\det A > 0$ and $\kappa < 1$ | The arrival time is a local minimum; the image has positive parity. |
+| II (saddle) | $\det A < 0$ | The arrival time is a saddle point; the image has negative parity. |
+| III (maximum) | $\det A > 0$ and $\kappa > 1$ | The arrival time is a local maximum; the image has positive parity. The central de-magnified image of an SIE belongs here. |
+
+By Morse theory, for a source inside all caustics the image count follows the sequence I, II, I, II, III (for a standard galaxy lens), giving a total of an odd number. The difference (number of minima + maxima) minus (number of saddles) equals $+1$ for a simply connected lens.
+
+#### Display
+
+The map shows iso-$\varphi$ contour lines computed analytically per pixel in the fragment shader. Contour spacing is $0.002\,\text{fov}^2$ arcsec². Contours fade toward the edge of the field. The contour passing through each Type II (saddle) image is drawn thicker and brighter because it separates distinct image regions on the arrival-time surface. Stationary point positions are overlaid as markers (circle for Type I, diamond for Type II, triangle for Type III) with a type legend in the lower right.
+
+#### Lensing potentials by model
+
+The potential $\psi_k$ is computed analytically where a closed form exists:
+
+| Model | $\psi$ |
+|---|---|
+| Point mass | $b^2 \ln r$ |
+| SIE / NIE | $\displaystyle\frac{bq}{\sqrt{1-q^2}}\!\left[x_r\arctan\frac{\sqrt{1-q^2}\,x_r}{r_e+s} + y_r\operatorname{arctanh}\frac{\sqrt{1-q^2}\,y_r}{r_e+q^2 s}\right]$ |
+| External shear | $\tfrac{\gamma}{2}\left[(\theta_x^2-\theta_y^2)\cos 2\varphi + 2\theta_x\theta_y\sin 2\varphi\right]$ |
+| External convergence | $\tfrac{\kappa}{2}\lvert\boldsymbol{\theta}\rvert^2$ |
+| Constant deflection | $\alpha(\theta_x\cos\varphi + \theta_y\sin\varphi)$ |
+| EPL | 0 (no closed form for the scaled-SIE approximation used here) |
+
+For EPL lenses, $\psi_\text{eff}$ receives only the geometric term $\tfrac{1}{2}\lvert\boldsymbol{\theta}\rvert^2$, so the Fermat potential reduces to a simple paraboloid centred on the lens for EPL-only configurations. This is noted in the EPL control panel.
+
+#### Gauge note
+
+The zero level of $\varphi$ has no absolute physical meaning; it depends on the normalisation convention. For a singular isothermal sphere with Einstein radius $b$ and source at the origin, $\varphi(\boldsymbol{\theta};0) = 0$ at $r = 0$ and $r = 2b$, not at the Einstein ring ($r = b$). What is physically meaningful is the **difference** in $\varphi$ between two images, which is proportional to the relative time delay between those images.
 
 ---
 
@@ -202,6 +259,21 @@ The arctanh function is absent in GLSL ES, so the shader uses $\operatorname{arc
 $$\alpha_x = \cos\varphi\,\alpha_{x_r} - \sin\varphi\,\alpha_{y_r}, \qquad \alpha_y = \sin\varphi\,\alpha_{x_r} + \cos\varphi\,\alpha_{y_r}$$
 
 In the circular limit $q\to 1$, both arguments vanish and L'Hôpital's rule gives $\lvert\hat{\boldsymbol{\alpha}}\rvert\to b$: the constant-magnitude deflection of the singular isothermal sphere.
+
+### NIE (Nonsingular Isothermal Ellipsoid)
+
+The NIE is an SIE with a finite core radius $r_c > 0$, replacing the central density cusp with a finite core. The deflection formula is identical to the SIE with the softening radius $s$ set to the user-specified core radius instead of the numerical floor:
+
+$$r_e = \sqrt{q^2(x_r^2 + r_c^2) + y_r^2}, \qquad s = r_c$$
+
+All four SIE steps apply unchanged. The NIE has no critical curve at the origin and produces a finite central surface density $\Sigma_0 \propto b/r_c$, making it more physical for lenses with observed cores (e.g. galaxy clusters with brightest-cluster galaxies).
+
+| Symbol | Meaning |
+|---|---|
+| $b$ | Deflection scale (arcsec), same role as in SIE |
+| $q$ | Axis ratio $0 \lt q \leq 1$ |
+| $\varphi$ | Position angle of major axis (radians) |
+| $r_c$ | Core radius (arcsec); $r_c \to 0$ recovers the SIE |
 
 ### EPL (Elliptical Power Law)
 
@@ -371,7 +443,7 @@ Caustica is written in vanilla JavaScript with no framework. The source lives in
 Pure physics; no DOM access or rendering.
 
 - **Cosmology**: `comovingDist`, `angDiamDist`, `angDiamDistBetween`: flat ΛCDM distance integrals via midpoint Riemann sum.
-- **Deflection models**: `deflectPointMass`, `deflectSIE`, `deflectEPL`: take a ray–lens separation in arcsec and return a deflection angle in arcsec.
+- **Deflection models**: `deflectPointMass`, `deflectSIE`, `deflectNIE`, `deflectEPL`: take a ray–lens separation in arcsec and return a deflection angle in arcsec.
 - **`precomputeDistances(planes)`**: builds the $D_\text{obs}$ and $D_\text{btwn}$ arrays once per plane configuration.
 - **`traceRay(θ, planes, dist, targetIdx)`**: evaluates the multiplane recursion in JavaScript; used for critical curve sampling.
 - **`computeCriticalCurves(planes, dist, sourceIdx, fov, gridN)`**: samples an $N \times N$ ray grid, computes the Jacobian determinant via finite differences, then runs marching squares to extract critical curve and caustic segments.
@@ -381,8 +453,9 @@ Pure physics; no DOM access or rendering.
 WebGL2 GPU renderer.
 
 - A single **GLSL 300 es fragment shader** runs the full multiplane lensing computation per pixel: it re-implements the multiplane recursion, all lens deflection models, all source brightness profiles, and tone mapping entirely on the GPU.
-- Scene data (plane redshifts, lens positions and parameters, source positions and parameters, pasted-image textures) are packed into uniform arrays and uploaded each frame.
-- The `Renderer` class manages the WebGL context, shader compilation, geometry, and texture slots. `setScene(planes, dist, fov, toneMap, toneMapParam)` triggers a redraw.
+- Scene data (plane redshifts, lens positions and parameters, source positions and parameters, pasted-image textures) are packed into uniform arrays and uploaded each frame. Fermat mode additionally receives up to 8 saddle-image $\varphi$ values as a float array uniform so the shader can highlight those contour levels.
+- The shader includes `lensPotential()` for analytic per-model potentials and `traceToPlaneWithPsi()`, which traces the ray while accumulating the effective potential $\psi_\text{eff}$ used in the Fermat quantity map.
+- The `Renderer` class manages the WebGL context, shader compilation, geometry, and texture slots. `setScene(planes, dist, fov, toneMap, toneMapParam, vizMode, vizSrcIdx, isDark, saddlePhis)` triggers a redraw.
 - `preserveDrawingBuffer: true` is set on the WebGL context to allow screenshot and recording capture.
 
 ### `main.js`
@@ -394,7 +467,7 @@ Application shell (~2500 lines).
 - **Event wiring**: `attachHandlers()` for global keyboard/tab/toolbar events; `attachAxisHandlers()` for plane-dragging on the redshift axis; `attachPlaneCanvasHandlers(canvas, plane)` per plane panel; `attachImageHandlers(wrap)` for drag-to-move in the main image.
 - **`renderSidebar()`**: rebuilds the Object Controls and settings/recording tab content. Called whenever selection or state changes.
 - **`rebuildPlaneBoxes()`**: rebuilds the plane panel DOM from scratch, called when planes are added or removed.
-- **`_doRedraw()`**: packs the scene into the renderer, redraws the axis canvas, and redraws the overlay (critical curves, position markers, legend) on a 2D canvas layered above the WebGL output.
+- **`_doRedraw()`**: packs the scene into the renderer, redraws the axis canvas, and redraws the overlay (critical curves, position markers, legend) on a 2D canvas layered above the WebGL output. In Fermat mode, `findStationaryPoints()` locates images of a source at the origin via a grid search followed by Newton-Raphson refinement, classifies them by Jacobian type, and computes their $\varphi$ values using `_computePsiEff()` (a CPU-side mirror of the shader potential accumulation) before passing saddle $\varphi$ levels to the renderer.
 - **Recording**: `captureSnapshot()` composites the WebGL canvas and overlay into a PNG; `startRecording()` / `stopRecording()` drive a `MediaRecorder` for WebM or a gif.js encoder for GIF.
 - **Programmatic recording**: each selected object can have an initial and final position set; `startProgrammaticRecording()` interpolates all registered objects simultaneously.
 - **Config save/load**: `configToYaml()` serialises all planes and objects to a human-readable YAML string; `parseYamlConfig()` parses it back with strict type and range validation (allowlisted model names, hex-only color strings, bounded numeric coordinates) before updating state.
@@ -416,5 +489,5 @@ Loaded lazily (only when GIF recording is requested) via a dynamic `<script>` ta
 
 - Schneider, Ehlers & Falco (1992), *Gravitational Lenses*, Springer. *(Multiplane lensing formalism.)*
 - Kormann, Schneider & Bartelmann (1994), Isothermal ellipsoidal mass distributions in gravitational lensing, A&A 284. *(SIE deflection angles.)*
-- Blandford & Narayan (1986), Fermat surface, caustics, and the time delay between images, ApJ 310. *(Early multiplane treatment.)*
+- Blandford & Narayan (1986), Fermat surface, caustics, and the time delay between images, ApJ 310. *(Fermat principle formulation of gravitational lensing; image types and time delays.)*
 - Lupton, Blanton, Fekete et al. (2004), Preparing Red-Green-Blue Images from CCD Data, PASP 116. *(Asinh stretch for astronomical image display.)*
