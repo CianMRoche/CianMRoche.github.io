@@ -80,6 +80,7 @@ const state = {
   dist:                null,
   fermatUseSourcePos:  false,  // when true, use lastFermatSource for Fermat β_s and source plane
   lastFermatSource:    null,   // { cx, cy, planeId } of last selected source object
+  saddlePhis:          [],     // φ values at Type-II saddle points; kept in sync for restore calls
 };
 
 // Draw a type-specific marker shape centred at (px, py) with circumradius r.
@@ -2220,10 +2221,11 @@ function findStationaryPoints(planes, dist, srcIdx, fov, betaS = [0, 0], gridN =
   }
 
   const results = [];
+  const maxStep = fov * 0.15;
   for (const [sx0, sy0] of seeds) {
     let tx = sx0, ty = sy0;
     let converged = false;
-    for (let iter = 0; iter < 10; iter++) {
+    for (let iter = 0; iter < 30; iter++) {
       const [bx, by] = traceRay(tx, ty, planes, dist, srcIdx);
       const fx = bx - bsx, fy = by - bsy;
       if (fx*fx + fy*fy < 1e-14) { converged = true; break; }
@@ -2237,14 +2239,18 @@ function findStationaryPoints(planes, dist, srcIdx, fov, betaS = [0, 0], gridN =
       const A22 = (byvp - byvm) / (2*h);
       const det = A11*A22 - A12*A21;
       if (Math.abs(det) < 1e-9) break;
-      tx -= (A22*fx - A12*fy) / det;
-      ty -= (-A21*fx + A11*fy) / det;
+      let dtx = (A22*fx - A12*fy) / det;
+      let dty = (-A21*fx + A11*fy) / det;
+      // Clamp step to prevent overshooting near critical curves (det → 0).
+      const stepLen = Math.sqrt(dtx*dtx + dty*dty);
+      if (stepLen > maxStep) { const s = maxStep / stepLen; dtx *= s; dty *= s; }
+      tx -= dtx; ty -= dty;
       if (Math.abs(tx) > half*1.5 || Math.abs(ty) > half*1.5) break;
     }
     if (!converged) {
       const [bxf, byf] = traceRay(tx, ty, planes, dist, srcIdx);
       const fxf = bxf - bsx, fyf = byf - bsy;
-      if (fxf*fxf + fyf*fyf < (h * 0.05)**2) converged = true;
+      if (fxf*fxf + fyf*fyf < (h * 0.01)**2) converged = true;
     }
     if (!converged) continue;
     if (Math.abs(tx) > half || Math.abs(ty) > half) continue;
@@ -2753,10 +2759,27 @@ function _doRedraw() {
   const sorted = [...state.planes].sort((a, b) => a.z - b.z);
   const isDark  = document.documentElement.getAttribute('data-theme') === 'dark' ? 1 : 0;
 
-  // Keep lastFermatSource synced: if a source is selected, update it (including position changes).
+  // Keep lastFermatSource synced with the actual source object's current position.
+  // Priority: (1) explicitly selected source, (2) hybrid partner of selected lens,
+  // (3) source object referenced by planeId (self-heals if source moved without selection).
   const _so = selectedObj(), _sp = selectedPlane();
-  if (_so && _so.type === 'source' && _sp) {
-    state.lastFermatSource = { cx: _so.cx, cy: _so.cy, planeId: _sp.id };
+  if (_so && _sp) {
+    if (_so.type === 'source') {
+      state.lastFermatSource = { cx: _so.cx, cy: _so.cy, planeId: _sp.id, objId: _so.id };
+    } else {
+      const _hp = hybridPartner(_sp, _so);
+      if (_hp && _hp.type === 'source') {
+        state.lastFermatSource = { cx: _hp.cx, cy: _hp.cy, planeId: _sp.id, objId: _hp.id };
+      }
+    }
+  }
+  // Always keep cx/cy in sync with the referenced source object even when not selected,
+  // so moves via any path (hybrid drag, programmatic animation) are reflected immediately.
+  if (state.lastFermatSource) {
+    const _fsp = state.planes.find(p => p.id === state.lastFermatSource.planeId);
+    const _fso = (_fsp?.objects.find(o => o.id === state.lastFermatSource.objId && o.type === 'source'))
+              ?? _fsp?.objects.find(o => o.type === 'source');
+    if (_fso) { state.lastFermatSource.cx = _fso.cx; state.lastFermatSource.cy = _fso.cy; }
   }
 
   if (state.vizMode !== 0) {
@@ -2765,13 +2788,16 @@ function _doRedraw() {
     if (state.vizMode === 6) {
       state.fermatPoints = findStationaryPoints(planes, dist, vizSrcIdx, state.fov, fermatBeta);
       saddlePhis = state.fermatPoints.filter(p => p.type === 2).map(p => p.phiVal);
+      state.saddlePhis = saddlePhis;
     } else {
       state.fermatPoints = null;
+      state.saddlePhis = [];
     }
     renderer.setScene(planes, dist, state.fov, state.toneMap, activeToneMapParam(), state.vizMode, vizSrcIdx, isDark, saddlePhis, fermatBeta);
   } else {
     renderer.setScene(sorted, state.dist, state.fov, state.toneMap, activeToneMapParam(), 0, 0, isDark, [], [0, 0]);
     state.fermatPoints = null;
+    state.saddlePhis = [];
   }
   for (const plane of state.planes) redrawPlaneCanvas(plane);
   drawAxisCanvas();
@@ -2802,11 +2828,12 @@ function buildCompositeCanvas() {
     ctx.globalCompositeOperation = 'source-over';
   }
   ctx.drawImage(ov, 0, 0);
-  // Restore viz mode
+  // Restore viz mode (preserve saddlePhis so highlighted contour stays correct).
   if (state.vizMode !== 0 && renderer && state.dist) {
     const p = [...state.planes].sort((a, b) => a.z - b.z);
     const { planes, dist, vizSrcIdx, fermatBeta } = vizArgs(p);
-    renderer.setScene(planes, dist, state.fov, state.toneMap, activeToneMapParam(), state.vizMode, vizSrcIdx, undefined, undefined, fermatBeta);
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark' ? 1 : 0;
+    renderer.setScene(planes, dist, state.fov, state.toneMap, activeToneMapParam(), state.vizMode, vizSrcIdx, isDark, state.saddlePhis ?? [], fermatBeta);
   }
   return off;
 }
@@ -2828,7 +2855,7 @@ function captureSnapshot() {
     const sorted  = [...state.planes].sort((a, b) => a.z - b.z);
     if (state.vizMode !== 0) {
       const { planes, dist, vizSrcIdx, fermatBeta } = vizArgs(sorted);
-      renderer.setScene(planes, dist, state.fov, state.toneMap, activeToneMapParam(), state.vizMode, vizSrcIdx, isDark, undefined, fermatBeta);
+      renderer.setScene(planes, dist, state.fov, state.toneMap, activeToneMapParam(), state.vizMode, vizSrcIdx, isDark, state.saddlePhis ?? [], fermatBeta);
     } else {
       renderer.setScene(sorted, state.dist, state.fov, state.toneMap, activeToneMapParam(), 0, 0, isDark);
     }
@@ -2939,7 +2966,13 @@ function startProgrammaticRecording() {
       const sorted   = [...state.planes].sort((a, b) => a.z - b.z);
       if (state.vizMode !== 0) {
         const { planes, dist, vizSrcIdx, fermatBeta } = vizArgs(sorted);
-        renderer.setScene(planes, dist, state.fov, state.toneMap, activeToneMapParam(), state.vizMode, vizSrcIdx, isDark, undefined, fermatBeta);
+        let saddlePhis = state.saddlePhis ?? [];
+        if (state.vizMode === 6) {
+          state.fermatPoints = findStationaryPoints(planes, dist, vizSrcIdx, state.fov, fermatBeta);
+          saddlePhis = state.fermatPoints.filter(p => p.type === 2).map(p => p.phiVal);
+          state.saddlePhis = saddlePhis;
+        }
+        renderer.setScene(planes, dist, state.fov, state.toneMap, activeToneMapParam(), state.vizMode, vizSrcIdx, isDark, saddlePhis, fermatBeta);
       } else {
         renderer.setScene(sorted, state.dist, state.fov, state.toneMap, activeToneMapParam(), 0, 0, isDark);
       }
