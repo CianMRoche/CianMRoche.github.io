@@ -42,7 +42,7 @@ function hybridLensHalf(plane, obj) {
 // Per-hybrid panel expansion state; reset when a different hybrid is selected.
 let _hybridExpanded   = { lens: false, src: false };
 let _lastHybridId     = null;
-let _settingsExpanded = { general: true, crit: false, ps: false };
+let _settingsExpanded = { general: false, cmap: false, crit: false, ps: false };
 let _progExpanded     = false;
 
 // Invert a 6-digit hex colour (#rrggbb → complement).
@@ -69,10 +69,11 @@ const state = {
   showCaustics:    false,
   showMarkers:     true,
   showLegend:      true,
+  showColorbar:    true,
   addMode:         'lens',   // 'lens' | 'source' | 'hybrid': global tool state
-  toneMap:             1,   // 0=linear, 1=sqrt, 2=power, 3=asinh
-  toneMapPower:        0.5,
-  toneMapAsinh:        5.0,
+  // Per-viz-mode colour mapping: { scale, param, min, max }. scale: 0=linear 1=sqrt
+  // 2=power 3=asinh 4=log. Modes: 0=surface brightness, 1=κ, 2=γ, 3=|μ|, 5=|α|.
+  vizScale:        null,     // initialised from DEFAULT_VIZ_SCALE below
   critGridN:           512,
   psGridStep:          0.02,   // arcsec — point source grid spacing
   vizMode:             0,      // 0=surface brightness, 1=κ, 2=γ, 3=|μ|, 4=signed μ, 5=|α|, 6=φ (Fermat)
@@ -82,6 +83,95 @@ const state = {
   lastFermatSource:    null,   // { cx, cy, planeId } of last selected source object
   saddlePhis:          [],     // φ values at Type-II saddle points; kept in sync for restore calls
 };
+
+// Default colour-mapping per viz mode (chosen to reproduce the original hardcoded look).
+// scale: 0=linear 1=sqrt 2=power 3=asinh 4=log ; param = γ (power) or a (asinh).
+// palette: 0=default 1=viridis 2=inferno 3=plasma 4=turbo 5=grayscale (ignored for mode 0).
+const DEFAULT_VIZ_SCALE = {
+  0: { scale: 1, param: 0.5, min: 0, max: 1,   palette: 0 },  // surface brightness (sqrt)
+  1: { scale: 0, param: 0.5, min: 0, max: 2,   palette: 0 },  // convergence κ
+  2: { scale: 0, param: 0.5, min: 0, max: 0.5, palette: 0 },  // shear γ
+  3: { scale: 4, param: 0.5, min: 1, max: 30,  palette: 0 },  // magnification |μ| (log)
+  5: { scale: 0, param: 0.5, min: 0, max: 2,   palette: 0 },  // deflection |α| (arcsec)
+};
+const VIZ_PALETTE_NAMES = ['Default', 'Viridis', 'Inferno', 'Plasma', 'Turbo', 'Grayscale'];
+// Colour-bar CSS gradients per palette. Index 0 is theme-dependent (see _updateColorbar).
+const VIZ_PALETTE_CSS = [
+  null, // 0 = default (theme-based)
+  'linear-gradient(to right,#440154,#414487,#2a788e,#22a884,#7ad151,#fde725)', // viridis
+  'linear-gradient(to right,#000004,#420a68,#932667,#dd513a,#fca50a,#fcffa4)', // inferno
+  'linear-gradient(to right,#0d0887,#6a00a8,#b12a90,#e16462,#fca636,#f0f921)', // plasma
+  'linear-gradient(to right,#30123b,#4669f2,#1ae4b6,#a4fc3c,#fb7e21,#7a0403)', // turbo
+  'linear-gradient(to right,#000000,#ffffff)',                                 // grayscale
+];
+function _cloneVizScaleDefaults() {
+  const o = {};
+  for (const k in DEFAULT_VIZ_SCALE) o[k] = { ...DEFAULT_VIZ_SCALE[k] };
+  return o;
+}
+// The viz modes that use the colour-mapping warp (Fermat φ=6 uses contours, not this).
+function vizModeHasScale(m) { return m === 0 || m === 1 || m === 2 || m === 3 || m === 5; }
+// Settings { scale, param, min, max } for a given mode (defaults if unset).
+function vizScaleFor(mode) {
+  return (state.vizScale && state.vizScale[mode]) || DEFAULT_VIZ_SCALE[mode] || DEFAULT_VIZ_SCALE[0];
+}
+state.vizScale = _cloneVizScaleDefaults();
+
+// A sensible increment for a numeric limit, scaled to its magnitude (≈ 1/20 of the
+// leading power of ten) — used for both the spinner step and drag-to-scrub sensitivity.
+function _numStep(v) {
+  const a = Math.abs(v);
+  if (!isFinite(a) || a === 0) return 0.01;
+  return Math.pow(10, Math.floor(Math.log10(a))) / 20;
+}
+
+// Make a number <input> draggable: click-drag left/right scrubs the value (step scaled
+// to its magnitude), clamped to [lo,hi]; a <2px move is treated as a click so typing and
+// the spinner still work. onChange(v) receives each new value.
+function _attachScrub(inp, { lo = -Infinity, hi = Infinity, onChange }) {
+  if (!inp) return;
+  inp.classList.add('sl-scrub');
+  let dragging = false, moved = false, startX = 0, startVal = 0, step = 0.01;
+  inp.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    startVal = parseFloat(inp.value) || 0;
+    step = _numStep(startVal || 1);
+    startX = e.clientX; dragging = true; moved = false;
+    inp.setPointerCapture(e.pointerId);
+  });
+  inp.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    if (Math.abs(e.clientX - startX) > 2) moved = true;
+    if (!moved) return;
+    const dec = Math.max(0, -Math.floor(Math.log10(step)) + 1);
+    const v = parseFloat(Math.min(hi, Math.max(lo, startVal + (e.clientX - startX) * step)).toFixed(dec));
+    inp.value = v;
+    onChange(v);
+  });
+  const end = (e) => {
+    if (!dragging) return;
+    dragging = false;
+    try { inp.releasePointerCapture(e.pointerId); } catch (_) {}
+  };
+  inp.addEventListener('pointerup', end);
+  inp.addEventListener('pointercancel', end);
+}
+
+// Explanation for the Colour Map section's ⓘ button — depends on the active mode/scale.
+function cmapInfoHtml(mode) {
+  const vs = vizScaleFor(mode);
+  const limits = mode === 0
+    ? `<b>Black / White</b>: image brightness mapped to the darkest and brightest output. Values below Black clip to the background; values above White saturate.`
+    : `<b>Min / Max</b>: the data values mapped to the two ends of the color bar. Values outside this range are clamped.`;
+  const scaleDesc = {
+    0: `<b>Linear</b>: color varies in direct proportion to the value.`,
+    1: `<b>Square root</b>: stretches low values and compresses high ones, revealing faint structure.`,
+    2: `<b>Power law</b>: color ∝ (normalized value)<sup>γ</sup>. γ&lt;1 brightens low values; γ&gt;1 emphasizes high values.`,
+    3: `<b>Asinh</b>: inverse-hyperbolic-sine stretch — linear near the bottom, logarithmic at the top. Softening <b>a</b> sets where it bends. The standard stretch for astronomical images.`,
+    4: `<b>Log</b>: logarithmic mapping, best for large dynamic range (e.g. magnification). Requires Min &gt; 0.`,
+  }[vs.scale] ?? '';
+  return `${limits}<br><br>${scaleDesc}<br><br><span style="color:var(--muted)">Tip: drag left/right across a value to scrub it, or type a number directly.</span>`;
+}
 
 // Draw a type-specific marker shape centred at (px, py) with circumradius r.
 // type: 'lens' = upward triangle, 'source' = downward triangle, 'hybrid' = diamond.
@@ -244,7 +334,11 @@ function findPointSourceImages(srcObj, srcPlane) {
 function configToYaml() {
   let y = `fov: ${state.fov}\nzMax: ${state.zMax}\n`;
   y += `vizMode: ${state.vizMode}\n`;
-  y += `toneMap: ${state.toneMap}\ntoneMapPower: ${state.toneMapPower}\ntoneMapAsinh: ${state.toneMapAsinh}\n`;
+  // Per-mode colour mapping: "scale param min max palette".
+  for (const m of [0, 1, 2, 3, 5]) {
+    const v = vizScaleFor(m);
+    y += `vizScale${m}: ${v.scale} ${v.param} ${v.min} ${v.max} ${v.palette ?? 0}\n`;
+  }
   y += `showCritCurves: ${state.showCritCurves}\nshowCaustics: ${state.showCaustics}\n`;
   y += `fermatUseSourcePos: ${state.fermatUseSourcePos}\n`;
   if (state.lastFermatSource) {
@@ -367,9 +461,23 @@ function loadConfigFromYaml(yaml) {
     state.selectedPlaneId = state.planes[0]?.id ?? null;
     state.selectedObjId   = state.planes[0]?.objects[0]?.id ?? null;
     if (cfg.vizMode       !== undefined) state.vizMode       = typeof cfg.vizMode  === 'number' ? cfg.vizMode  : 0;
-    if (cfg.toneMap       !== undefined) state.toneMap       = typeof cfg.toneMap  === 'number' ? cfg.toneMap  : 1;
-    if (isFinite(cfg.toneMapPower)) state.toneMapPower = cfg.toneMapPower;
-    if (isFinite(cfg.toneMapAsinh)) state.toneMapAsinh = cfg.toneMapAsinh;
+    // Per-mode colour mapping: "scale param min max" strings.
+    state.vizScale = _cloneVizScaleDefaults();
+    for (const m of [0, 1, 2, 3, 5]) {
+      const raw = cfg[`vizScale${m}`];
+      if (typeof raw === 'string') {
+        const [scale, param, min, max, palette] = raw.trim().split(/\s+/).map(Number);
+        if ([scale, param, min, max].every(isFinite))
+          state.vizScale[m] = { scale, param, min, max, palette: isFinite(palette) ? palette : 0 };
+      }
+    }
+    // Back-compat: old configs stored a single surface-brightness tone map.
+    if (cfg.toneMap !== undefined && cfg.vizScale0 === undefined) {
+      const s0 = state.vizScale[0];
+      if (typeof cfg.toneMap === 'number') s0.scale = cfg.toneMap;
+      if (isFinite(cfg.toneMapPower) && cfg.toneMap === 2) s0.param = cfg.toneMapPower;
+      if (isFinite(cfg.toneMapAsinh) && cfg.toneMap === 3) s0.param = cfg.toneMapAsinh;
+    }
     if (cfg.showCritCurves !== undefined) state.showCritCurves = cfg.showCritCurves === true;
     if (cfg.showCaustics   !== undefined) state.showCaustics   = cfg.showCaustics   === true;
     if (cfg.fermatUseSourcePos !== undefined) state.fermatUseSourcePos = cfg.fermatUseSourcePos === true;
@@ -1510,28 +1618,6 @@ function renderSidebar() {
             <label><input type="checkbox" id="sl-show-markers" ${state.showMarkers?'checked':''}> Show positions</label>
             <label><input type="checkbox" id="sl-show-legend"  ${state.showLegend ?'checked':''}> Show legend</label>
           </div>
-          ${state.vizMode === 0 ? `
-          <div class="sl-global-input" style="margin-top:8px">
-            <label>Tone map</label>
-            <select id="sl-tone-map">
-              <option value="0" ${state.toneMap===0?'selected':''}>Linear</option>
-              <option value="1" ${state.toneMap===1?'selected':''}>Square root</option>
-              <option value="2" ${state.toneMap===2?'selected':''}>Power law</option>
-              <option value="3" ${state.toneMap===3?'selected':''}>Asinh</option>
-            </select>
-          </div>
-          ${state.toneMap === 2 ? `
-          <div class="sl-global-input">
-            <label>Power (γ)</label>
-            <input type="range" id="sl-tone-power" min="0.1" max="1.0" step="0.05" value="${state.toneMapPower}">
-            <span class="sl-tone-param-val">${state.toneMapPower.toFixed(2)}</span>
-          </div>` : ''}
-          ${state.toneMap === 3 ? `
-          <div class="sl-global-input">
-            <label>Scale (a)</label>
-            <input type="range" id="sl-tone-asinh" min="0.5" max="20" step="0.5" value="${state.toneMapAsinh}">
-            <span class="sl-tone-param-val">${state.toneMapAsinh.toFixed(1)}</span>
-          </div>` : ''}` : ''}
           ${state.vizMode === 6 ? `
           <div class="sl-checkbox-row" style="margin-top:8px">
             <label><input type="checkbox" id="sl-fermat-use-src" ${state.fermatUseSourcePos?'checked':''}> Use last selected source for Fermat potential source position/redshift</label>
@@ -1542,6 +1628,68 @@ function renderSidebar() {
           </p>` : ''}` : ''}
         </div>` : ''}
       </div>
+
+      ${vizModeHasScale(state.vizMode) ? `
+      <div class="sl-hybrid-section">
+        <div class="sl-hybrid-hdr" id="sl-settings-hdr-cmap">
+          <span class="sl-hybrid-arrow">${_sg.cmap?'▼':'▶'}</span>
+          <span class="sl-panel-title" style="flex:1">Color Map</span>
+          ${_sg.cmap ? infoSection('sl-cmap-info', cmapInfoHtml(state.vizMode)) : ''}
+        </div>
+        ${_sg.cmap ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
+          ${state.vizMode !== 0 ? `<div class="sl-checkbox-row">
+            <label><input type="checkbox" id="sl-show-colorbar" ${state.showColorbar?'checked':''}> Show colorbar</label>
+          </div>` : ''}
+          ${(() => {
+            const vs = vizScaleFor(state.vizMode);
+            const heading = { 0:'Brightness stretch', 1:'κ color scale', 2:'γ color scale',
+                              3:'|μ| color scale', 5:'|α| color scale' }[state.vizMode];
+            const minLbl = state.vizMode === 0 ? 'Black' : 'Min';
+            const maxLbl = state.vizMode === 0 ? 'White' : 'Max';
+            const paramRow = vs.scale === 2 ? `
+          <div class="sl-global-input">
+            <label>Power (γ)</label>
+            <input type="range" id="sl-viz-param" min="0.1" max="2.0" step="0.05" value="${vs.param}">
+            <span class="sl-tone-param-val">${vs.param.toFixed(2)}</span>
+          </div>` : vs.scale === 3 ? `
+          <div class="sl-global-input">
+            <label>Softening (a)</label>
+            <input type="range" id="sl-viz-param" min="0.5" max="20" step="0.5" value="${vs.param}">
+            <span class="sl-tone-param-val">${vs.param.toFixed(1)}</span>
+          </div>` : '';
+            const paletteRow = state.vizMode === 0 ? '' : `
+          <div class="sl-global-input">
+            <label>Colormap</label>
+            <select id="sl-viz-palette">
+              ${VIZ_PALETTE_NAMES.map((n, i) => `<option value="${i}" ${(vs.palette??0)===i?'selected':''}>${n}</option>`).join('')}
+            </select>
+          </div>`;
+            return `
+          <p style="font-size:11px;color:var(--muted);margin:0 0 6px">${heading}</p>${paletteRow}
+          <div class="sl-global-input">
+            <label>Scale</label>
+            <select id="sl-viz-scale">
+              <option value="0" ${vs.scale===0?'selected':''}>Linear</option>
+              <option value="1" ${vs.scale===1?'selected':''}>Square root</option>
+              <option value="4" ${vs.scale===4?'selected':''}>Log</option>
+              <option value="2" ${vs.scale===2?'selected':''}>Power law</option>
+              <option value="3" ${vs.scale===3?'selected':''}>Asinh</option>
+            </select>
+          </div>
+          <div class="sl-global-input">
+            <label>${minLbl}</label>
+            <input type="number" class="sl-scrub" id="sl-viz-min" step="${_numStep(vs.min)}" value="${vs.min}">
+          </div>
+          <div class="sl-global-input">
+            <label>${maxLbl}</label>
+            <input type="number" class="sl-scrub" id="sl-viz-max" step="${_numStep(vs.max)}" value="${vs.max}">
+          </div>${paramRow}
+          <div style="margin-top:4px">
+            <button id="sl-viz-reset" type="button" style="font-size:11px;background:none;border:none;color:var(--muted);text-decoration:underline;cursor:pointer;padding:0">Reset to defaults</button>
+          </div>`;
+          })()}
+        </div>` : ''}
+      </div>` : ''}
 
       <div class="sl-hybrid-section">
         <button class="sl-hybrid-hdr" id="sl-settings-hdr-crit">
@@ -1695,29 +1843,62 @@ function renderSidebar() {
   document.getElementById('sl-tab-settings').innerHTML  = settingsContent;
   document.getElementById('sl-tab-recording').innerHTML = recordingPanel;
 
-  document.getElementById('sl-fov')?.addEventListener('change',         e => { const v = parseFloat(e.target.value); if (v > 0) { state.fov  = v; redraw(); } });
-  document.getElementById('sl-zmax')?.addEventListener('change',        e => { const v = parseFloat(e.target.value); if (v > 0) { state.zMax = v; drawAxisCanvas(); } });
+  const _fovEl = document.getElementById('sl-fov');
+  _fovEl?.addEventListener('change', e => { const v = parseFloat(e.target.value); if (v > 0) { state.fov = v; redraw(); } });
+  _attachScrub(_fovEl, { lo: 0.5, hi: 20, onChange: v => { state.fov = v; redraw(); } });
+  const _zmaxEl = document.getElementById('sl-zmax');
+  _zmaxEl?.addEventListener('change', e => { const v = parseFloat(e.target.value); if (v > 0) { state.zMax = v; drawAxisCanvas(); } });
+  _attachScrub(_zmaxEl, { lo: 0.1, hi: 10, onChange: v => { state.zMax = v; drawAxisCanvas(); } });
   document.getElementById('sl-prog-section-hdr')?.addEventListener('click',      () => { _progExpanded             = !_progExpanded;             renderSidebar(); });
   document.getElementById('sl-settings-hdr-general')?.addEventListener('click', () => { _settingsExpanded.general = !_settingsExpanded.general; renderSidebar(); });
+  document.getElementById('sl-settings-hdr-cmap')?.addEventListener('click',    () => { _settingsExpanded.cmap    = !_settingsExpanded.cmap;    renderSidebar(); });
   document.getElementById('sl-settings-hdr-crit')?.addEventListener('click',    () => { _settingsExpanded.crit    = !_settingsExpanded.crit;    renderSidebar(); });
   document.getElementById('sl-settings-hdr-ps')?.addEventListener('click',      () => { _settingsExpanded.ps      = !_settingsExpanded.ps;      renderSidebar(); });
   document.getElementById('sl-show-markers')?.addEventListener('change',e => { state.showMarkers = e.target.checked; redraw(); });
   document.getElementById('sl-show-legend')?.addEventListener('change', e => { state.showLegend  = e.target.checked; redraw(); });
-  document.getElementById('sl-tone-map')?.addEventListener('change', e => {
-    state.toneMap = parseInt(e.target.value, 10);
-    renderSidebar(); redraw();
+  document.getElementById('sl-show-colorbar')?.addEventListener('change', e => { state.showColorbar = e.target.checked; _updateColorbar(); });
+  document.getElementById('sl-viz-scale')?.addEventListener('change', e => {
+    const vs = vizScaleFor(state.vizMode);
+    vs.scale = parseInt(e.target.value, 10);
+    // Give power/asinh a useful starting param when first selected.
+    if (vs.scale === 2 && (vs.param < 0.1 || vs.param > 2.0)) vs.param = 0.5;
+    if (vs.scale === 3 && vs.param < 0.5)                     vs.param = 5.0;
+    renderSidebar(); _updateColorbar(); redraw();
   });
-  document.getElementById('sl-tone-power')?.addEventListener('input', e => {
-    state.toneMapPower = parseFloat(e.target.value);
+  document.getElementById('sl-viz-param')?.addEventListener('input', e => {
+    const vs = vizScaleFor(state.vizMode);
+    vs.param = parseFloat(e.target.value);
     const v = e.target.parentElement.querySelector('.sl-tone-param-val');
-    if (v) v.textContent = state.toneMapPower.toFixed(2);
+    if (v) v.textContent = vs.scale === 3 ? vs.param.toFixed(1) : vs.param.toFixed(2);
     redraw();
   });
-  document.getElementById('sl-tone-asinh')?.addEventListener('input', e => {
-    state.toneMapAsinh = parseFloat(e.target.value);
-    const v = e.target.parentElement.querySelector('.sl-tone-param-val');
-    if (v) v.textContent = state.toneMapAsinh.toFixed(1);
-    redraw();
+  document.getElementById('sl-viz-palette')?.addEventListener('change', e => {
+    vizScaleFor(state.vizMode).palette = parseInt(e.target.value, 10);
+    _updateColorbar(); redraw();
+  });
+  // Min/Max limit inputs: type a value, use the (magnitude-aware) spinner, or drag
+  // left/right across the field to scrub it smoothly.
+  const _attachVizLimit = (id, key) => {
+    const inp = document.getElementById(id);
+    if (!inp) return;
+    const apply = (v) => {
+      if (!isFinite(v)) return;
+      v = Math.max(0, v);
+      inp.value = v;
+      vizScaleFor(state.vizMode)[key] = v;
+      _updateColorbar(); redraw();
+    };
+    inp.addEventListener('change', e => apply(parseFloat(e.target.value)));
+    _attachScrub(inp, { lo: 0, onChange: apply });
+  };
+  _attachVizLimit('sl-viz-min', 'min');
+  _attachVizLimit('sl-viz-max', 'max');
+  // Keep the ⓘ popover from toggling the section it lives in.
+  document.getElementById('sl-cmap-info')?.addEventListener('click', e => e.stopPropagation());
+  document.getElementById('sl-viz-reset')?.addEventListener('click', () => {
+    const d = DEFAULT_VIZ_SCALE[state.vizMode];
+    if (d) state.vizScale[state.vizMode] = { ...d };
+    renderSidebar(); _updateColorbar(); redraw();
   });
   document.getElementById('sl-fermat-use-src')?.addEventListener('change', e => {
     state.fermatUseSourcePos = e.target.checked;
@@ -1739,7 +1920,9 @@ function renderSidebar() {
   document.getElementById('sl-crit-res')?.addEventListener('change', e => { state.critGridN = parseInt(e.target.value, 10); redraw(); });
   document.getElementById('sl-ps-grid')?.addEventListener('change',  e => { state.psGridStep = parseFloat(e.target.value); redraw(); });
   document.getElementById('sl-crit-zs')?.addEventListener('change',     e => { const v = parseFloat(e.target.value); if (v > 0) { state.critZs = v; redraw(); } });
-  document.getElementById('sl-crit-zs-gen')?.addEventListener('change', e => { const v = parseFloat(e.target.value); if (v > 0) { state.critZs = v; redraw(); } });
+  const _zsEl = document.getElementById('sl-crit-zs-gen');
+  _zsEl?.addEventListener('change', e => { const v = parseFloat(e.target.value); if (v > 0) { state.critZs = v; redraw(); } });
+  _attachScrub(_zsEl, { lo: 0.1, hi: 15, onChange: v => { state.critZs = v; redraw(); } });
   document.getElementById('sl-show-crit')?.addEventListener('change', e => { state.showCritCurves = e.target.checked; redraw(); });
   document.getElementById('sl-show-caus')?.addEventListener('change', e => { state.showCaustics   = e.target.checked; redraw(); });
   document.getElementById('sl-save-config')?.addEventListener('click', saveConfig);
@@ -2723,15 +2906,24 @@ function drawOverlay() {
 // ── Main redraw ───────────────────────────────────────────────────────────────
 let _raf = null;
 // ── Colorbar ──────────────────────────────────────────────────────────────────
-// [title, min-label, max-label, light-gradient, dark-gradient]
 const _VIZ_SEQ_LIGHT = 'linear-gradient(to right,#fff,#FF8C00,#722388,#000)';
 const _VIZ_SEQ_DARK  = 'linear-gradient(to right,#00000A,#5C005C,#E67200,#FFE600)';
+// [title, value-suffix] — limits and scale come from state.vizScale.
 const _VIZ_COLORBAR = {
-  1: ['κ',   '0',  '>2',  _VIZ_SEQ_LIGHT, _VIZ_SEQ_DARK],
-  2: ['γ',   '0',  '0.5', _VIZ_SEQ_LIGHT, _VIZ_SEQ_DARK],
-  3: ['|μ|', '1',  '>30', _VIZ_SEQ_LIGHT, _VIZ_SEQ_DARK],
-  5: ['|α|', '0',  '2″',  _VIZ_SEQ_LIGHT, _VIZ_SEQ_DARK],
+  1: ['κ',   ''],
+  2: ['γ',   ''],
+  3: ['|μ|', ''],
+  5: ['|α|', '″'],
 };
+
+// Format a colorbar limit compactly — at most 2 digits after the decimal point.
+function _fmtLimit(v, suffix) {
+  if (!isFinite(v)) return '–';
+  const a = Math.abs(v);
+  const s = (a !== 0 && (a < 0.01 || a >= 1e5)) ? v.toExponential(2)
+          : Number(v.toFixed(2)).toString();
+  return s + suffix;
+}
 
 function _updateColorbar() {
   const bar   = document.getElementById('sl-colorbar');
@@ -2741,13 +2933,15 @@ function _updateColorbar() {
   const ttl   = document.getElementById('sl-colorbar-title');
   if (!bar) return;
   const info = _VIZ_COLORBAR[state.vizMode];
-  if (!info) { bar.style.display = 'none'; return; }
+  if (!info || !state.showColorbar) { bar.style.display = 'none'; return; }
   const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const vs   = vizScaleFor(state.vizMode);
+  const pal  = vs.palette ?? 0;
   bar.style.display      = '';
   ttl.textContent        = info[0];
-  minEl.textContent      = info[1];
-  maxEl.textContent      = info[2] ?? (state.fov * 0.4).toFixed(2) + '″';
-  strip.style.background = dark ? info[4] : info[3];
+  minEl.textContent      = _fmtLimit(vs.min, info[1]);
+  maxEl.textContent      = _fmtLimit(vs.max, info[1]);
+  strip.style.background = VIZ_PALETTE_CSS[pal] || (dark ? _VIZ_SEQ_DARK : _VIZ_SEQ_LIGHT);
 }
 
 // Returns { planes, dist, vizSrcIdx } — augmented with a virtual source plane at
@@ -2785,10 +2979,10 @@ function vizPlanesAndIdx(sortedPlanes) {
   return { planes: augmented, dist: augDist, vizSrcIdx: augIdx };
 }
 
-function activeToneMapParam() {
-  if (state.toneMap === 2) return state.toneMapPower;
-  if (state.toneMap === 3) return state.toneMapAsinh;
-  return 0.5;
+// The { scale, param, min, max } warp passed to the renderer for a given viz mode.
+// Fermat (6) has no colour warp, so fall back to surface-brightness settings.
+function activeVizSettings(mode = state.vizMode) {
+  return vizScaleFor(vizModeHasScale(mode) ? mode : 0);
 }
 
 function redraw() {
@@ -2835,9 +3029,9 @@ function _doRedraw() {
       state.fermatPoints = null;
       state.saddlePhis = [];
     }
-    renderer.setScene(planes, dist, state.fov, state.toneMap, activeToneMapParam(), state.vizMode, vizSrcIdx, isDark, saddlePhis, fermatBeta);
+    renderer.setScene(planes, dist, state.fov, activeVizSettings(), state.vizMode, vizSrcIdx, isDark, saddlePhis, fermatBeta);
   } else {
-    renderer.setScene(sorted, state.dist, state.fov, state.toneMap, activeToneMapParam(), 0, 0, isDark, [], [0, 0]);
+    renderer.setScene(sorted, state.dist, state.fov, activeVizSettings(0), 0, 0, isDark, [], [0, 0]);
     state.fermatPoints = null;
     state.saddlePhis = [];
   }
@@ -2855,7 +3049,7 @@ function buildCompositeCanvas() {
   // Re-render in surface brightness mode so recordings always show lensed image.
   if (state.vizMode !== 0 && renderer && state.dist) {
     const p = [...state.planes].sort((a, b) => a.z - b.z);
-    renderer.setScene(p, state.dist, state.fov, state.toneMap, activeToneMapParam(), 0, 0);
+    renderer.setScene(p, state.dist, state.fov, activeVizSettings(0), 0, 0);
   }
   const off = document.createElement('canvas');
   off.width  = gl.width;
@@ -2875,7 +3069,7 @@ function buildCompositeCanvas() {
     const p = [...state.planes].sort((a, b) => a.z - b.z);
     const { planes, dist, vizSrcIdx, fermatBeta } = vizArgs(p);
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark' ? 1 : 0;
-    renderer.setScene(planes, dist, state.fov, state.toneMap, activeToneMapParam(), state.vizMode, vizSrcIdx, isDark, state.saddlePhis ?? [], fermatBeta);
+    renderer.setScene(planes, dist, state.fov, activeVizSettings(), state.vizMode, vizSrcIdx, isDark, state.saddlePhis ?? [], fermatBeta);
   }
   return off;
 }
@@ -2897,9 +3091,9 @@ function captureSnapshot() {
     const sorted  = [...state.planes].sort((a, b) => a.z - b.z);
     if (state.vizMode !== 0) {
       const { planes, dist, vizSrcIdx, fermatBeta } = vizArgs(sorted);
-      renderer.setScene(planes, dist, state.fov, state.toneMap, activeToneMapParam(), state.vizMode, vizSrcIdx, isDark, state.saddlePhis ?? [], fermatBeta);
+      renderer.setScene(planes, dist, state.fov, activeVizSettings(), state.vizMode, vizSrcIdx, isDark, state.saddlePhis ?? [], fermatBeta);
     } else {
-      renderer.setScene(sorted, state.dist, state.fov, state.toneMap, activeToneMapParam(), 0, 0, isDark);
+      renderer.setScene(sorted, state.dist, state.fov, activeVizSettings(0), 0, 0, isDark);
     }
     drawOverlay();
   }
@@ -3014,9 +3208,9 @@ function startProgrammaticRecording() {
           saddlePhis = state.fermatPoints.filter(p => p.type === 2).map(p => p.phiVal);
           state.saddlePhis = saddlePhis;
         }
-        renderer.setScene(planes, dist, state.fov, state.toneMap, activeToneMapParam(), state.vizMode, vizSrcIdx, isDark, saddlePhis, fermatBeta);
+        renderer.setScene(planes, dist, state.fov, activeVizSettings(), state.vizMode, vizSrcIdx, isDark, saddlePhis, fermatBeta);
       } else {
-        renderer.setScene(sorted, state.dist, state.fov, state.toneMap, activeToneMapParam(), 0, 0, isDark);
+        renderer.setScene(sorted, state.dist, state.fov, activeVizSettings(0), 0, 0, isDark);
       }
       const savedCrit = state.showCritCurves, savedCaus = state.showCaustics;
       if (!recState.useGif) { state.showCritCurves = false; state.showCaustics = false; }

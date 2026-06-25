@@ -939,6 +939,8 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   font-size: 12.5px;
 }
 .sl-global-input input[type="range"] { flex: 1; min-width: 0; }
+/* Drag horizontally to scrub the value (also typeable / spinner-adjustable). */
+.sl-global-input input.sl-scrub { cursor: ew-resize; }
 .sl-tone-param-val {
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;

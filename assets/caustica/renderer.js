@@ -46,8 +46,11 @@ const float SIE_SOFT    = 0.001;
 
 uniform float u_fov;
 uniform vec2  u_res;
-uniform int   u_toneMap;
-uniform float u_toneMapParam;
+uniform int   u_vizScale;     // value→[0,1] warp: 0=linear 1=sqrt 2=power 3=asinh 4=log
+uniform float u_vizScaleParam; // γ for power, softening a for asinh
+uniform float u_vizMin;        // lower data limit mapped to colorbar 0
+uniform float u_vizMax;        // upper data limit mapped to colorbar 1
+uniform int   u_colormap;      // palette: 0=default 1=viridis 2=inferno 3=plasma 4=turbo 5=gray
 uniform int   u_vizMode;      // 0=surface brightness, 1=κ, 2=γ, 3=|μ|, 4=signed μ, 5=|α|, 6=φ (Fermat)
 uniform int   u_vizSrcIdx;    // target plane index for visualization Jacobian
 uniform int   u_isDark;       // 1 = dark theme, 0 = light theme
@@ -482,6 +485,80 @@ vec3 cmSequential(float t) {
   return mix(c, d, (t - 0.66) * 3.0);
 }
 
+// Standard perceptual colormaps via compact polynomial fits (after Matt Zucker's
+// "Optimized colormaps"). All map t∈[0,1] → RGB and are theme-independent.
+vec3 cmViridis(float t) {
+  const vec3 c0 = vec3(0.2777, 0.0054, 0.3341);
+  const vec3 c1 = vec3(0.1051, 1.4046, 1.3846);
+  const vec3 c2 = vec3(-0.3308, 0.2148, 0.0951);
+  const vec3 c3 = vec3(-4.6342, -5.7991, -19.3324);
+  const vec3 c4 = vec3(6.2283, 14.1799, 56.6906);
+  const vec3 c5 = vec3(4.7764, -13.7451, -65.3530);
+  const vec3 c6 = vec3(-5.4355, 4.6459, 26.3124);
+  return c0 + t * (c1 + t * (c2 + t * (c3 + t * (c4 + t * (c5 + t * c6)))));
+}
+vec3 cmInferno(float t) {
+  const vec3 c0 = vec3(0.0002, 0.0016, -0.0194);
+  const vec3 c1 = vec3(0.1065, 0.5639, 3.9327);
+  const vec3 c2 = vec3(11.6024, -3.9728, -15.9423);
+  const vec3 c3 = vec3(-41.7039, 17.4363, 44.3540);
+  const vec3 c4 = vec3(77.1629, -33.4023, -81.8073);
+  const vec3 c5 = vec3(-71.3194, 32.6261, 73.2095);
+  const vec3 c6 = vec3(25.1311, -12.2426, -23.0703);
+  return c0 + t * (c1 + t * (c2 + t * (c3 + t * (c4 + t * (c5 + t * c6)))));
+}
+vec3 cmPlasma(float t) {
+  const vec3 c0 = vec3(0.0587, 0.0233, 0.5433);
+  const vec3 c1 = vec3(2.1761, 0.2380, 0.7539);
+  const vec3 c2 = vec3(-2.6894, -7.4554, 3.1107);
+  const vec3 c3 = vec3(6.1305, 42.3461, -28.5188);
+  const vec3 c4 = vec3(-11.1074, -82.6663, 60.1399);
+  const vec3 c5 = vec3(10.0233, 71.4136, -54.0721);
+  const vec3 c6 = vec3(-3.6587, -22.9315, 18.1919);
+  return c0 + t * (c1 + t * (c2 + t * (c3 + t * (c4 + t * (c5 + t * c6)))));
+}
+vec3 cmTurbo(float t) {
+  const vec3 c0 = vec3(0.1140, 0.0628, 0.2248);
+  const vec3 c1 = vec3(6.7164, 3.1822, 7.5715);
+  const vec3 c2 = vec3(-66.0941, -4.9279, -10.0934);
+  const vec3 c3 = vec3(228.7660, 25.0498, -91.5410);
+  const vec3 c4 = vec3(-334.8334, -69.3174, 288.5858);
+  const vec3 c5 = vec3(218.7637, 67.5215, -305.2045);
+  const vec3 c6 = vec3(-52.8895, -21.5453, 110.5174);
+  return c0 + t * (c1 + t * (c2 + t * (c3 + t * (c4 + t * (c5 + t * c6)))));
+}
+
+// Quantity-map colormap selector (u_colormap): 0=default 1=viridis 2=inferno
+// 3=plasma 4=turbo 5=grayscale.
+vec3 applyColormap(float t) {
+  t = clamp(t, 0.0, 1.0);
+  if (u_colormap == 1) return clamp(cmViridis(t), 0.0, 1.0);
+  if (u_colormap == 2) return clamp(cmInferno(t), 0.0, 1.0);
+  if (u_colormap == 3) return clamp(cmPlasma(t),  0.0, 1.0);
+  if (u_colormap == 4) return clamp(cmTurbo(t),   0.0, 1.0);
+  if (u_colormap == 5) return vec3(t);
+  return cmSequential(t);
+}
+
+// ── Value → [0,1] warp ─────────────────────────────────────────────────────────
+// Maps a raw quantity v into [0,1] given user limits [lo,hi] and a scale function.
+// linear/sqrt/power/asinh act on the linearly-normalised position (so with lo=0,hi=1
+// they reproduce the classic tone-map curves exactly); log is a true data-unit axis.
+float vizWarp(float v, float lo, float hi, int scale, float p) {
+  if (scale == 4) {                                  // log (needs a positive range)
+    float L = log(max(lo, EPS)), H = log(max(hi, EPS));
+    return clamp((log(max(v, EPS)) - L) / max(H - L, EPS), 0.0, 1.0);
+  }
+  float u = clamp((v - lo) / max(hi - lo, EPS), 0.0, 1.0);
+  if (scale == 1) return sqrt(u);                    // square root
+  if (scale == 2) return pow(u, max(p, EPS));        // power law γ
+  if (scale == 3) {                                  // asinh, softening a = p
+    float a = max(p, EPS);
+    return asinh(a * u) / max(asinh(a), EPS);
+  }
+  return u;                                          // linear
+}
+
 // ── Visualization Jacobian ────────────────────────────────────────────────────
 
 vec3 computeViz(vec2 theta) {
@@ -539,23 +616,23 @@ vec3 computeViz(vec2 theta) {
   float g2    = -0.5*(A12 + A21);
   float gamma = sqrt(g1*g1 + g2*g2);
 
-  if (u_vizMode == 1) { // convergence κ: sequential, clamped ≥ 0, saturates at κ ≈ 2
-    return cmSequential(max(kappa, 0.0) * 0.5);
+  if (u_vizMode == 1) { // convergence κ (clamped ≥ 0)
+    return applyColormap(vizWarp(max(kappa, 0.0), u_vizMin, u_vizMax, u_vizScale, u_vizScaleParam));
   }
-  if (u_vizMode == 2) { // shear |γ|: sequential, [0, 0.5]
-    return cmSequential(gamma * 2.0);
+  if (u_vizMode == 2) { // shear |γ|
+    return applyColormap(vizWarp(gamma, u_vizMin, u_vizMax, u_vizScale, u_vizScaleParam));
   }
-  if (u_vizMode == 3) { // |magnification| log scale
+  if (u_vizMode == 3) { // |magnification|
     float mu = 1.0 / max(abs(detJ), 0.001);
-    return cmSequential(log2(mu + 1.0) / 5.0);
+    return applyColormap(vizWarp(mu, u_vizMin, u_vizMax, u_vizScale, u_vizScaleParam));
   }
   if (u_vizMode == 4) { // signed magnification: diverging
     float muS = clamp(1.0 / detJ, -8.0, 8.0);
     return cmDiverge(muS * 0.15);
   }
-  // u_vizMode == 5: deflection |α|, linear scale — saturates at 2″
+  // u_vizMode == 5: deflection |α|
   vec2 beta = (bpx + bmx) * 0.5;
-  return cmSequential(length(theta - beta) / 2.0);
+  return applyColormap(vizWarp(length(theta - beta), u_vizMin, u_vizMax, u_vizScale, u_vizScaleParam));
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -581,14 +658,13 @@ void main() {
   }
 
   colorOut = clamp(colorOut, 0.0, 1.0);
-  if (u_toneMap == 1) {
-    colorOut = sqrt(colorOut);
-  } else if (u_toneMap == 2) {
-    colorOut = pow(colorOut, vec3(u_toneMapParam));
-  } else if (u_toneMap == 3) {
-    float a = max(u_toneMapParam, 0.01);
-    colorOut = log(a * colorOut + sqrt(a * a * colorOut * colorOut + 1.0)) / log(a + sqrt(a * a + 1.0));
-  }
+  // Surface-brightness stretch: same [min,max]+scale warp as the quantity maps,
+  // applied per colour channel (min=black point, max=white point).
+  colorOut = vec3(
+    vizWarp(colorOut.r, u_vizMin, u_vizMax, u_vizScale, u_vizScaleParam),
+    vizWarp(colorOut.g, u_vizMin, u_vizMax, u_vizScale, u_vizScaleParam),
+    vizWarp(colorOut.b, u_vizMin, u_vizMax, u_vizScale, u_vizScaleParam)
+  );
   fragColor = vec4(colorOut, 1.0);
 }`;
 
@@ -635,8 +711,9 @@ export class Renderer {
     if (entry) { gl.deleteTexture(entry.tex); this._pastedTexCache.delete(objId); }
   }
 
-  setScene(planes, dist, fovArcsec, toneMap = 1, toneMapParam = 0.5, vizMode = 0, vizSrcIdx = -1, isDark = 1, saddlePhis = [], fermatBeta = [0, 0]) {
-    this._scene = { planes, dist, fovArcsec, toneMap, toneMapParam, vizMode, vizSrcIdx, isDark, saddlePhis, fermatBeta };
+  // viz = { scale, param, min, max } — value→[0,1] warp for the active mode.
+  setScene(planes, dist, fovArcsec, viz = {}, vizMode = 0, vizSrcIdx = -1, isDark = 1, saddlePhis = [], fermatBeta = [0, 0]) {
+    this._scene = { planes, dist, fovArcsec, viz, vizMode, vizSrcIdx, isDark, saddlePhis, fermatBeta };
     this._draw();
   }
 
@@ -663,7 +740,7 @@ export class Renderer {
 
   _draw() {
     const { gl, _prog, _locs } = this;
-    const { planes, dist, fovArcsec, toneMap, toneMapParam, vizMode, vizSrcIdx, isDark, saddlePhis, fermatBeta } = this._scene;
+    const { planes, dist, fovArcsec, viz, vizMode, vizSrcIdx, isDark, saddlePhis, fermatBeta } = this._scene;
 
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     gl.useProgram(_prog);
@@ -672,10 +749,14 @@ export class Renderer {
     gl.enableVertexAttribArray(_locs.a_pos);
     gl.vertexAttribPointer(_locs.a_pos, 2, gl.FLOAT, false, 0, 0);
 
+    const _viz = viz ?? {};
     gl.uniform1f(_locs.u_fov, fovArcsec);
     gl.uniform2f(_locs.u_res, this.canvas.width, this.canvas.height);
-    gl.uniform1i(_locs.u_toneMap,      toneMap      ?? 1);
-    gl.uniform1f(_locs.u_toneMapParam, toneMapParam ?? 0.5);
+    gl.uniform1i(_locs.u_vizScale,      _viz.scale ?? 1);
+    gl.uniform1f(_locs.u_vizScaleParam, _viz.param ?? 0.5);
+    gl.uniform1f(_locs.u_vizMin,        _viz.min   ?? 0.0);
+    gl.uniform1f(_locs.u_vizMax,        _viz.max   ?? 1.0);
+    gl.uniform1i(_locs.u_colormap,      _viz.palette ?? 0);
     gl.uniform1i(_locs.u_vizMode,      vizMode   ?? 0);
     gl.uniform1i(_locs.u_vizSrcIdx,    vizSrcIdx ?? -1);
     gl.uniform1i(_locs.u_isDark,       isDark    ?? 1);
@@ -863,8 +944,11 @@ export class Renderer {
       a_pos:          a('a_pos'),
       u_fov:          u('u_fov'),
       u_res:          u('u_res'),
-      u_toneMap:      u('u_toneMap'),
-      u_toneMapParam: u('u_toneMapParam'),
+      u_vizScale:      u('u_vizScale'),
+      u_vizScaleParam: u('u_vizScaleParam'),
+      u_vizMin:        u('u_vizMin'),
+      u_vizMax:        u('u_vizMax'),
+      u_colormap:      u('u_colormap'),
       u_vizMode:      u('u_vizMode'),
       u_vizSrcIdx:    u('u_vizSrcIdx'),
       u_isDark:       u('u_isDark'),
