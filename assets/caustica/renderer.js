@@ -57,6 +57,7 @@ uniform vec2  u_fermatBeta;   // source position β_s for Fermat potential (arcs
 
 uniform float u_D_obs [${MAX_PLANES}];
 uniform float u_D_btwn[${MAX_PLANES * MAX_PLANES}];
+uniform float u_chi   [${MAX_PLANES}]; // comoving distances χ_j = (1+z_j)·D_obs[j]
 
 uniform int   u_numPlanes;
 uniform int   u_planeType[${MAX_PLANES}];
@@ -268,6 +269,89 @@ vec2 traceToPlaneWithPsi(vec2 theta, int targetIdx, inout float psiEff) {
   return result;
 }
 
+// Physically correct multiplane Fermat (arrival-time) surface φ(θ; β_s).
+//
+// Built in COMOVING transverse coordinates η_j = χ_j·x_j, where x_j is the angular
+// ray position at plane j. The arrival-time surface is a sum of geometric path-length
+// terms over a reduced node sequence that includes ONLY the deflecting (lens) planes:
+//
+//     observer (χ=0, η=0) → each lens plane (χ_j, η_j) → source (χ_s, η_s=χ_s·β_s)
+//     φ_raw = Σ_segments ½|Δη|²/Δχ  −  Σ_lens χ_j·ψ_j(x_j)
+//
+// Empty planes are skipped entirely: a ray drifts in a straight comoving line between
+// deflections, so omitting empty planes is exact AND makes φ invariant to inserting or
+// moving empty planes (the reduced sequence is identical regardless of empty planes).
+// The source node is pinned to β_s (u_fermatBeta), so stationary points coincide with
+// image positions.  φ is normalised by K = χ_L·χ_s/(χ_s−χ_L) (χ_L = first lens plane)
+// so that the single-plane case reduces exactly to ½|θ−β_s|²−ψ and the field stays O(1).
+float fermatPotential(vec2 theta, int targetIdx) {
+  float chi_s = u_chi[targetIdx];
+  if (chi_s < EPS) return 0.0;
+
+  // ── Pass 1: trace angular positions x_j at every plane up to the source. ──
+  vec2 pos[${MAX_PLANES}];
+  for (int j = 0; j < MAX_PLANES; j++) pos[j] = theta;
+  for (int j = 1; j < MAX_PLANES; j++) {
+    if (j > targetIdx) break;
+    float Dj = u_D_obs[j];
+    vec2 totalDefl = vec2(0.0);
+    if (Dj > EPS) {
+      for (int k = 0; k < MAX_PLANES; k++) {
+        if (k >= j) break;
+        if (u_planeType[k] != 0) continue;
+        float Dkj = u_D_btwn[k * MAX_PLANES + j];
+        if (Dkj < EPS) continue;
+        float wt = Dkj / Dj;
+        for (int li = 0; li < MAX_OBJECTS; li++) {
+          if (li >= u_numLenses) break;
+          if (u_lensPlaneIdx[li] != k) continue;
+          totalDefl += wt * lensDeflection(li, pos[k]);
+        }
+      }
+    }
+    pos[j] = theta - totalDefl;
+  }
+
+  // ── Pass 2: reduced comoving arrival-time surface, skipping empty planes. ──
+  float prevChi  = 0.0;          // observer node: χ=0, η=0
+  vec2  prevEta  = vec2(0.0);
+  float chi_L    = -1.0;         // first lens plane comoving distance (for normalisation)
+  float geoDelay = 0.0;
+  float psiEff   = 0.0;
+  for (int j = 0; j < MAX_PLANES; j++) {
+    if (j >= targetIdx) break;
+    if (u_planeType[j] != 0) continue;        // skip empty planes
+    float chi_j = u_chi[j];
+    if (chi_j - prevChi < EPS) continue;
+    if (chi_L < 0.0) chi_L = chi_j;
+    vec2 eta_j = chi_j * pos[j];
+    vec2 de    = eta_j - prevEta;
+    geoDelay  += 0.5 * dot(de, de) / (chi_j - prevChi);
+    prevChi    = chi_j;
+    prevEta    = eta_j;
+    for (int li = 0; li < MAX_OBJECTS; li++) {
+      if (li >= u_numLenses) break;
+      if (u_lensPlaneIdx[li] != j) continue;
+      psiEff += chi_j * lensPotential(li, pos[j]);
+    }
+  }
+  // Final drift to the source plane, pinned at β_s.
+  vec2 etaS = chi_s * u_fermatBeta;
+  vec2 deS  = etaS - prevEta;
+  if (chi_s - prevChi > EPS) geoDelay += 0.5 * dot(deS, deS) / (chi_s - prevChi);
+
+  float phi = geoDelay - psiEff;
+
+  // Normalise so single-plane reduces to ½|θ−β_s|²−ψ and the field stays O(1).
+  if (chi_L > 0.0 && chi_s - chi_L > EPS) {
+    float K = chi_L * chi_s / (chi_s - chi_L);
+    phi /= K;
+  } else {
+    phi /= chi_s;                              // no lens planes: pure geometric fallback
+  }
+  return phi;
+}
+
 // ── Pasted image sampling ─────────────────────────────────────────────────────
 // Returns the pasted image color (RGB) for source idx at source-plane
 // position beta.  Uses an if-else chain to avoid dynamic sampler indexing.
@@ -403,15 +487,12 @@ vec3 cmSequential(float t) {
 vec3 computeViz(vec2 theta) {
   int tgt = u_vizSrcIdx;
 
-  // Fermat potential — contour lines of φ = ½|θ|² − ψ_eff.
+  // Fermat potential — contour lines of the arrival-time surface φ(θ; β_s).
   // Single blue line color; fades toward the edge; saddle-level contours
   // are thicker and brighter. fwidth() auto-fades where contours are too
   // dense to resolve (outer field far from lens).
   if (u_vizMode == 6) {
-    float psiEff = 0.0;
-    traceToPlaneWithPsi(theta, tgt, psiEff);
-    vec2  dtheta   = theta - u_fermatBeta;
-    float phi      = 0.5 * dot(dtheta, dtheta) - psiEff;
+    float phi = fermatPotential(theta, tgt);
     float interval = max(u_fov * u_fov * 0.002, EPS);
     float phi_n    = phi / interval;
     float fw       = fwidth(phi_n) * 0.5;
@@ -625,6 +706,10 @@ export class Renderer {
     gl.uniform1fv(_locs.u_D_obs,  D_obs);
     gl.uniform1fv(_locs.u_D_btwn, D_btwn);
 
+    const chi = new Float32Array(MAX_PLANES);
+    for (let i = 0; i < N; i++) chi[i] = (1 + allPlanes[i].z) * (dist.D_obs[i] || 0);
+    gl.uniform1fv(_locs.u_chi, chi);
+
     // Pack lens objects.
     const lensModel    = new Int32Array(MAX_OBJECTS);
     const lensPlaneIdx = new Int32Array(MAX_OBJECTS);
@@ -785,6 +870,7 @@ export class Renderer {
       u_isDark:       u('u_isDark'),
       u_D_obs:        u('u_D_obs'),
       u_D_btwn:       u('u_D_btwn'),
+      u_chi:          u('u_chi'),
       u_numPlanes:    u('u_numPlanes'),
       u_planeType:    u('u_planeType'),
       u_numLenses:    u('u_numLenses'),

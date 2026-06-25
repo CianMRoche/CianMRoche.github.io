@@ -2186,6 +2186,48 @@ function _computePsiEff(tx, ty, planes, dist, srcIdx) {
   return psiEff;
 }
 
+// Physically correct multiplane Fermat (arrival-time) surface φ(θ; β_s) at (tx, ty).
+// Mirrors the GLSL fermatPotential() exactly — see that function for the full rationale.
+// Comoving transverse coordinates η_j = χ_j·x_j; reduced node sequence over ONLY the
+// lens planes (empty planes skipped → invariant to inserting/moving empty planes);
+// source node pinned at β_s; normalised by K = χ_L·χ_s/(χ_s−χ_L).
+function _computeFullFermat(tx, ty, planes, dist, srcIdx, betaX, betaY) {
+  const { D_obs } = dist;
+  const chi   = j => (1 + planes[j].z) * D_obs[j];
+  const chi_s = chi(srcIdx);
+  if (chi_s < 1e-9) return 0;
+
+  const isLens = j => planes[j].objects.some(o => !o.hidden && o.type === 'lens');
+
+  // Reduced comoving arrival-time surface: observer(χ=0,η=0) → lens planes → source(β_s).
+  let prevChi = 0, prevEx = 0, prevEy = 0;
+  let chi_L = -1, geoDelay = 0, psiEff = 0;
+  for (let j = 0; j < srcIdx; j++) {
+    if (!isLens(j)) continue;                       // skip empty planes
+    const chi_j = chi(j);
+    if (chi_j - prevChi < 1e-9) continue;
+    if (chi_L < 0) chi_L = chi_j;
+    const [px, py] = traceRay(tx, ty, planes, dist, j); // x_j (x_0 = θ since no prior deflection)
+    const ex = chi_j * px, ey = chi_j * py;
+    const dx = ex - prevEx, dy = ey - prevEy;
+    geoDelay += 0.5 * (dx * dx + dy * dy) / (chi_j - prevChi);
+    prevChi = chi_j; prevEx = ex; prevEy = ey;
+    for (const obj of planes[j].objects) {
+      if (obj.hidden || obj.type !== 'lens') continue;
+      psiEff += chi_j * _lensPotentialJS(obj, px, py);
+    }
+  }
+  // Final drift to the source plane, pinned at β_s.
+  const esx = chi_s * betaX, esy = chi_s * betaY;
+  const dsx = esx - prevEx, dsy = esy - prevEy;
+  if (chi_s - prevChi > 1e-9) geoDelay += 0.5 * (dsx * dsx + dsy * dsy) / (chi_s - prevChi);
+
+  let phi = geoDelay - psiEff;
+  if (chi_L > 0 && chi_s - chi_L > 1e-9) phi /= (chi_L * chi_s / (chi_s - chi_L));
+  else                                   phi /= chi_s;
+  return phi;
+}
+
 // Find stationary points of the Fermat potential φ(θ; β_s) = ½|θ−β_s|² − ψ_eff(θ).
 // These are the images of a source at β_s: ∇φ = β(θ) − β_s = 0.
 // betaS defaults to [0,0] (source at origin).
@@ -2269,7 +2311,7 @@ function findStationaryPoints(planes, dist, srcIdx, fov, betaS = [0, 0], gridN =
     const kappa = 1 - 0.5*(A11 + A22);
     const type   = detJ < 0 ? 2 : (kappa > 1 ? 3 : 1);
     const dx = tx - bsx, dy = ty - bsy;
-    const phiVal = 0.5*(dx*dx + dy*dy) - _computePsiEff(tx, ty, planes, dist, srcIdx);
+    const phiVal = _computeFullFermat(tx, ty, planes, dist, srcIdx, bsx, bsy);
     results.push({ tx, ty, type, phiVal });
   }
   return results;
