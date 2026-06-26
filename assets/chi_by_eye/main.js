@@ -25,6 +25,18 @@ function toggleTheme() {
   document.documentElement.setAttribute('data-theme', next);
   try { localStorage.setItem('theme', next); } catch {}
   applyThemeIcons(next);
+  redrawAllPlots();
+}
+
+// Plots paint from CSS vars but only on demand, so a theme flip leaves any
+// already-drawn canvas showing stale colors. Re-render every live plot (the
+// in-game plot, the sandbox plot, and the summary mini-plots). render() reads
+// the CSS vars fresh and no-ops when a plot has no round, so this is cheap and
+// safe to call regardless of the current view.
+function redrawAllPlots() {
+  if (plot) plot.render();
+  if (sandboxPlot) sandboxPlot.render();
+  if (game._miniPlots) game._miniPlots.forEach(p => p.render());
 }
 
 // Keyboard shortcut: press "d" to toggle dark/light (ignored while typing or with modifiers).
