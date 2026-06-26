@@ -43,8 +43,8 @@
   function toggleTheme() {
     var current = document.documentElement.getAttribute('data-theme') || 'dark';
     var next = current === 'dark' ? 'light' : 'dark';
-    applyTheme(next);                                   // apply first, so the toggle works even if storage is blocked
-    try { localStorage.setItem('theme', next); } catch (e) {}  // persistence is best-effort (private mode, blocked storage)
+    applyTheme(next);                                   /* apply first, so the toggle works even if storage is blocked */
+    try { localStorage.setItem('theme', next); } catch (e) {}  /* persistence is best-effort (private mode, blocked storage) */
     document.querySelectorAll('iframe').forEach(function(f) {
       try { f.contentWindow.postMessage({ theme: next }, '*'); } catch(e) {}
     });
@@ -53,7 +53,7 @@
   var btn = document.getElementById('dark-toggle');
   if (btn) btn.addEventListener('click', toggleTheme);
 
-  // Keyboard shortcut: press "d" to toggle dark/light (ignored while typing or with modifiers).
+  /* Keyboard shortcut: press "d" to toggle dark/light (ignored while typing or with modifiers). */
   document.addEventListener('keydown', function(e) {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.key !== 'd' && e.key !== 'D') return;
