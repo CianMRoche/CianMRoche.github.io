@@ -43,8 +43,8 @@
   function toggleTheme() {
     var current = document.documentElement.getAttribute('data-theme') || 'dark';
     var next = current === 'dark' ? 'light' : 'dark';
-    localStorage.setItem('theme', next);
-    applyTheme(next);
+    applyTheme(next);                                   // apply first, so the toggle works even if storage is blocked
+    try { localStorage.setItem('theme', next); } catch (e) {}  // persistence is best-effort (private mode, blocked storage)
     document.querySelectorAll('iframe').forEach(function(f) {
       try { f.contentWindow.postMessage({ theme: next }, '*'); } catch(e) {}
     });
@@ -62,6 +62,8 @@
     toggleTheme();
   });
 
-  applyTheme(localStorage.getItem('theme') || 'dark');
+  var saved;
+  try { saved = localStorage.getItem('theme'); } catch (e) {}
+  applyTheme(saved || 'dark');
 })();
 </script>

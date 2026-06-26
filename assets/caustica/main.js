@@ -1574,22 +1574,22 @@ function renderSidebar() {
             <button class="sl-delete-obj-btn" id="sl-delete-obj">Delete</button>
           </div>
           <div class="sl-hybrid-section">
-            <button class="sl-hybrid-hdr" id="sl-hybrid-lens-hdr">
+            <div class="sl-hybrid-hdr" id="sl-hybrid-lens-hdr">
               <span class="sl-hybrid-arrow">${lensExp ? '▼' : '▶'}</span>
               <span class="sl-panel-title" style="flex:1">Lens</span>
               ${infoSection('sl-param-info-lens', LENS_INFO[lensObj.model] ?? '')}
-            </button>
+            </div>
             ${lensExp ? `<div class="sl-hybrid-body" data-hybrid-section="lens">
               <select class="sl-select" id="sl-model-select-lens">${lensModelOpts}</select>
               ${lensParamRows(lensObj)}
             </div>` : ''}
           </div>
           <div class="sl-hybrid-section">
-            <button class="sl-hybrid-hdr" id="sl-hybrid-src-hdr">
+            <div class="sl-hybrid-hdr" id="sl-hybrid-src-hdr">
               <span class="sl-hybrid-arrow">${srcExp ? '▼' : '▶'}</span>
               <span class="sl-panel-title" style="flex:1">Source</span>
               ${infoSection('sl-param-info-src', SOURCE_INFO[srcObj.model] ?? '')}
-            </button>
+            </div>
             ${srcExp ? `<div class="sl-hybrid-body" data-hybrid-section="src">
               <select class="sl-select" id="sl-model-select-src">${srcModelOpts}</select>
               ${sourceParamRows(srcObj)}
@@ -2043,6 +2043,9 @@ function renderSidebar() {
       document.getElementById('sl-hybrid-src-hdr')?.addEventListener('click', () => {
         _hybridExpanded.src = !_hybridExpanded.src; renderSidebar();
       });
+      // Keep the ⓘ popovers from toggling the section header they live in.
+      document.getElementById('sl-param-info-lens')?.addEventListener('click', e => e.stopPropagation());
+      document.getElementById('sl-param-info-src')?.addEventListener('click', e => e.stopPropagation());
       // Lens section model + params
       document.getElementById('sl-model-select-lens')?.addEventListener('change', e => {
         lensObj.model = e.target.value; lensObj.params = defaultParams(lensObj.model);

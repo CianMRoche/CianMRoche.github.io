@@ -102,6 +102,25 @@ details.lens-section > summary:hover .lens-heading { color: #3b82f6; }
 .lens-content { overflow: hidden; transition: height 0.42s cubic-bezier(0.4, 0, 0.2, 1); }
 html[data-theme="dark"] details.lens-section > summary { border-bottom-color: #30363d; }
 html[data-theme="dark"] details.lens-section > summary:hover .lens-heading { color: #58a6ff; }
+
+/* Call-to-action button linking to the full Caustica simulator.
+   Matches the demo's preset-button style (outlined, fills on hover). */
+.lens-cta-btn {
+  display: inline-block;
+  background: #fff;
+  border: 1.5px solid #3b82f6;
+  color: #3b82f6 !important;
+  border-radius: 6px;
+  padding: 5px 13px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  text-decoration: none !important;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.lens-cta-btn:hover { background: #3b82f6; color: #fff !important; }
+html[data-theme="dark"] .lens-cta-btn { background: #0d1117; border-color: #7bbfcc; color: #7bbfcc !important; }
+html[data-theme="dark"] .lens-cta-btn:hover { background: #7bbfcc; color: #0d1117 !important; }
 </style>
 
 <div class="nav-cards">
@@ -261,8 +280,10 @@ When a <span style="color:#BA7517">massive object</span> sits between us and a d
 </svg>
 
 <p style="font-size:0.875rem; color:#6b7280; line-height:1.65; margin: 1rem 0 0.5rem;">
-Click a preset or load your own source image by pasting (Ctrl+V / Cmd+V) or dragging an image onto the left panel. Click the right panel to move the lens.
-For a much more complete lens simulator, see <a href="/assets/caustica/">Caustica</a>.</p>
+Load your own source image by pasting (Ctrl+V / Cmd+V) or dragging an image onto the left panel, or choose one of the presets below. Click/drag in the right panel to move the lens.</p>
+
+<p style="font-size:0.875rem; color:#6b7280; line-height:1.65; margin: 0.75rem 0 0.25rem;">
+For a much more complete lensing simulator  <a class="lens-cta-btn" href="/assets/caustica/">Launch Caustica →</a></p>
 
 <div class="demo-wrap">
   <iframe id="lensing-iframe" src=""
