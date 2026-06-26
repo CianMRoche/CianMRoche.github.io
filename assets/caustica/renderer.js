@@ -57,6 +57,7 @@ uniform int   u_isDark;       // 1 = dark theme, 0 = light theme
 uniform float u_saddlePhi[8]; // φ values at Type-II saddle images (Fermat mode)
 uniform int   u_nSaddle;      // number of valid entries in u_saddlePhi
 uniform vec2  u_fermatBeta;   // source position β_s for Fermat potential (arcsec)
+uniform float u_contourSpacing; // Fermat contour spacing multiplier (interval = 0.002·fov²·this)
 
 uniform float u_D_obs [${MAX_PLANES}];
 uniform float u_D_btwn[${MAX_PLANES * MAX_PLANES}];
@@ -193,8 +194,13 @@ float lensPotential(int idx, vec2 pos) {
     return p.x * p.x * log(max(length(u), SIE_SOFT));
   }
 
-  // SIE (m=1) or NIE (m=6): ψ = A · [xr·atan(…) + yr·atanh(…)]
-  // This satisfies ∇ψ = α exactly for isothermal-family models.
+  // SIE (m=1) or NIE (m=6): cored isothermal-ellipsoid potential, ∇ψ = α exactly.
+  //   ψ = A·[xr·atan(…) + yr·atanh(…)] − ½·b·q·s·ln[(r+s)² + (1−q²)·xr²]
+  // The first (Euler-homogeneous) term alone is exact only in the singular limit;
+  // the second term is the core correction needed when the softening s is finite.
+  // It vanishes as s→0, so the SIE limit (s = SIE_SOFT) is essentially unchanged,
+  // but for a cored NIE (s = rc) it is what makes the Fermat surface stationary at
+  // the image positions. Without it the arrival-time extrema are visibly displaced.
   if (m == 1 || m == 6) {
     float b = p.x, phi = p.z;
     float qs  = max(p.y, 0.001);
@@ -205,8 +211,10 @@ float lensPotential(int idx, vec2 pos) {
     float yr = -sp * u.x + cp * u.y;
     float r  = sqrt(qs * qs * (xr * xr + s * s) + yr * yr);
     float A  = b * qs / sqf;
-    return A * (xr * atan(sqf * xr / (r + s))
-              + yr * atanh_approx(sqf * yr / (r + qs * qs * s)));
+    float psi = A * (xr * atan(sqf * xr / (r + s))
+                   + yr * atanh_approx(sqf * yr / (r + qs * qs * s)));
+    psi -= 0.5 * b * qs * s * log((r + s) * (r + s) + sqf * sqf * xr * xr);
+    return psi;
   }
 
   // EPL: scaled-SIE deflections do not admit a closed-form potential.
@@ -532,12 +540,18 @@ vec3 cmTurbo(float t) {
 // 3=plasma 4=turbo 5=grayscale.
 vec3 applyColormap(float t) {
   t = clamp(t, 0.0, 1.0);
-  if (u_colormap == 1) return clamp(cmViridis(t), 0.0, 1.0);
-  if (u_colormap == 2) return clamp(cmInferno(t), 0.0, 1.0);
-  if (u_colormap == 3) return clamp(cmPlasma(t),  0.0, 1.0);
-  if (u_colormap == 4) return clamp(cmTurbo(t),   0.0, 1.0);
-  if (u_colormap == 5) return vec3(t);
-  return cmSequential(t);
+  if (u_colormap == 0) return cmSequential(t);   // Default: already theme-aware
+  vec3 c;
+  if      (u_colormap == 1) c = cmViridis(t);
+  else if (u_colormap == 2) c = cmInferno(t);
+  else if (u_colormap == 3) c = cmPlasma(t);
+  else if (u_colormap == 4) c = cmTurbo(t);
+  else                      c = vec3(t);          // grayscale
+  c = clamp(c, 0.0, 1.0);
+  // In light mode, invert so low values blend with the light background,
+  // matching how the Default palette flips between themes.
+  if (u_isDark == 0) c = vec3(1.0) - c;
+  return c;
 }
 
 // ── Value → [0,1] warp ─────────────────────────────────────────────────────────
@@ -570,7 +584,7 @@ vec3 computeViz(vec2 theta) {
   // dense to resolve (outer field far from lens).
   if (u_vizMode == 6) {
     float phi = fermatPotential(theta, tgt);
-    float interval = max(u_fov * u_fov * 0.002, EPS);
+    float interval = max(u_fov * u_fov * 0.002 * u_contourSpacing, EPS);
     float phi_n    = phi / interval;
     float fw       = fwidth(phi_n) * 0.5;
     float d        = min(fract(phi_n), 1.0 - fract(phi_n));
@@ -768,6 +782,7 @@ export class Renderer {
     gl.uniform1i (_locs.u_nSaddle,   Math.min(_saddles.length, 8));
     const _fb = fermatBeta ?? [0, 0];
     gl.uniform2f(_locs.u_fermatBeta, _fb[0] ?? 0, _fb[1] ?? 0);
+    gl.uniform1f(_locs.u_contourSpacing, _viz.contourSpacing ?? 1.0);
 
     const allPlanes = [...planes].sort((a, b) => a.z - b.z);
     const N = Math.min(allPlanes.length, MAX_PLANES);
@@ -980,6 +995,7 @@ export class Renderer {
       u_saddlePhi:    u('u_saddlePhi'),
       u_nSaddle:      u('u_nSaddle'),
       u_fermatBeta:   u('u_fermatBeta'),
+      u_contourSpacing: u('u_contourSpacing'),
     };
   }
 }

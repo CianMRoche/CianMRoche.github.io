@@ -27,6 +27,15 @@ function toggleTheme() {
   applyThemeIcons(next);
 }
 
+// Keyboard shortcut: press "d" to toggle dark/light (ignored while typing or with modifiers).
+document.addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key !== 'd' && e.key !== 'D') return;
+  const el = document.activeElement, tag = el && el.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (el && el.isContentEditable)) return;
+  toggleTheme();
+});
+
 // Reusable SVG markup for the sun/moon toggle button content.
 const THEME_BTN_INNER = `
   <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -745,7 +754,7 @@ function sandboxViewMarkup() {
       <h2>Sandbox</h2>
       <div class="view-header-actions">
         <button class="lbf-back" id="sb-back">&larr; Back to menu</button>
-        <button class="dark-toggle" id="sb-theme-btn" title="Toggle dark mode" aria-label="Toggle dark mode">${THEME_BTN_INNER}</button>
+        <button class="dark-toggle" id="sb-theme-btn" title="Toggle dark mode (D)" aria-label="Toggle dark mode">${THEME_BTN_INNER}</button>
       </div>
     </div>
     <div class="sb-main">
@@ -1077,7 +1086,7 @@ function renderLeaderboardView() {
       <h2>Leaderboards</h2>
       <div class="view-header-actions">
         <button id="lbf-back" class="lbf-back">&larr; Back to menu</button>
-        <button class="dark-toggle" id="lbf-theme-btn" title="Toggle dark mode" aria-label="Toggle dark mode">${THEME_BTN_INNER}</button>
+        <button class="dark-toggle" id="lbf-theme-btn" title="Toggle dark mode (D)" aria-label="Toggle dark mode">${THEME_BTN_INNER}</button>
       </div>
     </div>
     <div class="lbf-filters">
@@ -1350,7 +1359,7 @@ function buildShell() {
         <div class="meta timer hidden" id="timer">Time <b id="timer-val">—</b></div>
         <div class="meta">Score <b id="score-val">0</b></div>
         <a class="exit" href="#" id="exit-link">Quit</a>
-        <button class="dark-toggle" id="theme-toggle" title="Toggle dark mode" aria-label="Toggle dark mode">
+        <button class="dark-toggle" id="theme-toggle" title="Toggle dark mode (D)" aria-label="Toggle dark mode">
           <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
           </svg>
@@ -1591,7 +1600,7 @@ function menuMarkup() {
      </div>`;
   }).join('');
   return `
-    <button class="dark-toggle menu-theme-btn" title="Toggle dark mode" aria-label="Toggle dark mode">${THEME_BTN_INNER}</button>
+    <button class="dark-toggle menu-theme-btn" title="Toggle dark mode (D)" aria-label="Toggle dark mode">${THEME_BTN_INNER}</button>
     <h1><span class="chi">&chi;</span> by eye</h1>
     <p class="tagline">
       Estimate the tension between data and model. <br>New to &chi;&sup2;?

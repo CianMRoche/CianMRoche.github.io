@@ -1,0 +1,57 @@
+fov: 5.5
+zMax: 3
+vizMode: 6
+vizScale0: 1 0.5 0 1 0
+vizScale1: 0 0.5 0 2 0
+vizScale2: 0 0.5 0 0.5 0
+vizScale3: 4 0.5 1 30 0
+vizScale5: 0 0.5 0 2 0
+showCritCurves: false
+showCaustics: false
+showMarkers: true
+showLegend: true
+showColorbar: true
+critGridN: 512
+psGridStep: 0.02
+critZs: null
+contourSpacing: 1.2875
+fermatUseSourcePos: true
+fermatBetaX: -0.070466
+fermatBetaY: -0.034217
+fermatSrcPlaneZ: 1.0000
+planes:
+  - z: 0.500
+    objects:
+      - type: lens
+        model: sie
+        cx: -0.54973
+        cy: -0.37213
+        hidden: false
+        showShape: false
+        params:
+          b: 2.338414
+          q: 0.75
+          phi: 0
+      - type: lens
+        model: nie
+        cx: 0.54022
+        cy: 0.56047
+        hidden: false
+        showShape: false
+        params:
+          b: 1.813861
+          q: 0.75
+          phi: 0
+          rc: 0.2
+  - z: 1.000
+    objects:
+      - type: source
+        model: point
+        cx: -0.07047
+        cy: -0.03422
+        hidden: false
+        showShape: false
+        params:
+          sigma: 0.057994
+          amplitude: 1
+          color: '#ffffff'

@@ -20,7 +20,7 @@
       </nav>
     </div>
   </div>
-  <button id="dark-toggle" class="dark-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+  <button id="dark-toggle" class="dark-toggle" aria-label="Toggle dark mode" title="Toggle dark mode (D)">
     <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
     </svg>
@@ -40,18 +40,27 @@
     moons.forEach(function(el) { el.style.display = theme === 'dark' ? 'none'  : 'block'; });
   }
 
-  var btn = document.getElementById('dark-toggle');
-  if (btn) {
-    btn.addEventListener('click', function() {
-      var current = document.documentElement.getAttribute('data-theme') || 'dark';
-      var next = current === 'dark' ? 'light' : 'dark';
-      localStorage.setItem('theme', next);
-      applyTheme(next);
-      document.querySelectorAll('iframe').forEach(function(f) {
-        try { f.contentWindow.postMessage({ theme: next }, '*'); } catch(e) {}
-      });
+  function toggleTheme() {
+    var current = document.documentElement.getAttribute('data-theme') || 'dark';
+    var next = current === 'dark' ? 'light' : 'dark';
+    localStorage.setItem('theme', next);
+    applyTheme(next);
+    document.querySelectorAll('iframe').forEach(function(f) {
+      try { f.contentWindow.postMessage({ theme: next }, '*'); } catch(e) {}
     });
   }
+
+  var btn = document.getElementById('dark-toggle');
+  if (btn) btn.addEventListener('click', toggleTheme);
+
+  // Keyboard shortcut: press "d" to toggle dark/light (ignored while typing or with modifiers).
+  document.addEventListener('keydown', function(e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key !== 'd' && e.key !== 'D') return;
+    var el = document.activeElement, tag = el && el.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (el && el.isContentEditable)) return;
+    toggleTheme();
+  });
 
   applyTheme(localStorage.getItem('theme') || 'dark');
 })();

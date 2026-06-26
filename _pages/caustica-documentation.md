@@ -6,7 +6,11 @@ permalink: /caustica-documentation/
 
 [Caustica](/assets/caustica/) is a tool for easily visualizing strong gravitational lensing, named after the term used by 17th century mathematicians for the curves onto which refracted light rays converge, which were capable of burning objects.
 
----
+<figure class="doc-fig-wide">
+  <img class="img-light" src="/images/caustica-docs/ui-light.png" alt="The Caustica interface: lensed-image panel, redshift axis, plane panels, and controls.">
+  <img class="img-dark"  src="/images/caustica-docs/ui-dark.png"  alt="The Caustica interface: lensed-image panel, redshift axis, plane panels, and controls.">
+  <figcaption>The Caustica interface recreating a zigzag lens configuration. The image panel shows the lensed view; the redshift axis and plane panels hold the lens and source objects.</figcaption>
+</figure>
 
 ## Quick start
 
@@ -15,9 +19,7 @@ permalink: /caustica-documentation/
 3. **Click inside a plane panel** to place an object. Drag from an existing marker to move it. You can also drag objects directly in the main image panel.
 4. **Adjust parameters** in the Object Controls panel on the right. For hybrid objects, separate collapsible sections appear for the lens and source halves. The eye button excludes an object from the computation without deleting it.
 5. **The image panel** updates in real time. Press C to overlay critical curves and caustics. Use the recording tab to save a PNG, WebM, or GIF.
-6. **Save and load configurations** using the Save YAML / Load YAML buttons at the bottom of the Settings tab. The file stores all planes, objects, and parameters.
-
----
+6. **Save and load configurations** using the Save YAML / Load YAML buttons at the bottom of the Settings tab. The file stores all planes, objects, and parameters along with the full view state, so a loaded config reproduces the same picture: field of view, active quantity, per-quantity color mapping, contour spacing, the critical-curve and point-source resolution, and the overlay toggles. Any setting absent from a file (for instance one saved by an older version) loads at its default value.
 
 ## Keyboard shortcuts
 
@@ -35,19 +37,16 @@ permalink: /caustica-documentation/
 | `O` | Clear all objects from the selected plane |
 | `X` | Delete the selected plane |
 | `R` | Start / stop live recording |
+| `D` | Toggle dark / light theme |
 | `↑ ↓ ← →` | Nudge selected object (hold for acceleration) |
 | `Delete` / `Backspace` | Delete the selected object |
 | `Escape` | Deselect |
-
----
 
 ## 1. Coordinate system
 
 All angular positions are measured in **arcseconds** (″): object coordinates $(c_x, c_y)$, deflection angles, and size parameters all use this unit.
 The image panel shows a square patch of sky of side *field of view* `fov` (default 4″), centred on the optical axis.
 Radians appear only in intermediate formulae and are converted back to arcseconds throughout.
-
----
 
 ## 2. Cosmological distances
 
@@ -93,15 +92,17 @@ Distances are precomputed once whenever the plane configuration changes and pack
 | `D_obs[i]` | $D(0, z_i)$ | Observer to plane $i$ |
 | `D_btwn[i,j]` | $D(z_i, z_j)$ | Between planes $i$ and $j$ |
 
----
-
 ## 3. Multiplane lensing recursion
 
 Planes are sorted by increasing redshift.
 A ray **observed** at image-plane angle $\boldsymbol{\theta}$ (a 2-D vector in arcsec) is traced forward through each plane in order.
 Its angular position at plane $j$ is given by the *multiplane recursion* (Schneider, Ehlers & Falco 1992):
 
+<div class="doc-key" markdown="1">
+**Multiplane recursion**
+
 $$\boldsymbol{\theta}_j \;=\; \boldsymbol{\theta} \;-\; \sum_{k\,<\,j} \frac{D_{kj}}{D_j}\;\hat{\boldsymbol{\alpha}}_k\left(\boldsymbol{\theta}_k\right)$$
+</div>
 
 | Symbol | Meaning |
 |---|---|
@@ -118,9 +119,22 @@ The weight $D_{kj}/D_j$ converts the deflection at plane $k$ into its angular di
 
 The position at the target plane is the **source-plane position** $\boldsymbol{\beta}$, where source brightness is sampled.
 
-> Because each lens plane evaluates its deflection at the ray's *already-deflected* position $\boldsymbol{\theta}_k$, successive lens planes interact non-linearly, a key feature of multiplane lensing absent in single-plane calculations.
+<div class="doc-note" markdown="1">
+**Key idea.** Because each lens plane evaluates its deflection at the ray's *already-deflected* position $\boldsymbol{\theta}_k$, successive lens planes interact non-linearly, a key feature of multiplane lensing absent in single-plane calculations.
+</div>
 
----
+<div class="doc-figpair">
+  <figure class="figpair-main">
+    <img class="img-light" src="/images/caustica-docs/multiplane-light.png" alt="Two lens planes at different redshifts bending light from a background source into arcs.">
+    <img class="img-dark"  src="/images/caustica-docs/multiplane-dark.png"  alt="Two lens planes at different redshifts bending light from a background source into arcs.">
+    <figcaption>A two-lens-plane configuration: lenses at z = 0.4 and z = 0.8 deflect light from a source at z = 1.6, the two deflections compounding non-linearly.</figcaption>
+  </figure>
+  <figure class="figpair-side">
+    <img class="img-light" src="/images/caustica-docs/plane-timeline-light.png" alt="Redshift timeline showing two lens planes and a source plane as draggable markers.">
+    <img class="img-dark"  src="/images/caustica-docs/plane-timeline-dark.png"  alt="Redshift timeline showing two lens planes and a source plane as draggable markers.">
+    <figcaption>The plane controls for the same scene: each plane is a marker on the redshift timeline (observer at z = 0), draggable to set its redshift. Objects are added to the selected plane.</figcaption>
+  </figure>
+</div>
 
 ## 4. Lensing quantities
 
@@ -143,8 +157,27 @@ Four Jacobian-derived quantities are available:
 |---|---|---|
 | Convergence $\kappa$ | $1 - \tfrac{1}{2}(A_{11}+A_{22})$ | Dimensionless projected mass density scaled by the critical surface density. $\kappa=0$ in empty space; $\kappa=1$ on the Einstein ring. |
 | Shear $\gamma$ | $\sqrt{\gamma_1^2+\gamma_2^2}$, where $\gamma_1=\tfrac{1}{2}(A_{22}-A_{11})$, $\gamma_2=-\tfrac{1}{2}(A_{12}+A_{21})$ | Tidal distortion; zero for a circularly symmetric lens at its centre. |
-| Magnification $\mu$ | $1/\lvert\det A\rvert$ | Ratio of image to source solid angle; diverges on critical curves. Displayed on a log scale. |
-| Deflection $\lvert\hat{\boldsymbol{\alpha}}\rvert$ | $\lvert\boldsymbol{\theta} - \boldsymbol{\beta}(\boldsymbol{\theta})\rvert$ | Total accumulated deflection angle in arcseconds from observer to source plane. Linear scale, saturates at 2″. |
+| Magnification $\mu$ | $1/\lvert\det A\rvert$ | Ratio of image to source solid angle; diverges on critical curves. Log colour scale over $\mu \in [1, 30]$ by default (adjustable). |
+| Deflection $\lvert\hat{\boldsymbol{\alpha}}\rvert$ | $\lvert\boldsymbol{\theta} - \boldsymbol{\beta}(\boldsymbol{\theta})\rvert$ | Total accumulated deflection angle in arcseconds from observer to source plane. Linear colour scale over $[0, 2]$″ by default (adjustable). |
+
+<div class="doc-figrow">
+  <figure>
+    <img class="img-light" src="/images/caustica-docs/kappa-light.png" alt="Convergence map of a compound lens.">
+    <img class="img-dark"  src="/images/caustica-docs/kappa-dark.png"  alt="Convergence map of a compound lens.">
+    <figcaption>Convergence κ</figcaption>
+  </figure>
+  <figure>
+    <img class="img-light" src="/images/caustica-docs/gamma-light.png" alt="Shear map of a compound lens.">
+    <img class="img-dark"  src="/images/caustica-docs/gamma-dark.png"  alt="Shear map of a compound lens.">
+    <figcaption>Shear γ</figcaption>
+  </figure>
+  <figure>
+    <img class="img-light" src="/images/caustica-docs/mu-light.png" alt="Magnification map of a compound lens.">
+    <img class="img-dark"  src="/images/caustica-docs/mu-dark.png"  alt="Magnification map of a compound lens.">
+    <figcaption>Magnification |μ|</figcaption>
+  </figure>
+</div>
+<figcaption style="text-align:center">Convergence, shear, and magnification maps for the same compound lens (a main galaxy with an an off-centre companion), at source redshift z<sub>s</sub>=1.5.</figcaption>
 
 ### Distance weighting and the effective shear
 
@@ -164,21 +197,86 @@ The finite-difference Jacobian is accurate everywhere except very close to singu
 Near such singularities the truncation error of the central-difference scheme can produce small spurious structure in the $\kappa$ map; convergence is clamped to zero in the display to suppress the most prominent artefacts.
 The shear and magnification maps are less affected.
 
-### Fermat potential (key `T`)
+### Colour scale, limits, and palette
 
-The **Fermat potential** (also called the arrival-time surface) maps each image-plane position $\boldsymbol{\theta}$ to the light-travel time relative to an undeflected path, for a source at position $\boldsymbol{\beta}_s$ in the source plane:
+The $\kappa$, $\gamma$, $\lvert\mu\rvert$, and $\lvert\hat{\boldsymbol{\alpha}}\rvert$ maps share a set of controls in the collapsible **Color Map** section of the Settings tab. Each map remembers its own settings.
 
-$$\varphi(\boldsymbol{\theta};\boldsymbol{\beta}_s) = \frac{1}{2}|\boldsymbol{\theta} - \boldsymbol{\beta}_s|^2 - \psi_\text{eff}(\boldsymbol{\theta})$$
+A raw quantity value $v$ is mapped to a colour in two steps: first warped to a normalised position $t \in [0,1]$ between the chosen limits, then passed through the selected colour palette.
 
-By default $\boldsymbol{\beta}_s = 0$ (source at the coordinate origin). When the **Use last selected source for Fermat potential source position/redshift** checkbox in the General settings panel is enabled, the position and source-plane redshift of the most recently selected source object are used instead, so the arrival-time surface and image markers reflect the actual source being lensed.
+- **Min / Max** set the data values mapped to the two ends of the colour bar; values outside are clamped. Each field can be typed, nudged with the spinner (whose step scales to the value's magnitude), or **dragged left/right to scrub** continuously.
+- **Scale** chooses the warp from value to colour:
 
-$\psi_\text{eff}$ is the effective multiplane lensing potential:
+| Scale | Mapping | Notes |
+|---|---|---|
+| Linear | $t = \dfrac{v - \text{min}}{\text{max}-\text{min}}$ | Proportional. |
+| Square root | $t = \sqrt{u}$ | Expands low values. |
+| Log | $t = \dfrac{\ln v - \ln\text{min}}{\ln\text{max} - \ln\text{min}}$ | True logarithmic axis; needs $\text{min} > 0$. Default for $\lvert\mu\rvert$. |
+| Power law | $t = u^{\gamma}$, $\gamma \in [0.1, 2]$ | $\gamma < 1$ brightens low values; $\gamma > 1$ emphasises high values. |
+| Asinh | $t = \operatorname{asinh}(a\,u)/\operatorname{asinh}(a)$, $a \in [0.5, 20]$ | Linear near the bottom, logarithmic at the top. |
 
-$$\psi_\text{eff}(\boldsymbol{\theta}) = \sum_k \frac{D_{k,s}}{D_s}\,\psi_k\!\left(\boldsymbol{\theta}_k\right)$$
+(where $u = (v-\text{min})/(\text{max}-\text{min})$ clamped to $[0,1]$).
 
-$D_{k,s}$ is the angular diameter distance from lens plane $k$ to the source, $D_s$ is the observer-to-source distance, and $\psi_k$ is the analytic lensing potential of plane $k$ evaluated at the ray's position $\boldsymbol{\theta}_k$ in that plane.
+- **Colormap** selects the palette: **Default** (theme-aware purple→orange→yellow), **Viridis**, **Inferno**, **Plasma**, **Turbo**, or **Grayscale**. The standard palettes are evaluated on the GPU via compact polynomial fits and are theme-independent.
+- **Show colorbar** toggles the on-canvas colour bar, which is labelled with the current Min/Max (at most two decimal places).
 
-The physical time delay between an image at $\boldsymbol{\theta}$ and a reference position is proportional to $\varphi(\boldsymbol{\theta};\boldsymbol{\beta}_s)$. Images of the source at $\boldsymbol{\beta}_s$ form at **stationary points** of $\varphi$, i.e. where $\nabla\varphi = \boldsymbol{\beta}(\boldsymbol{\theta}) - \boldsymbol{\beta}_s = 0$.
+A small ⓘ button in the section header summarises whichever controls are currently shown. The same Min/Max/Scale machinery also drives the brightness stretch of the lensed-image view (§6).
+
+<div class="doc-figrow">
+  <figure>
+    <img class="img-light" src="/images/caustica-docs/cmap-default-light.png" alt="Magnification map with the Default palette.">
+    <img class="img-dark"  src="/images/caustica-docs/cmap-default-dark.png"  alt="Magnification map with the Default palette.">
+    <figcaption>Default</figcaption>
+  </figure>
+  <figure>
+    <img class="img-light" src="/images/caustica-docs/cmap-viridis-light.png" alt="Magnification map with the Viridis palette.">
+    <img class="img-dark"  src="/images/caustica-docs/cmap-viridis-dark.png"  alt="Magnification map with the Viridis palette.">
+    <figcaption>Viridis</figcaption>
+  </figure>
+  <figure>
+    <img class="img-light" src="/images/caustica-docs/cmap-turbo-light.png" alt="Magnification map with the Turbo palette.">
+    <img class="img-dark"  src="/images/caustica-docs/cmap-turbo-dark.png"  alt="Magnification map with the Turbo palette.">
+    <figcaption>Turbo</figcaption>
+  </figure>
+</div>
+<figcaption style="text-align:center">The same compound-lens |μ| map under three palettes, log scale over the same limits.</figcaption>
+
+### Fermat potential
+
+The **Fermat potential** (also called the arrival-time surface) maps each image-plane position $\boldsymbol{\theta}$ to the light-travel time relative to an undeflected path, for a source at a fixed position $\boldsymbol{\beta}_s$ in the source plane. Caustica builds the full multiplane arrival-time surface in **comoving transverse coordinates** $\boldsymbol{\eta}_j = \chi_j\,\boldsymbol{\theta}_j$, where $\chi_j$ is the comoving distance to plane $j$ and $\boldsymbol{\theta}_j$ is the ray's angular position there. The surface sums geometric path-length terms over a reduced sequence of nodes (the observer, each **lens** plane, and the source) minus the lensing potentials:
+
+<div class="doc-key" markdown="1">
+**Fermat (arrival-time) surface**
+
+$$\varphi(\boldsymbol{\theta};\boldsymbol{\beta}_s) = \frac{1}{K}\left[\;\sum_{\text{segments}} \frac{1}{2}\,\frac{\lvert\boldsymbol{\eta}_{j+1} - \boldsymbol{\eta}_j\rvert^2}{\chi_{j+1} - \chi_j} \;-\; \sum_{\text{lens planes } k} \chi_k\,\psi_k(\boldsymbol{\theta}_k)\;\right]$$
+</div>
+
+The node sequence runs observer $(\chi=0,\,\boldsymbol{\eta}=\mathbf{0}) \to$ each lens plane $(\chi_k,\,\boldsymbol{\eta}_k) \to$ source $(\chi_s,\,\boldsymbol{\eta}_s = \chi_s\boldsymbol{\beta}_s)$, with the final node **pinned** to the fixed source position $\boldsymbol{\beta}_s$ rather than the traced one. The normalisation $K = \chi_L\,\chi_s/(\chi_s - \chi_L)$, with $\chi_L$ the comoving distance to the first lens plane, rescales the surface so that the single-plane case reduces exactly to the textbook $\tfrac{1}{2}\lvert\boldsymbol{\theta}-\boldsymbol{\beta}_s\rvert^2 - \psi$ and the contour field stays of order unity. $\psi_k$ is the analytic lensing potential of plane $k$ (table below), evaluated at the ray's position $\boldsymbol{\theta}_k$.
+
+Two properties make this the physically correct surface, and distinguish it from a naïve single-plane generalisation.
+
+**Empty planes do nothing.** Between deflections a ray drifts in a straight comoving line, so planes containing no lens are skipped entirely. Inserting or moving an empty plane therefore leaves $\varphi$ unchanged. A formula written in angular rather than comoving coordinates fails this test, because the $(1+z)$ factors in the angular diameter distances do not cancel.
+
+**Stationary points are images.** With the source node pinned, the gradient of the arrival-time surface is
+
+$$\nabla_{\boldsymbol{\theta}}\,\varphi = \boldsymbol{\beta}(\boldsymbol{\theta}) - \boldsymbol{\beta}_s ,$$
+
+which vanishes exactly where the traced source position $\boldsymbol{\beta}(\boldsymbol{\theta})$ equals the fixed source position, the image positions. The relative time delay between two images is proportional to their difference in $\varphi$.
+
+By default $\boldsymbol{\beta}_s = 0$ (source at the coordinate origin). When the **Use last selected source** checkbox in the Fermat Potential settings section (shown only in this mode) is enabled, the position and source-plane redshift of the most recently selected source object are used instead, so the arrival-time surface and image markers reflect the actual source being lensed.
+
+<div class="doc-figrow doc-figrow-wide">
+  <figure>
+    <img class="img-light" src="/images/caustica-docs/fermat-light.png" alt="Fermat arrival-time contour map with image-position markers.">
+    <img class="img-dark"  src="/images/caustica-docs/fermat-dark.png"  alt="Fermat arrival-time contour map with image-position markers.">
+    <figcaption>Arrival-time surface: iso-φ contours with the image markers (I, II, III) at its stationary points.</figcaption>
+  </figure>
+  <figure>
+    <img class="img-light" src="/images/caustica-docs/fermat-images-light.png" alt="The same lens with a uniform circle source, showing the lensed images.">
+    <img class="img-dark"  src="/images/caustica-docs/fermat-images-dark.png"  alt="The same lens with a uniform circle source, showing the lensed images.">
+    <figcaption>The same lens with a uniform circle source: each lensed image lands exactly on a stationary point at left.</figcaption>
+  </figure>
+</div>
+<figcaption style="text-align:center">Images form at stationary points of the arrival-time surface. Left: the surface and its markers. Right: the actual lensed light of a uniform circle source at the same positions.</figcaption>
 
 #### Image type classification
 
@@ -194,7 +292,7 @@ By Morse theory, for a source inside all caustics the image count follows the se
 
 #### Display
 
-The map shows iso-$\varphi$ contour lines computed analytically per pixel in the fragment shader. Contour spacing is $0.002\,\text{fov}^2$ arcsec². Contours fade toward the edge of the field. The contour passing through each Type II (saddle) image is drawn thicker and brighter because it separates distinct image regions on the arrival-time surface. Stationary point positions are overlaid as markers (circle for Type I, diamond for Type II, triangle for Type III) with a type legend in the lower right.
+The map shows iso-$\varphi$ contour lines computed analytically per pixel in the fragment shader. The default contour spacing is $0.002\,\text{fov}^2$ arcsec², adjustable with the **Spacing** control in the Contours section of the Settings panel (a multiplier of this default, available whenever the Fermat map is shown). Because the spacing scales with the field of view, the contour density stays similar as you zoom. Contours fade toward the edge of the field. The contour passing through each Type II (saddle) image is drawn thicker and brighter because it separates distinct image regions on the arrival-time surface, and this highlight tracks the chosen spacing. Stationary point positions are overlaid as markers (circle for Type I, diamond for Type II, triangle for Type III) with a type legend in the lower right.
 
 #### Lensing potentials by model
 
@@ -203,19 +301,17 @@ The potential $\psi_k$ is computed analytically where a closed form exists:
 | Model | $\psi$ |
 |---|---|
 | Point mass | $b^2 \ln r$ |
-| SIE / NIE | $\displaystyle\frac{bq}{\sqrt{1-q^2}}\!\left[x_r\arctan\frac{\sqrt{1-q^2}\,x_r}{r_e+s} + y_r\operatorname{arctanh}\frac{\sqrt{1-q^2}\,y_r}{r_e+q^2 s}\right]$ |
+| SIE / NIE | $\displaystyle\frac{bq}{\sqrt{1-q^2}}\left[x_r\arctan\frac{\sqrt{1-q^2}\,x_r}{r_e+s} + y_r\operatorname{arctanh}\frac{\sqrt{1-q^2}\,y_r}{r_e+q^2 s}\right]$ |
 | External shear | $\tfrac{\gamma}{2}\left[(\theta_x^2-\theta_y^2)\cos 2\varphi + 2\theta_x\theta_y\sin 2\varphi\right]$ |
 | External convergence | $\tfrac{\kappa}{2}\lvert\boldsymbol{\theta}\rvert^2$ |
 | Constant deflection | $\alpha(\theta_x\cos\varphi + \theta_y\sin\varphi)$ |
 | EPL | 0 (no closed form for the scaled-SIE approximation used here) |
 
-For EPL lenses, $\psi_\text{eff}$ receives only the geometric term $\tfrac{1}{2}\lvert\boldsymbol{\theta}\rvert^2$, so the Fermat potential reduces to a simple paraboloid centred on the lens for EPL-only configurations. This is noted in the EPL control panel.
+For EPL lenses $\psi_k = 0$ (no closed form for the scaled-SIE approximation), so only the geometric term contributes and the Fermat potential reduces to a simple paraboloid for EPL-only configurations. This is noted in the EPL control panel.
 
 #### Gauge note
 
 The zero level of $\varphi$ has no absolute physical meaning; it depends on the normalisation convention. For a singular isothermal sphere with Einstein radius $b$ and source at the origin, $\varphi(\boldsymbol{\theta};0) = 0$ at $r = 0$ and $r = 2b$, not at the Einstein ring ($r = b$). What is physically meaningful is the **difference** in $\varphi$ between two images, which is proportional to the relative time delay between those images.
-
----
 
 ## 5. Lens deflection models
 
@@ -311,7 +407,9 @@ This follows from the lensing potential $\psi = \tfrac{\gamma_\text{ext}}{2}\lef
 
 The shear object's position in the plane panel has no effect on the lensing computation; the deflection is always computed relative to the coordinate origin. The marker and direction arrow can be repositioned freely for visual organisation.
 
-> The effective shear visible in the lensing-quantities map is $\gamma_\text{eff} = \gamma_\text{ext} \cdot D_{ls}/D_s$, not $\gamma_\text{ext}$ itself. See §4 for details.
+<div class="doc-note" markdown="1">
+**Note.** The effective shear visible in the lensing-quantities map is $\gamma_\text{eff} = \gamma_\text{ext} \cdot D_{ls}/D_s$, not $\gamma_\text{ext}$ itself. See §4 for details.
+</div>
 
 ### Constant deflection
 
@@ -342,8 +440,6 @@ This follows from the potential $\psi = \tfrac{\kappa}{2}\lvert\boldsymbol{\thet
 
 The object's position has no effect on the lensing. External convergence is related to the **mass sheet degeneracy**: a uniform sheet cannot be distinguished from a rescaling of all lens masses and source distances using image positions alone.
 
----
-
 ## 6. Source brightness models
 
 Once a ray arrives at a plane at position $\boldsymbol{\beta}$, the brightness of each source object at that plane is evaluated.
@@ -361,6 +457,25 @@ Note: $r_\text{ell}$ differs from the lens elliptical radius $r_e$ by a factor o
 | $q$ | Axis ratio minor/major, $0 \lt q \leq 1$ |
 | $\sigma$ | Scale radius (arcsec) |
 | $A$ | Amplitude (peak surface brightness) |
+
+<div class="doc-figrow">
+  <figure>
+    <img class="img-light" src="/images/caustica-docs/src-pointsource-light.png" alt="Point source lensed by an SIE into multiple images.">
+    <img class="img-dark"  src="/images/caustica-docs/src-pointsource-dark.png"  alt="Point source lensed by an SIE into multiple images.">
+    <figcaption>Point source</figcaption>
+  </figure>
+  <figure>
+    <img class="img-light" src="/images/caustica-docs/src-gaussian-light.png" alt="Gaussian source lensed by an SIE.">
+    <img class="img-dark"  src="/images/caustica-docs/src-gaussian-dark.png"  alt="Gaussian source lensed by an SIE.">
+    <figcaption>Gaussian</figcaption>
+  </figure>
+  <figure>
+    <img class="img-light" src="/images/caustica-docs/src-pasted-light.png" alt="A pasted image lensed by an SIE.">
+    <img class="img-dark"  src="/images/caustica-docs/src-pasted-dark.png"  alt="A pasted image lensed by an SIE.">
+    <figcaption>Pasted image</figcaption>
+  </figure>
+</div>
+<figcaption style="text-align:center">The same SIE lens acting on three source types: an idealised point source, a Gaussian blob, and a pasted image.</figcaption>
 
 ### Gaussian
 
@@ -382,11 +497,13 @@ A filled disc of constant brightness with radius $\sigma$. The axis ratio $q$ is
 
 ### Point source
 
-A mathematically point-like source for simulating quasars or other compact objects. The source position $(c_x, c_y)$ is specified in the source plane; the simulator finds all image positions $\{\theta_i\}$ by solving the lens equation $\beta(\theta) = (c_x, c_y)$ numerically, then draws a circle of fixed angular radius $\sigma$ at each $\theta_i$ in the image plane.
+A mathematically point-like source for simulating quasars or other compact objects. The source position $(c_x, c_y)$ is specified in the source plane; the simulator finds all image positions $\lbrace\theta_i\rbrace$ by solving the lens equation $\beta(\theta) = (c_x, c_y)$ numerically, then draws a circle of fixed angular radius $\sigma$ at each $\theta_i$ in the image plane.
 
 Image positions are found via a two-stage algorithm: a coarse grid search using sign-change topology to locate starting guesses, followed by Newton–Raphson refinement with backtracking line search until $\lvert F(\theta)\rvert^2 \lt 10^{-14}$ arcsec². Each converged solution is deduplicated. Because the circles are drawn in the image plane with fixed size, they are not stretched or sheared by lensing; this is appropriate for modelling the PSF-limited appearance of a quasar image.
 
-> Einstein rings and arc-shaped images do not appear in this mode. Use a Gaussian or uniform circle source for extended-emission lensing. Highly demagnified images (such as the central odd image of an SIE lens) may be missed by the grid search.
+<div class="doc-warning" markdown="1">
+**Heads up.** Einstein rings and arc-shaped images do not appear in this mode. Use a Gaussian or uniform circle source for extended-emission lensing. Highly demagnified images (such as the central odd image of an SIE lens) may be missed by the grid search.
+</div>
 
 The grid spacing used for image finding is set in the Settings tab under **Point Source**. Finer spacing finds images more reliably near caustics but is slower; the default is 20 mas.
 
@@ -395,24 +512,18 @@ The grid spacing used for image finding is set in the Settings tab under **Point
 A user-pasted image is uploaded to the GPU as a WebGL texture.
 At each pixel, $\boldsymbol{\beta}$ is converted to UV coordinates centred on $(c_x, c_y)$ spanning $\pm\tfrac{\text{fov}}{2}$ arcsec, and the texture is sampled with bilinear interpolation.
 
-### Compositing and tone mapping
+### Compositing and brightness stretch
 
 Contributions from all source objects across all planes are summed per pixel to give a linear intensity $I \in [0,\infty)$.
 Hidden objects contribute nothing to the sum, nor to deflection or critical curve computation.
-The sum is clamped to $[0,1]$ and passed through a tone-mapping curve before display.
+The sum is clamped to $[0,1]$ and passed through a nonlinear stretch before display.
 
-The dynamic range of astrophysical sources (bright ring core to faint extended arcs) far exceeds what a monitor can show linearly, so a nonlinear stretch is applied. Four options are available:
+The dynamic range of astrophysical sources (bright ring core to faint extended arcs) far exceeds what a monitor can show linearly, so the stretch is essential. In surface-brightness mode the **Color Map** section of the Settings tab is titled **Brightness stretch** and exposes the same machinery used for the quantity maps (§4), applied independently to each RGB channel:
 
-| Mode | Formula | Parameter | Character |
-|---|---|---|---|
-| Linear | $\text{out} = I$ | — | No stretch. Faint arcs invisible; bright cores sharp. |
-| Square root | $\text{out} = \sqrt{I}$ | — | Moderate fixed stretch ($\gamma = 0.5$). Default. |
-| Power law | $\text{out} = I^\gamma$ | $\gamma \in [0.1,\,1]$ | Generalises square root. Lower $\gamma$ lifts faint emission more aggressively. |
-| Asinh | $\text{out} = \operatorname{asinh}(aI)\,/\,\operatorname{asinh}(a)$ | $a \in [0.5,\,20]$ | Near-linear at low $I$, logarithmic at high $I$. Used by SDSS, HST, and modern survey pipelines (Lupton et al. 2004). Larger $a$ gives a stronger stretch. |
+- **Black / White** points (the Min/Max limits, default $0$ and $1$): intensities at or below Black map to the background; at or above White they saturate.
+- **Scale**: Linear, Square root (default, $\gamma=0.5$), Log, Power law ($\gamma \in [0.1, 2]$; lower $\gamma$ lifts faint emission more aggressively), or Asinh ($a \in [0.5, 20]$; near-linear at low intensity, logarithmic at high, the stretch used by SDSS, HST, and modern survey pipelines, Lupton et al. 2004).
 
-All modes satisfy $f(0)=0$ and $f(1)=1$, so the output always spans $[0,1]$.
-
----
+With the default Black/White points of $0$ and $1$ the Square root, Power law, and Asinh curves all satisfy $f(0)=0$ and $f(1)=1$, reproducing the classic tone-mapping curves exactly. The colour-palette dropdown is hidden in this mode, since the lensed image carries its own colour.
 
 ## 7. Critical curves and caustics
 
@@ -430,9 +541,15 @@ The computation proceeds in four steps:
 
 4. **Map to caustics.** Each critical-curve point is traced to the source plane by interpolating from the already-computed $\boldsymbol{\beta}$ grid.
 
-> Fine features such as cusps are only resolved at higher resolutions.
+<figure>
+  <img class="img-light" src="/images/caustica-docs/crit-light.png" alt="Critical curves and caustics of a compound lens.">
+  <img class="img-dark"  src="/images/caustica-docs/crit-dark.png"  alt="Critical curves and caustics of a compound lens.">
+  <figcaption>Critical curves (image plane) and their caustics for a compound lens, toggled with the C key. The extra mass components merge and distort the curves well beyond the simple SIE case. A source crossing a caustic changes the image count by two.</figcaption>
+</figure>
 
----
+<div class="doc-note" markdown="1">
+**Note.** Fine features such as cusps are only resolved at higher resolutions.
+</div>
 
 ## 8. Code structure
 
@@ -452,25 +569,26 @@ Pure physics; no DOM access or rendering.
 
 WebGL2 GPU renderer.
 
-- A single **GLSL 300 es fragment shader** runs the full multiplane lensing computation per pixel: it re-implements the multiplane recursion, all lens deflection models, all source brightness profiles, and tone mapping entirely on the GPU.
-- Scene data (plane redshifts, lens positions and parameters, source positions and parameters, pasted-image textures) are packed into uniform arrays and uploaded each frame. Fermat mode additionally receives up to 8 saddle-image $\varphi$ values as a float array uniform so the shader can highlight those contour levels.
-- The shader includes `lensPotential()` for analytic per-model potentials and `traceToPlaneWithPsi()`, which traces the ray while accumulating the effective potential $\psi_\text{eff}$ used in the Fermat quantity map.
-- The `Renderer` class manages the WebGL context, shader compilation, geometry, and texture slots. `setScene(planes, dist, fov, toneMap, toneMapParam, vizMode, vizSrcIdx, isDark, saddlePhis)` triggers a redraw.
+- A single **GLSL 300 es fragment shader** runs the full multiplane lensing computation per pixel: it re-implements the multiplane recursion, all lens deflection models, all source brightness profiles, the colour-mapping warp, and the colour palettes entirely on the GPU.
+- Scene data (plane redshifts and comoving distances, lens positions and parameters, source positions and parameters, pasted-image textures) are packed into uniform arrays and uploaded each frame. Fermat mode additionally receives up to 8 saddle-image $\varphi$ values as a float array uniform so the shader can highlight those contour levels.
+- The shader includes `lensPotential()` for analytic per-model potentials and `fermatPotential()`, which traces the ray and evaluates the comoving arrival-time surface (§4) for the Fermat map.
+- `vizWarp()` applies the value→$[0,1]$ warp (linear/sqrt/log/power/asinh) and `applyColormap()` selects the palette; both are driven by the `u_vizScale`, `u_vizScaleParam`, `u_vizMin`, `u_vizMax`, and `u_colormap` uniforms.
+- The `Renderer` class manages the WebGL context, shader compilation, geometry, and texture slots. `setScene(planes, dist, fov, viz, vizMode, vizSrcIdx, isDark, saddlePhis, fermatBeta)` triggers a redraw, where `viz = { scale, param, min, max, palette }`.
 - `preserveDrawingBuffer: true` is set on the WebGL context to allow screenshot and recording capture.
 
 ### `main.js`
 
 Application shell (~2500 lines).
 
-- **`state`**: single object holding all mutable app state: planes and their objects, selected IDs, display flags, add mode, tone-map settings, recording state.
+- **`state`**: single object holding all mutable app state: planes and their objects, selected IDs, display flags, add mode, per-viz-mode colour-mapping settings (`vizScale`: scale, parameter, limits, and palette for each of surface brightness, $\kappa$, $\gamma$, $\lvert\mu\rvert$, $\lvert\hat{\boldsymbol{\alpha}}\rvert$), recording state.
 - **`buildDOM()`**: constructs the entire UI tree in one pass (image panel, sidebar tabs, redshift axis, plane boxes area, toolbar, plane setup bar).
 - **Event wiring**: `attachHandlers()` for global keyboard/tab/toolbar events; `attachAxisHandlers()` for plane-dragging on the redshift axis; `attachPlaneCanvasHandlers(canvas, plane)` per plane panel; `attachImageHandlers(wrap)` for drag-to-move in the main image.
 - **`renderSidebar()`**: rebuilds the Object Controls and settings/recording tab content. Called whenever selection or state changes.
 - **`rebuildPlaneBoxes()`**: rebuilds the plane panel DOM from scratch, called when planes are added or removed.
-- **`_doRedraw()`**: packs the scene into the renderer, redraws the axis canvas, and redraws the overlay (critical curves, position markers, legend) on a 2D canvas layered above the WebGL output. In Fermat mode, `findStationaryPoints()` locates images of a source at the origin via a grid search followed by Newton-Raphson refinement, classifies them by Jacobian type, and computes their $\varphi$ values using `_computePsiEff()` (a CPU-side mirror of the shader potential accumulation) before passing saddle $\varphi$ levels to the renderer.
-- **Recording**: `captureSnapshot()` composites the WebGL canvas and overlay into a PNG; `startRecording()` / `stopRecording()` drive a `MediaRecorder` for WebM or a gif.js encoder for GIF.
+- **`_doRedraw()`**: packs the scene into the renderer, redraws the axis canvas, and redraws the overlay (critical curves, position markers, legend) on a 2D canvas layered above the WebGL output. In Fermat mode, `findStationaryPoints()` locates images of the source at $\boldsymbol{\beta}_s$ via a grid search followed by Newton-Raphson refinement, classifies them by Jacobian type, and computes their $\varphi$ values using `_computeFullFermat()` (a CPU-side mirror of the shader's comoving arrival-time surface) before passing saddle $\varphi$ levels to the renderer.
+- **Recording**: `captureSnapshot()` composites the WebGL canvas and overlay into a PNG, reflecting the current view (lensed image or quantity map); `startRecording()` / `stopRecording()` drive a `MediaRecorder` for WebM or a gif.js encoder for GIF. UI chrome (the viz-mode chip, colour bar, sidebar) lives in separate DOM elements and is intentionally excluded from both PNG and recordings. The light-mode colour inversion that matches the on-screen lensed image is applied only in surface-brightness mode, since the quantity maps carry their own theming.
 - **Programmatic recording**: each selected object can have an initial and final position set; `startProgrammaticRecording()` interpolates all registered objects simultaneously.
-- **Config save/load**: `configToYaml()` serialises all planes and objects to a human-readable YAML string; `parseYamlConfig()` parses it back with strict type and range validation (allowlisted model names, hex-only color strings, bounded numeric coordinates) before updating state.
+- **Config save/load**: `configToYaml()` serialises all planes and objects, plus the view state needed to reproduce the rendered image (field of view, $z_\text{max}$, active viz mode, per-mode color mapping, contour spacing, critical-curve and point-source resolution, the critical-curve redshift, and the marker/legend/colorbar/critical-curve/caustic toggles), to a human-readable YAML string. `parseYamlConfig()` parses it back with strict type and range validation (allowlisted model names, hex-only color strings, bounded numeric coordinates). The scalar view settings are centralised in a `CONFIG_DEFAULTS` table that both seeds the initial state and supplies the fallback for any field missing from a loaded file, so older or partial configs load to a fully defined visual state rather than inheriting whatever was on screen. The page theme and pasted-image textures are not part of the config (the former is a site-wide preference, the latter is binary data).
 - **Tour**: `startTour()` / `showTourStep()`: spotlight-and-tooltip tutorial with mobile-aware step callbacks that open/close the plane setup drawer and switch mobile tabs as needed.
 
 ### `style.css`
@@ -483,11 +601,10 @@ The layout uses flexbox throughout: three-column on wide screens, collapsing to 
 A vendored local copy of the gif.js library.
 Loaded lazily (only when GIF recording is requested) via a dynamic `<script>` tag, avoiding cross-origin Web Worker restrictions that would arise from a CDN-hosted copy.
 
----
-
 ## References
 
 - Schneider, Ehlers & Falco (1992), *Gravitational Lenses*, Springer. *(Multiplane lensing formalism.)*
 - Kormann, Schneider & Bartelmann (1994), Isothermal ellipsoidal mass distributions in gravitational lensing, A&A 284. *(SIE deflection angles.)*
 - Blandford & Narayan (1986), Fermat surface, caustics, and the time delay between images, ApJ 310. *(Fermat principle formulation of gravitational lensing; image types and time delays.)*
 - Lupton, Blanton, Fekete et al. (2004), Preparing Red-Green-Blue Images from CCD Data, PASP 116. *(Asinh stretch for astronomical image display.)*
+- Smith & van der Walt (2015), matplotlib viridis/inferno/plasma colormaps; Mikhailov (2019), Turbo colormap. *(Perceptually uniform palettes; implemented here via compact polynomial fits.)*

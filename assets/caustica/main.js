@@ -42,7 +42,7 @@ function hybridLensHalf(plane, obj) {
 // Per-hybrid panel expansion state; reset when a different hybrid is selected.
 let _hybridExpanded   = { lens: false, src: false };
 let _lastHybridId     = null;
-let _settingsExpanded = { general: false, cmap: false, crit: false, ps: false };
+let _settingsExpanded = { general: false, cmap: false, contours: false, crit: false, ps: false };
 let _progExpanded     = false;
 
 // Invert a 6-digit hex colour (#rrggbb → complement).
@@ -59,29 +59,37 @@ const CRIT_COLOR = 'rgba(248, 113, 196, 0.95)';
 const CAUS_COLOR = 'rgba(134, 239, 172, 0.95)';
 
 // ── App state ─────────────────────────────────────────────────────────────────
+// Scalar view/visual settings that round-trip through the YAML config. Centralised
+// so that loadConfigFromYaml() can fall back to these exact defaults for any field
+// that is absent from the file (backwards compatibility with older configs).
+const CONFIG_DEFAULTS = {
+  fov:                4.0,
+  zMax:               3.0,
+  vizMode:            0,      // 0=surface brightness, 1=κ, 2=γ, 3=|μ|, 4=signed μ, 5=|α|, 6=φ (Fermat)
+  showCritCurves:     false,
+  showCaustics:       false,
+  showMarkers:        true,
+  showLegend:         true,
+  showColorbar:       true,
+  critGridN:          512,
+  psGridStep:         0.02,   // arcsec — point source grid spacing
+  critZs:             null,   // null = auto (highest-z source plane)
+  fermatUseSourcePos: false,  // when true, use lastFermatSource for Fermat β_s and source plane
+  contourSpacing:     1.0,    // Fermat contour spacing multiplier (interval = 0.002·fov²·this)
+};
+
 const state = {
-  fov:             4.0,
-  zMax:            3.0,
+  ...CONFIG_DEFAULTS,
   planes:          [],
   selectedPlaneId: null,
   selectedObjId:   null,
-  showCritCurves:  false,
-  showCaustics:    false,
-  showMarkers:     true,
-  showLegend:      true,
-  showColorbar:    true,
   addMode:         'lens',   // 'lens' | 'source' | 'hybrid': global tool state
   // Per-viz-mode colour mapping: { scale, param, min, max }. scale: 0=linear 1=sqrt
   // 2=power 3=asinh 4=log. Modes: 0=surface brightness, 1=κ, 2=γ, 3=|μ|, 5=|α|.
   vizScale:        null,     // initialised from DEFAULT_VIZ_SCALE below
-  critGridN:           512,
-  psGridStep:          0.02,   // arcsec — point source grid spacing
-  vizMode:             0,      // 0=surface brightness, 1=κ, 2=γ, 3=|μ|, 4=signed μ, 5=|α|, 6=φ (Fermat)
-  critZs:              null,  // null = auto (highest-z source plane)
-  dist:                null,
-  fermatUseSourcePos:  false,  // when true, use lastFermatSource for Fermat β_s and source plane
-  lastFermatSource:    null,   // { cx, cy, planeId } of last selected source object
-  saddlePhis:          [],     // φ values at Type-II saddle points; kept in sync for restore calls
+  dist:            null,
+  lastFermatSource:null,     // { cx, cy, planeId } of last selected source object
+  saddlePhis:      [],       // φ values at Type-II saddle points; kept in sync for restore calls
 };
 
 // Default colour-mapping per viz mode (chosen to reproduce the original hardcoded look).
@@ -171,6 +179,19 @@ function cmapInfoHtml(mode) {
     4: `<b>Log</b>: logarithmic mapping, best for large dynamic range (e.g. magnification). Requires Min &gt; 0.`,
   }[vs.scale] ?? '';
   return `${limits}<br><br>${scaleDesc}<br><br><span style="color:var(--muted)">Tip: drag left/right across a value to scrub it, or type a number directly.</span>`;
+}
+
+// Explanation for the Fermat Potential section's ⓘ button (arrival-time mode).
+function contourInfoHtml() {
+  return `<b>Use last selected source</b>: pins the arrival-time surface and image markers to the ` +
+    `position and redshift of the most recently selected source, so the contours reflect the source ` +
+    `actually being lensed. When off, the source sits at the coordinate origin.<br><br>` +
+    `<b>Spacing</b>: scales the arrival-time interval between iso-φ contour lines. ` +
+    `The interval is 0.002·fov² (arcsec²) at spacing 1; larger values draw fewer, more widely ` +
+    `spaced contours, smaller values pack them more densely. Spacing tracks the field of view, so ` +
+    `the contour density stays similar as you zoom.<br><br>` +
+    `The contour through each Type II (saddle) image is always drawn thicker and brighter, whatever ` +
+    `the spacing.<br><br><span style="color:var(--muted)">Tip: drag left/right to scrub, or type a number directly.</span>`;
 }
 
 // Draw a type-specific marker shape centred at (px, py) with circumradius r.
@@ -340,6 +361,10 @@ function configToYaml() {
     y += `vizScale${m}: ${v.scale} ${v.param} ${v.min} ${v.max} ${v.palette ?? 0}\n`;
   }
   y += `showCritCurves: ${state.showCritCurves}\nshowCaustics: ${state.showCaustics}\n`;
+  y += `showMarkers: ${state.showMarkers}\nshowLegend: ${state.showLegend}\nshowColorbar: ${state.showColorbar}\n`;
+  y += `critGridN: ${state.critGridN}\npsGridStep: ${state.psGridStep}\n`;
+  y += `critZs: ${state.critZs === null ? 'null' : state.critZs}\n`;
+  y += `contourSpacing: ${state.contourSpacing}\n`;
   y += `fermatUseSourcePos: ${state.fermatUseSourcePos}\n`;
   if (state.lastFermatSource) {
     const fsp = state.planes.find(p => p.id === state.lastFermatSource.planeId);
@@ -358,6 +383,7 @@ function configToYaml() {
       y += `        cx: ${+obj.cx.toFixed(5)}\n`;
       y += `        cy: ${+obj.cy.toFixed(5)}\n`;
       y += `        hidden: ${obj.hidden}\n`;
+      y += `        showShape: ${obj.showShape === true}\n`;
       if (obj.hybridId) y += `        hybridId: '${obj.hybridId}'\n`;
       y += `        params:\n`;
       for (const [k, v] of Object.entries(obj.params)) {
@@ -425,8 +451,10 @@ function saveConfig() {
 function loadConfigFromYaml(yaml) {
   try {
     const cfg = parseYamlConfig(yaml);
-    if (cfg.fov)  state.fov  = cfg.fov;
-    if (cfg.zMax) state.zMax = cfg.zMax;
+    // Any scalar setting absent from the file falls back to its default, so older
+    // configs (and hand-written partial ones) load to a well-defined visual state.
+    state.fov  = (isFinite(cfg.fov)  && cfg.fov  > 0) ? cfg.fov  : CONFIG_DEFAULTS.fov;
+    state.zMax = (isFinite(cfg.zMax) && cfg.zMax > 0) ? cfg.zMax : CONFIG_DEFAULTS.zMax;
     // Clear pasted textures before replacing planes
     for (const p of state.planes)
       p.objects.filter(o => o.model === 'pastedimage').forEach(o => renderer?.clearPastedTexture(o.id));
@@ -451,7 +479,7 @@ function loadConfigFromYaml(yaml) {
           cx:       isFinite(o.cx) ? Math.max(-50, Math.min(50, +o.cx)) : 0,
           cy:       isFinite(o.cy) ? Math.max(-50, Math.min(50, +o.cy)) : 0,
           hidden:   o.hidden === true,
-          showShape: false,
+          showShape: o.showShape === true,
           ...(typeof o.hybridId === 'string' && /^[a-z0-9-]+$/.test(o.hybridId) ? { hybridId: o.hybridId } : {}),
           params: Object.keys(params).length ? params : defaultParams(model),
         };
@@ -460,7 +488,7 @@ function loadConfigFromYaml(yaml) {
     state.planes.sort((a, b) => a.z - b.z);
     state.selectedPlaneId = state.planes[0]?.id ?? null;
     state.selectedObjId   = state.planes[0]?.objects[0]?.id ?? null;
-    if (cfg.vizMode       !== undefined) state.vizMode       = typeof cfg.vizMode  === 'number' ? cfg.vizMode  : 0;
+    state.vizMode = (typeof cfg.vizMode === 'number') ? cfg.vizMode : CONFIG_DEFAULTS.vizMode;
     // Per-mode colour mapping: "scale param min max" strings.
     state.vizScale = _cloneVizScaleDefaults();
     for (const m of [0, 1, 2, 3, 5]) {
@@ -478,9 +506,19 @@ function loadConfigFromYaml(yaml) {
       if (isFinite(cfg.toneMapPower) && cfg.toneMap === 2) s0.param = cfg.toneMapPower;
       if (isFinite(cfg.toneMapAsinh) && cfg.toneMap === 3) s0.param = cfg.toneMapAsinh;
     }
-    if (cfg.showCritCurves !== undefined) state.showCritCurves = cfg.showCritCurves === true;
-    if (cfg.showCaustics   !== undefined) state.showCaustics   = cfg.showCaustics   === true;
-    if (cfg.fermatUseSourcePos !== undefined) state.fermatUseSourcePos = cfg.fermatUseSourcePos === true;
+    // Boolean overlays: present → use the value, absent → default.
+    const _bool = (v, d) => (typeof v === 'boolean') ? v : d;
+    state.showCritCurves = _bool(cfg.showCritCurves, CONFIG_DEFAULTS.showCritCurves);
+    state.showCaustics   = _bool(cfg.showCaustics,   CONFIG_DEFAULTS.showCaustics);
+    state.showMarkers    = _bool(cfg.showMarkers,    CONFIG_DEFAULTS.showMarkers);
+    state.showLegend     = _bool(cfg.showLegend,     CONFIG_DEFAULTS.showLegend);
+    state.showColorbar   = _bool(cfg.showColorbar,   CONFIG_DEFAULTS.showColorbar);
+    state.fermatUseSourcePos = _bool(cfg.fermatUseSourcePos, CONFIG_DEFAULTS.fermatUseSourcePos);
+    // Numeric settings, validated against their allowed choices where applicable.
+    state.critGridN     = [256, 512, 1024, 2048].includes(cfg.critGridN) ? cfg.critGridN : CONFIG_DEFAULTS.critGridN;
+    state.psGridStep    = [0.1, 0.05, 0.02, 0.01, 0.005].includes(cfg.psGridStep) ? cfg.psGridStep : CONFIG_DEFAULTS.psGridStep;
+    state.critZs        = (isFinite(cfg.critZs) && cfg.critZs > 0) ? cfg.critZs : CONFIG_DEFAULTS.critZs;
+    state.contourSpacing = isFinite(cfg.contourSpacing) ? Math.max(0.05, cfg.contourSpacing) : CONFIG_DEFAULTS.contourSpacing;
     if (isFinite(cfg.fermatBetaX) && isFinite(cfg.fermatBetaY) && isFinite(cfg.fermatSrcPlaneZ)) {
       const fsp = state.planes.find(p => Math.abs(p.z - cfg.fermatSrcPlaneZ) < 1e-4);
       state.lastFermatSource = fsp ? { cx: cfg.fermatBetaX, cy: cfg.fermatBetaY, planeId: fsp.id } : null;
@@ -491,7 +529,7 @@ function loadConfigFromYaml(yaml) {
     if (_vizSel) _vizSel.value = state.vizMode;
     glCanvas?.classList.toggle('sl-viz-active', state.vizMode !== 0);
     invalidateDistances();
-    rebuildPlaneBoxes(); renderSidebar(); redraw();
+    rebuildPlaneBoxes(); renderSidebar(); _updateColorbar(); redraw();
   } catch (err) {
     alert('Failed to load config: ' + err.message);
     console.error(err);
@@ -626,6 +664,16 @@ function applyThemeIcons(theme) {
   document.querySelectorAll('.icon-moon').forEach(el => { el.style.display = theme === 'dark' ? 'none'  : 'block'; });
 }
 
+// Flip dark/light and refresh everything theme-dependent (icons, colorbar, canvases).
+function toggleTheme() {
+  const next = (document.documentElement.getAttribute('data-theme') || 'dark') === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('theme', next); } catch {}
+  applyThemeIcons(next);
+  _updateColorbar();
+  rebuildPlaneBoxes(); renderSidebar(); redraw();
+}
+
 function showRendererError(msg) {
   const wrap = document.getElementById('sl-image-wrap');
   if (!wrap) return;
@@ -664,7 +712,7 @@ function buildDOM() {
         <h1>Caustica</h1>
 <a class="sl-demo-btn" href="/caustica-documentation/" target="_blank" rel="noopener">Docs</a>
         <button class="sl-demo-btn" id="sl-demo" title="Walk through a tour of the controls">Tour</button>
-        <button class="sl-theme-btn" id="sl-theme" title="Toggle dark mode" aria-label="Toggle dark mode">
+        <button class="sl-theme-btn" id="sl-theme" title="Toggle dark mode (D)" aria-label="Toggle dark mode">
           <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
           </svg>
@@ -755,14 +803,7 @@ function buildDOM() {
 // ── Handlers ──────────────────────────────────────────────────────────────────
 function attachHandlers() {
   document.getElementById('sl-demo').addEventListener('click', startTour);
-  document.getElementById('sl-theme').addEventListener('click', () => {
-    const next = (document.documentElement.getAttribute('data-theme') || 'dark') === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', next);
-    try { localStorage.setItem('theme', next); } catch {}
-    applyThemeIcons(next);
-    _updateColorbar();
-    rebuildPlaneBoxes(); renderSidebar(); redraw();
-  });
+  document.getElementById('sl-theme').addEventListener('click', toggleTheme);
   applyThemeIcons(document.documentElement.getAttribute('data-theme') || 'dark');
 
   // Tab switching: static buttons, wired once.
@@ -952,6 +993,10 @@ function attachHandlers() {
       state.showCritCurves = !either;
       state.showCaustics   = !either;
       renderSidebar(); redraw();
+      return;
+    }
+    if ((e.key === 'd' || e.key === 'D') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      toggleTheme();
       return;
     }
     // Visualization mode shortcuts: toggle on/off; pressing the same key again returns to image.
@@ -1583,7 +1628,7 @@ function renderSidebar() {
             <button class="sl-delete-obj-btn" id="sl-delete-obj">Delete</button>
           </div>
           <select class="sl-select" id="sl-model-select">${modelOptions}</select>
-          ${isLens ? lensParamRows(obj) : sourceParamRows(obj)}
+          ${isLens ? lensParamRows(obj, true) : sourceParamRows(obj, true)}
         </div>`;
     }
   } else {
@@ -1618,14 +1663,6 @@ function renderSidebar() {
             <label><input type="checkbox" id="sl-show-markers" ${state.showMarkers?'checked':''}> Show positions</label>
             <label><input type="checkbox" id="sl-show-legend"  ${state.showLegend ?'checked':''}> Show legend</label>
           </div>
-          ${state.vizMode === 6 ? `
-          <div class="sl-checkbox-row" style="margin-top:8px">
-            <label><input type="checkbox" id="sl-fermat-use-src" ${state.fermatUseSourcePos?'checked':''}> Use last selected source for Fermat potential source position/redshift</label>
-          </div>
-          ${state.fermatUseSourcePos && state.lastFermatSource ? `
-          <p style="font-size:11px;color:var(--muted);margin:3px 0 0">
-            &beta; = (${state.lastFermatSource.cx.toFixed(3)}&Prime;, ${state.lastFermatSource.cy.toFixed(3)}&Prime;)
-          </p>` : ''}` : ''}
         </div>` : ''}
       </div>
 
@@ -1688,6 +1725,32 @@ function renderSidebar() {
             <button id="sl-viz-reset" type="button" style="font-size:11px;background:none;border:none;color:var(--muted);text-decoration:underline;cursor:pointer;padding:0">Reset to defaults</button>
           </div>`;
           })()}
+        </div>` : ''}
+      </div>` : ''}
+
+      ${state.vizMode === 6 ? `
+      <div class="sl-hybrid-section">
+        <div class="sl-hybrid-hdr" id="sl-settings-hdr-contours">
+          <span class="sl-hybrid-arrow">${_sg.contours?'▼':'▶'}</span>
+          <span class="sl-panel-title" style="flex:1">Fermat Potential</span>
+          ${_sg.contours ? infoSection('sl-contours-info', contourInfoHtml()) : ''}
+        </div>
+        ${_sg.contours ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
+          <div class="sl-checkbox-row">
+            <label><input type="checkbox" id="sl-fermat-use-src" ${state.fermatUseSourcePos?'checked':''}> Use last selected source for the source position and redshift</label>
+          </div>
+          ${state.fermatUseSourcePos && state.lastFermatSource ? `
+          <p style="font-size:11px;color:var(--muted);margin:3px 0 0">
+            &beta; = (${state.lastFermatSource.cx.toFixed(3)}&Prime;, ${state.lastFermatSource.cy.toFixed(3)}&Prime;)
+          </p>` : ''}
+          <p style="font-size:11px;color:var(--muted);margin:10px 0 6px">Iso-arrival-time contour spacing</p>
+          <div class="sl-global-input">
+            <label>Spacing (&times;)</label>
+            <input type="number" class="sl-scrub" id="sl-contour-spacing" min="0.05" step="${_numStep(state.contourSpacing)}" value="${state.contourSpacing}">
+          </div>
+          <div style="margin-top:4px">
+            <button id="sl-contour-reset" type="button" style="font-size:11px;background:none;border:none;color:var(--muted);text-decoration:underline;cursor:pointer;padding:0">Reset to default</button>
+          </div>
         </div>` : ''}
       </div>` : ''}
 
@@ -1852,6 +1915,7 @@ function renderSidebar() {
   document.getElementById('sl-prog-section-hdr')?.addEventListener('click',      () => { _progExpanded             = !_progExpanded;             renderSidebar(); });
   document.getElementById('sl-settings-hdr-general')?.addEventListener('click', () => { _settingsExpanded.general = !_settingsExpanded.general; renderSidebar(); });
   document.getElementById('sl-settings-hdr-cmap')?.addEventListener('click',    () => { _settingsExpanded.cmap    = !_settingsExpanded.cmap;    renderSidebar(); });
+  document.getElementById('sl-settings-hdr-contours')?.addEventListener('click',() => { _settingsExpanded.contours= !_settingsExpanded.contours;renderSidebar(); });
   document.getElementById('sl-settings-hdr-crit')?.addEventListener('click',    () => { _settingsExpanded.crit    = !_settingsExpanded.crit;    renderSidebar(); });
   document.getElementById('sl-settings-hdr-ps')?.addEventListener('click',      () => { _settingsExpanded.ps      = !_settingsExpanded.ps;      renderSidebar(); });
   document.getElementById('sl-show-markers')?.addEventListener('change',e => { state.showMarkers = e.target.checked; redraw(); });
@@ -1899,6 +1963,23 @@ function renderSidebar() {
     const d = DEFAULT_VIZ_SCALE[state.vizMode];
     if (d) state.vizScale[state.vizMode] = { ...d };
     renderSidebar(); _updateColorbar(); redraw();
+  });
+  // Contours section (Fermat mode): spacing scrub input, reset, info popover.
+  document.getElementById('sl-contours-info')?.addEventListener('click', e => e.stopPropagation());
+  const _csEl = document.getElementById('sl-contour-spacing');
+  if (_csEl) {
+    const applyCS = (v) => {
+      if (!isFinite(v)) return;
+      v = Math.max(0.05, v);
+      _csEl.value = v;
+      state.contourSpacing = v;
+      redraw();
+    };
+    _csEl.addEventListener('change', e => applyCS(parseFloat(e.target.value)));
+    _attachScrub(_csEl, { lo: 0.05, hi: 50, onChange: applyCS });
+  }
+  document.getElementById('sl-contour-reset')?.addEventListener('click', () => {
+    state.contourSpacing = 1.0; renderSidebar(); redraw();
   });
   document.getElementById('sl-fermat-use-src')?.addEventListener('change', e => {
     state.fermatUseSourcePos = e.target.checked;
@@ -2004,6 +2085,7 @@ function renderSidebar() {
       });
     } else {
       document.getElementById('sl-show-shape')?.addEventListener('change', e => { obj.showShape = e.target.checked; redraw(); });
+      document.getElementById('sl-attach-partner')?.addEventListener('click', () => attachPartner(obj, pl));
       document.getElementById('sl-model-select')?.addEventListener('change', e => {
         obj.model = e.target.value; obj.params = defaultParams(obj.model);
         rebuildPlaneBoxes(); renderSidebar(); redraw();
@@ -2064,58 +2146,92 @@ function sliderRowLog(label, key, minV, maxV, val) {
   </div>`;
 }
 
-function shapeToggle(obj) {
-  return `<label class="sl-shape-toggle">
-    <input type="checkbox" id="sl-show-shape" ${obj.showShape ? 'checked' : ''}>
-    Show shape
-  </label>`;
+// "Show shape" only applies to objects with a drawable outline (all lenses and
+// the analytic source profiles, but not point sources or pasted images).
+function supportsShowShape(obj) {
+  if (obj.type === 'lens') return true;
+  return obj.model !== 'pointsource' && obj.model !== 'pastedimage';
 }
 
-function lensParamRows(obj) {
+// Footer row at the bottom of the Object Controls: the Show-shape toggle on the
+// left and, for single (non-hybrid) objects, an Attach button on the right that
+// converts the object into a hybrid by adding a co-located partner of the other type.
+function objFooter(obj, showAttach) {
+  const hasShape = supportsShowShape(obj);
+  if (!hasShape && !showAttach) return '';
+  const toggle = hasShape
+    ? `<label class="sl-shape-toggle"><input type="checkbox" id="sl-show-shape" ${obj.showShape ? 'checked' : ''}> Show shape</label>`
+    : '';
+  const attach = showAttach
+    ? `<button class="sl-attach-btn" id="sl-attach-partner" title="${obj.type === 'lens'
+        ? 'Add a co-located source, turning this into a hybrid object'
+        : 'Add a co-located lens, turning this into a hybrid object'}">${obj.type === 'lens' ? 'Attach source' : 'Attach lens'}</button>`
+    : '';
+  return `<div class="sl-obj-footer">${toggle}${attach}</div>`;
+}
+
+// Convert a single object into a hybrid by giving it a co-located partner of the
+// opposite type, sharing a hybridId (mirrors the H add-tool).
+function attachPartner(obj, plane) {
+  if (!obj || !plane || obj.hybridId) return;
+  const hybridId = uid();
+  obj.hybridId = hybridId;
+  const partnerType  = obj.type === 'lens' ? 'source' : 'lens';
+  const partnerModel = partnerType === 'lens' ? 'sie' : 'gaussian';
+  const partner = Object.assign(makeObject(partnerType, partnerModel, obj.cx, obj.cy), { hybridId });
+  plane.objects.push(partner);
+  state.selectedObjId = obj.id;
+  // Open the newly-added partner's section so its controls are immediately visible.
+  _lastHybridId   = hybridId;
+  _hybridExpanded = { lens: partnerType === 'lens', src: partnerType === 'source' };
+  updatePlaneBoxColor(plane); redrawPlaneCanvas(plane); renderSidebar(); redraw();
+}
+
+function lensParamRows(obj, showAttach) {
   const p = obj.params;
   if (obj.model === 'deflection')
     return sliderRowLog('α (")', 'alpha', 0.005, 5.0, p.alpha ?? 0.1)
          + sliderRow('φ (rad)', 'phi', 0, Math.PI * 2, 0.05, p.phi ?? 0)
-         + shapeToggle(obj)
+         + objFooter(obj, showAttach)
          + '<p style="font-size:11px;color:var(--muted);margin-top:4px;grid-column:1/-1">Uniform deflection of all rays. Models the monopole from a distant perturber. Object position has no effect.</p>';
   if (obj.model === 'convergence')
     return sliderRow('κ', 'kappa', -0.5, 0.5, 0.01, p.kappa ?? 0.05)
-         + shapeToggle(obj)
+         + objFooter(obj, showAttach)
          + '<p style="font-size:11px;color:var(--muted);margin-top:4px;grid-column:1/-1">Deflection is κ·θ relative to the coordinate origin. Object position has no effect on lensing.</p>';
   if (obj.model === 'shear')
     return sliderRowLog('γ', 'gamma', 0.001, 0.5, p.gamma ?? 0.05)
          + sliderRow   ('φ (rad)', 'phi', 0, Math.PI, 0.05, p.phi ?? 0)
-         + shapeToggle(obj)
+         + objFooter(obj, showAttach)
          + '<p style="font-size:11px;color:var(--muted);margin-top:4px;grid-column:1/-1">Deflection is always computed relative to the coordinate origin regardless of object position. Moving the marker only repositions the direction arrow.</p>';
   if (obj.model === 'pointmass')
     return sliderRowLog('Strength (")', 'thetaE', 0.01, 8.0, p.thetaE ?? 1)
-         + shapeToggle(obj);
+         + objFooter(obj, showAttach);
   if (obj.model === 'sie')
     return sliderRowLog('b (")',   'b',   0.01, 8.0,   p.b   ?? 1)
          + sliderRow   ('q',       'q',   0.05, 1.0,   0.05, p.q   ?? 0.75)
          + sliderRow   ('φ (rad)', 'phi', 0,   Math.PI, 0.05, p.phi ?? 0)
-         + shapeToggle(obj);
+         + objFooter(obj, showAttach);
   if (obj.model === 'nie')
     return sliderRowLog('b (")',    'b',   0.01, 8.0,   p.b   ?? 1)
          + sliderRow   ('q',        'q',   0.05, 1.0,   0.05, p.q   ?? 0.75)
          + sliderRow   ('φ (rad)',  'phi', 0,   Math.PI, 0.05, p.phi ?? 0)
          + sliderRowLog('r<sub>c</sub> (")', 'rc', 0.005, 2.0, p.rc ?? 0.2)
-         + shapeToggle(obj);
+         + objFooter(obj, showAttach);
   if (obj.model === 'epl')
     return sliderRowLog('b (")',   'b',     0.01, 8.0,   p.b     ?? 1)
          + sliderRow   ('q',       'q',     0.05, 1.0,   0.05, p.q     ?? 0.75)
          + sliderRow   ('φ (rad)', 'phi',   0,   Math.PI, 0.05, p.phi   ?? 0)
          + sliderRow   ('γ',       'gamma', 0.5, 3.0,     0.05, p.gamma ?? 2.0)
-         + shapeToggle(obj)
+         + objFooter(obj, showAttach)
          + '<p style="font-size:11px;color:var(--muted);margin-top:4px;grid-column:1/-1">Fermat potential (T) uses the geometric term only for EPL: the potential has no closed form for the scaled-SIE approximation.</p>';
   if (obj.model === 'nfw')
     return sliderRowLog('κ<sub>s</sub>',     'kappaS', 0.01, 5.0, p.kappaS ?? 0.5)
          + sliderRowLog('r<sub>s</sub> (")', 'rS',     0.01, 5.0, p.rS     ?? 0.4)
-         + shapeToggle(obj);
+         + objFooter(obj, showAttach);
   return '';
 }
 
-function sourceParamRows(obj) {
+function sourceParamRows(obj, showAttach) {
   const p = obj.params;
   if (obj.model === 'pointsource') {
     const isLight = document.documentElement.getAttribute('data-theme') !== 'dark';
@@ -2126,6 +2242,7 @@ function sourceParamRows(obj) {
               <span class="sl-param-label">Color</span>
               <input type="color" data-param-color="1" value="${displayColor}" class="sl-color-input">
             </div>`
+         + objFooter(obj, showAttach)
          + '<p style="font-size:11px;color:var(--muted);margin-top:4px;grid-column:1/-1">Image positions are computed with a numerical refinement algorithm. Einstein rings do not appear for point sources: use a uniform circle source instead. Some highly demagnified images may not appear.</p>';
   }
   if (obj.model === 'point') {
@@ -2137,7 +2254,7 @@ function sourceParamRows(obj) {
               <span class="sl-param-label">Color</span>
               <input type="color" data-param-color="1" value="${displayColor}" class="sl-color-input">
             </div>`
-         + shapeToggle(obj);
+         + objFooter(obj, showAttach);
   }
 
   if (obj.model === 'pastedimage') {
@@ -2145,6 +2262,7 @@ function sourceParamRows(obj) {
       '<p style="font-size:11px;color:var(--muted);font-style:italic;margin-top:6px;grid-column:1/-1">Use the image button in the plane header to load an image, or Ctrl+V with this object selected</p>';
     return sliderRowLog('Scale', 'sigma', 0.05, 4.0, p.sigma ?? 1.0)
          + sliderRow('Brightness', 'amplitude', 0.1, 5.0, 0.1, p.amplitude ?? 1.0)
+         + objFooter(obj, showAttach)
          + hint;
   }
   // In light mode the canvas is CSS-inverted, so show the complement in the
@@ -2161,7 +2279,7 @@ function sourceParamRows(obj) {
             <input type="color" data-param-color="1" value="${displayColor}"
                    class="sl-color-input" title="Source light color">
           </div>`
-       + shapeToggle(obj);
+       + objFooter(obj, showAttach);
 }
 
 // ── Axis canvas ───────────────────────────────────────────────────────────────
@@ -2334,7 +2452,10 @@ function _lensPotentialJS(obj, posX, posY) {
     const r = Math.sqrt(q*q*(xr*xr + s*s) + yr*yr);
     const A = b * q / sqf;
     const n = 1 + sqf*yr / (r + q*q*s), d = Math.max(1 - sqf*yr / (r + q*q*s), EPS);
-    return A * (xr * Math.atan2(sqf*xr, r + s) + yr * 0.5 * Math.log(n / d));
+    // Euler (homogeneous) part + core correction; the latter makes ∇ψ = α for a
+    // finite core radius s (vanishes as s→0). Mirrors renderer.js lensPotential().
+    return A * (xr * Math.atan2(sqf*xr, r + s) + yr * 0.5 * Math.log(n / d))
+         - 0.5 * b * q * s * Math.log((r + s) * (r + s) + sqf * sqf * xr * xr);
   }
   if (model === 'epl') return 0;
   if (model === 'shear') {
@@ -2942,6 +3063,76 @@ function _updateColorbar() {
   minEl.textContent      = _fmtLimit(vs.min, info[1]);
   maxEl.textContent      = _fmtLimit(vs.max, info[1]);
   strip.style.background = VIZ_PALETTE_CSS[pal] || (dark ? _VIZ_SEQ_DARK : _VIZ_SEQ_LIGHT);
+  // Standard palettes invert in light mode (see applyColormap); the Default palette
+  // already has theme-specific gradients, so it needs no filter.
+  strip.style.filter = (pal > 0 && !dark) ? 'invert(1)' : 'none';
+}
+
+// Colour stops for the active palette, matching what the shader / on-screen bar show
+// (standard palettes invert in light mode, just like applyColormap and the CSS strip).
+function _paletteStops(palette, dark) {
+  const css = (palette > 0 && VIZ_PALETTE_CSS[palette]) || (dark ? _VIZ_SEQ_DARK : _VIZ_SEQ_LIGHT);
+  let stops = css.match(/#[0-9a-fA-F]{3,6}/g) || ['#000000', '#ffffff'];
+  // Standard palettes (palette > 0) use 6-digit hex and invert in light mode.
+  if (palette > 0 && !dark) stops = stops.map(invertHexColor);
+  return stops;
+}
+
+// The on-screen colour bar is a DOM element layered over the canvas, so it is not part
+// of the captured pixels. For PNG/recording exports we draw a pixel-faithful copy onto
+// the 2D composite. To stay identical to the live bar under any scaling, we MEASURE the
+// live elements and map their screen rects into the canvas buffer, deriving sizes from
+// the measured bar (the .sl-colorbar* CSS uses 10px units that match the bar height).
+function _drawColorbarOnto(ctx, w, h) {
+  const info = _VIZ_COLORBAR[state.vizMode];
+  if (!info || !state.showColorbar || !glCanvas) return;
+  const barEl = document.getElementById('sl-colorbar-bar');
+  const minEl = document.getElementById('sl-colorbar-min');
+  if (!barEl) return;
+  const cr = glCanvas.getBoundingClientRect();
+  const br = barEl.getBoundingClientRect();
+  if (cr.width < 1 || cr.height < 1 || br.width < 1) return;
+
+  const vs     = vizScaleFor(state.vizMode);
+  const dark   = document.documentElement.getAttribute('data-theme') === 'dark';
+  const stops  = _paletteStops(vs.palette ?? 0, dark);
+  const fgSoft = dark ? '#c9d1d9' : '#4b5563';        // --fg-soft (dark / light)
+
+  // Map screen coordinates → canvas-buffer pixels (handles dpr and any CSS transform).
+  const sx = w / cr.width, sy = h / cr.height;
+  const barX = (br.left - cr.left) * sx;
+  const barY = (br.top  - cr.top ) * sy;
+  const barW = br.width  * sx;
+  const barH = br.height * sy;
+  const unit = barH / 10;                              // buffer px per CSS px
+  const gap  = 3 * unit, fs = 10 * unit, tfs = 10.5 * unit, rad = 2 * unit;
+  // Label row top: use the live label position when available, else CSS margin-top:3.
+  const mr = minEl?.getBoundingClientRect();
+  const labelsY = (mr && mr.height) ? (mr.top - cr.top) * sy : barY + barH + gap;
+
+  ctx.save();
+  ctx.globalAlpha = 0.88;                              // .sl-colorbar opacity
+
+  const grad = ctx.createLinearGradient(barX, 0, barX + barW, 0);
+  const n = Math.max(stops.length - 1, 1);
+  stops.forEach((c, i) => grad.addColorStop(i / n, c));
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(barX, barY, barW, barH, rad);
+  else               ctx.rect(barX, barY, barW, barH);
+  ctx.fillStyle = grad;
+  ctx.fill();
+  ctx.lineWidth = Math.max(1, unit);
+  ctx.strokeStyle = 'rgba(128,128,128,0.3)';
+  ctx.stroke();
+
+  ctx.fillStyle    = fgSoft;
+  ctx.textBaseline = 'top';
+  ctx.font = `${fs}px system-ui, -apple-system, sans-serif`;
+  ctx.textAlign = 'left';   ctx.fillText(_fmtLimit(vs.min, info[1]), barX, labelsY);
+  ctx.textAlign = 'right';  ctx.fillText(_fmtLimit(vs.max, info[1]), barX + barW, labelsY);
+  ctx.font = `600 ${tfs}px system-ui, -apple-system, sans-serif`;
+  ctx.textAlign = 'center'; ctx.fillText(info[0], barX + barW / 2, labelsY);
+  ctx.restore();
 }
 
 // Returns { planes, dist, vizSrcIdx } — augmented with a virtual source plane at
@@ -2982,7 +3173,10 @@ function vizPlanesAndIdx(sortedPlanes) {
 // The { scale, param, min, max } warp passed to the renderer for a given viz mode.
 // Fermat (6) has no colour warp, so fall back to surface-brightness settings.
 function activeVizSettings(mode = state.vizMode) {
-  return vizScaleFor(vizModeHasScale(mode) ? mode : 0);
+  // Return a copy (never mutate the stored vizScale) augmented with the Fermat
+  // contour spacing; the shader ignores contourSpacing outside Fermat mode.
+  const vs = vizScaleFor(vizModeHasScale(mode) ? mode : 0);
+  return { ...vs, contourSpacing: state.contourSpacing };
 }
 
 function redraw() {
@@ -3043,34 +3237,27 @@ function _doRedraw() {
 // ── Capture & recording ───────────────────────────────────────────────────────
 
 // Composite the WebGL canvas (always in surface brightness mode) + overlay.
+// Composite the GL canvas + overlay (markers/curves/legend) into a flat 2D canvas,
+// reflecting whatever is currently on screen. UI chrome (the viz-mode chip, colorbar,
+// sidebar) lives in separate DOM elements and is intentionally NOT included.
 function buildCompositeCanvas() {
   const gl  = glCanvas;
   const ov  = document.getElementById('sl-overlay');
-  // Re-render in surface brightness mode so recordings always show lensed image.
-  if (state.vizMode !== 0 && renderer && state.dist) {
-    const p = [...state.planes].sort((a, b) => a.z - b.z);
-    renderer.setScene(p, state.dist, state.fov, activeVizSettings(0), 0, 0);
-  }
   const off = document.createElement('canvas');
   off.width  = gl.width;
   off.height = gl.height;
   const ctx  = off.getContext('2d');
-  // Apply light-mode inversion (surface brightness always inverted in light mode)
   ctx.drawImage(gl, 0, 0);
-  if (document.documentElement.getAttribute('data-theme') !== 'dark') {
+  // Match on-screen appearance: in light mode only the lensed-image view is
+  // CSS-inverted (viz maps carry their own theming), so invert here only for mode 0.
+  if (state.vizMode === 0 && document.documentElement.getAttribute('data-theme') !== 'dark') {
     ctx.globalCompositeOperation = 'difference';
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, off.width, off.height);
     ctx.globalCompositeOperation = 'source-over';
   }
   ctx.drawImage(ov, 0, 0);
-  // Restore viz mode (preserve saddlePhis so highlighted contour stays correct).
-  if (state.vizMode !== 0 && renderer && state.dist) {
-    const p = [...state.planes].sort((a, b) => a.z - b.z);
-    const { planes, dist, vizSrcIdx, fermatBeta } = vizArgs(p);
-    const isDark = document.documentElement.getAttribute('data-theme') === 'dark' ? 1 : 0;
-    renderer.setScene(planes, dist, state.fov, activeVizSettings(), state.vizMode, vizSrcIdx, isDark, state.saddlePhis ?? [], fermatBeta);
-  }
+  _drawColorbarOnto(ctx, off.width, off.height);
   return off;
 }
 
@@ -3351,13 +3538,15 @@ function _compositeToLive() {
   }
   const ctx = lc.getContext('2d');
   ctx.drawImage(gl, 0, 0);
-  if (document.documentElement.getAttribute('data-theme') !== 'dark') {
+  // Only the lensed-image view is CSS-inverted in light mode (see buildCompositeCanvas).
+  if (state.vizMode === 0 && document.documentElement.getAttribute('data-theme') !== 'dark') {
     ctx.globalCompositeOperation = 'difference';
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, lc.width, lc.height);
     ctx.globalCompositeOperation = 'source-over';
   }
   ctx.drawImage(ov, 0, 0);
+  _drawColorbarOnto(ctx, lc.width, lc.height);
 }
 
 function _startWebMRecording(fps, liveCanvas) {

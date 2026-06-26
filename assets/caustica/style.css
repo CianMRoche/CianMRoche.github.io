@@ -829,6 +829,28 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
 .sl-shape-toggle input { accent-color: var(--accent); flex-shrink: 0; }
 .sl-shape-toggle:hover { color: var(--fg-soft); }
 
+/* Object-controls footer: Show-shape toggle (left) + Attach button (right-justified). */
+.sl-obj-footer {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+.sl-obj-footer .sl-shape-toggle { grid-column: auto; margin-top: 0; }
+.sl-attach-btn {
+  margin-left: auto;
+  font-size: 12px;
+  padding: 3px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sl-attach-btn:hover { border-color: var(--accent); color: var(--accent); }
+
 /* Color picker in source params — spans slider + value columns */
 .sl-color-input {
   grid-column: 2 / -1;

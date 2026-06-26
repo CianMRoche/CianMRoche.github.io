@@ -1,0 +1,78 @@
+fov: 7
+zMax: 3
+planes:
+  - z: 0.180
+    objects:
+      - type: lens
+        model: sie
+        cx: 0.02561
+        cy: -0.00196
+        hidden: false
+        hybridId: '7'
+        params:
+          b: 2.637406
+          q: 0.85
+          phi: 3
+      - type: source
+        model: exponential
+        cx: 0.02561
+        cy: -0.00196
+        hidden: false
+        hybridId: '7'
+        params:
+          sigma: 0.346042
+          q: 0.75
+          phi: 2.9
+          amplitude: 1.1
+          color: '#e0ffe1'
+      - type: lens
+        model: deflection
+        cx: 2.5253
+        cy: -1.59092
+        hidden: false
+        params:
+          alpha: 2.152633
+          phi: 3.85
+      - type: lens
+        model: shear
+        cx: 2.55974
+        cy: -2.62051
+        hidden: false
+        params:
+          gamma: 0.061195
+          phi: 1.25
+  - z: 1.890
+    objects:
+      - type: lens
+        model: sie
+        cx: 1.29296
+        cy: 0.72339
+        hidden: false
+        hybridId: '10'
+        params:
+          b: 2.417892
+          q: 1
+          phi: 0
+      - type: source
+        model: gaussian
+        cx: 1.29296
+        cy: 0.72339
+        hidden: false
+        hybridId: '10'
+        params:
+          sigma: 0.06855
+          q: 0.35
+          phi: 1
+          amplitude: 0.3
+          color: '#d33131'
+  - z: 2.380
+    objects:
+      - type: source
+        model: pointsource
+        cx: 1.29543
+        cy: 0.9554
+        hidden: false
+        params:
+          sigma: 0.11067
+          amplitude: 1
+          color: '#ffffff'

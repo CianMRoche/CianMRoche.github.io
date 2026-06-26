@@ -5,7 +5,16 @@
       "WebFetch(domain:esahubble.org)",
       "WebFetch(domain:arxiv.org)",
       "Bash(node fermat_test.mjs)",
-      "Bash(python3 fermat_test3.py)"
+      "Bash(python3 fermat_test3.py)",
+      "Bash(bundle exec *)",
+      "Bash(echo \"=== EXIT: $? ===\")",
+      "Bash(grep -o 'Stationary points are images.*difference in.\\\\{0,40\\\\}' _site/caustica-documentation/index.html)",
+      "Bash(grep -o 'sqrt{1-q^2}}[^|]\\\\{0,40\\\\}' _site/caustica-documentation/index.html)",
+      "Bash(grep -o '1-q^2}}.\\\\{0,8\\\\}' _site/caustica-documentation/index.html)",
+      "Bash(grep -o '<div class=\"doc-note\">.\\\\{0,180\\\\}' _site/caustica-documentation/index.html)",
+      "Bash(grep -o '<div class=\"doc-key\">.\\\\{0,160\\\\}' _site/caustica-documentation/index.html)",
+      "Bash(python3 -)",
+      "Bash(osascript -l JavaScript -e ' *)"
     ]
   }
 }
