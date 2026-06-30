@@ -684,7 +684,10 @@ function showRendererError(msg) {
   const s = document.createElement('small');
   s.style.opacity = '0.7';
   s.textContent = msg;
-  div.appendChild(h); div.appendChild(s);
+  const hint = document.createElement('small');
+  hint.style.opacity = '0.7';
+  hint.textContent = 'Try enabling hardware acceleration in your browser’s settings.';
+  div.appendChild(h); div.appendChild(s); div.appendChild(hint);
   wrap.innerHTML = '';
   wrap.appendChild(div);
 }
