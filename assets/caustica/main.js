@@ -448,6 +448,29 @@ function saveConfig() {
   downloadBlob(new Blob([configToYaml()], { type: 'text/yaml' }), 'caustica-config.yaml');
 }
 
+// Example scenes shipped with the site. GitHub Pages can't list a directory, so
+// the manifest is explicit; files live in /images/caustica-presets/.
+const PRESET_BASE = '/images/caustica-presets/';
+const PRESETS = [
+  { file: 'single-sie.yaml',    name: 'SIE lens + Point Source' },
+  { file: 'compound-lens.yaml', name: 'Double Lens + Uniform Source' },
+  { file: 'two-plane.yaml',     name: 'Two lens planes (multiplane)' },
+  { file: 'fermat-demo.yaml',   name: 'Fermat surface demo' },
+  { file: 'zigzag.yaml',        name: 'ZigZag Lens' },
+];
+
+// Name of the preset last loaded from the dropdown, so the box keeps showing it.
+let _selectedPreset = '';
+
+// Fetch a preset YAML by filename and load it through the normal config path.
+function loadPreset(file) {
+  if (!PRESETS.some(p => p.file === file)) return; // only load known files
+  fetch(PRESET_BASE + file)
+    .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); })
+    .then(yaml => { _selectedPreset = file; loadConfigFromYaml(yaml); }) // loadConfig re-renders the sidebar
+    .catch(err => { alert('Failed to load preset: ' + err.message); console.error(err); renderSidebar(); });
+}
+
 function loadConfigFromYaml(yaml) {
   try {
     const cfg = parseYamlConfig(yaml);
@@ -1800,6 +1823,10 @@ function renderSidebar() {
       </div>
 
       <div class="sl-subsection-header" style="margin-top:8px">Configuration</div>
+      <select class="sl-select" id="sl-preset-select" style="margin-top:8px" aria-label="Load a preset scene">
+        <option value="" ${_selectedPreset ? '' : 'selected'}>Load a preset scene…</option>
+        ${PRESETS.map(p => `<option value="${p.file}" ${_selectedPreset === p.file ? 'selected' : ''}>${p.name}</option>`).join('')}
+      </select>
       <div class="sl-capture-row">
         <button class="sl-capture-btn" id="sl-save-config">↓ Save YAML</button>
         <button class="sl-capture-btn" id="sl-load-config">↑ Load YAML</button>
@@ -2016,9 +2043,14 @@ function renderSidebar() {
   document.getElementById('sl-config-file')?.addEventListener('change', e => {
     const file = e.target.files?.[0]; if (!file) return;
     const reader = new FileReader();
-    reader.onload = ev => loadConfigFromYaml(ev.target.result);
+    reader.onload = ev => { _selectedPreset = ''; loadConfigFromYaml(ev.target.result); }; // custom file: clear preset label
     reader.readAsText(file);
     e.target.value = ''; // reset so same file can be loaded again
+  });
+  document.getElementById('sl-preset-select')?.addEventListener('change', e => {
+    const file = e.target.value;
+    if (file) loadPreset(file);
+    else renderSidebar(); // placeholder re-chosen: restore the current label
   });
 
   if (obj && pl) {
