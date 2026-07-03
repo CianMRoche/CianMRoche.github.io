@@ -3,7 +3,25 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>χ by eye</title>
+  <title>χ by eye: Fit Models to Data by Eye and Learn Chi-Squared</title>
+  <meta name="description" content="An interactive tool for fitting models to data by eye. Adjust a curve to match data points and build intuition for chi-squared, goodness of fit, and parameter estimation.">
+  <link rel="canonical" href="https://cianmroche.github.io/assets/chi_by_eye/">
+  <meta name="author" content="Cian Roche">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Cian Roche">
+  <meta property="og:title" content="χ by eye: Fit Models to Data by Eye and Learn Chi-Squared">
+  <meta property="og:description" content="An interactive tool for fitting models to data by eye. Adjust a curve to match data points and build intuition for chi-squared, goodness of fit, and parameter estimation.">
+  <meta property="og:url" content="https://cianmroche.github.io/assets/chi_by_eye/">
+  <meta property="og:image" content="https://cianmroche.github.io/images/chi_by_eye_logo.svg">
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="χ by eye: Fit Models to Data by Eye and Learn Chi-Squared">
+  <meta name="twitter:description" content="An interactive tool for fitting models to data by eye. Adjust a curve to match data points and build intuition for chi-squared, goodness of fit, and parameter estimation.">
+  <meta name="twitter:image" content="https://cianmroche.github.io/images/chi_by_eye_logo.svg">
+
   <script>
     // Sync with main site's theme before first paint.
     (function () {
@@ -14,7 +32,15 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="app"></div>
+  <!-- Static content for crawlers and no-JS visitors. The app replaces #app on load. -->
+  <div id="app">
+    <section style="max-width:640px;margin:0 auto;padding:48px 24px;font-family:system-ui,-apple-system,sans-serif;line-height:1.6;color:#888">
+      <h1>χ by eye</h1>
+      <p>χ by eye is an interactive tool for fitting models to data by eye. Adjust a curve to match a set of data points and build intuition for chi-squared, reduced chi-squared, goodness of fit, and parameter uncertainty. It is a browser-based way to develop a feel for statistical fitting before reaching for a solver.</p>
+      <p>This interactive tool runs in your browser. If it has not loaded, make sure JavaScript is enabled in your browser settings.</p>
+      <p><a href="https://cianmroche.github.io/side_projects/">More projects by Cian Roche</a></p>
+    </section>
+  </div>
   <script type="module" src="main.js"></script>
 </body>
 </html>

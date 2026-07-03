@@ -3,7 +3,25 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Caustica</title>
+  <title>Caustica: Interactive Gravitational Lensing Simulator</title>
+  <meta name="description" content="A free, interactive gravitational lensing simulator. Watch mass bend light into Einstein rings, arcs, and caustics with real-time control over lenses and background sources.">
+  <link rel="canonical" href="https://cianmroche.github.io/assets/caustica/">
+  <meta name="author" content="Cian Roche">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Cian Roche">
+  <meta property="og:title" content="Caustica: Interactive Gravitational Lensing Simulator">
+  <meta property="og:description" content="A free, interactive gravitational lensing simulator. Watch mass bend light into Einstein rings, arcs, and caustics with real-time control over lenses and background sources.">
+  <meta property="og:url" content="https://cianmroche.github.io/assets/caustica/">
+  <meta property="og:image" content="https://cianmroche.github.io/images/caustica-prog-2pointmass.gif">
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Caustica: Interactive Gravitational Lensing Simulator">
+  <meta name="twitter:description" content="A free, interactive gravitational lensing simulator. Watch mass bend light into Einstein rings, arcs, and caustics with real-time control over lenses and background sources.">
+  <meta name="twitter:image" content="https://cianmroche.github.io/images/caustica-prog-2pointmass.gif">
+
   <script>
     (function () {
       var t = localStorage.getItem('theme') || 'dark';
@@ -13,7 +31,15 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="app"></div>
+  <!-- Static content for crawlers and no-JS visitors. The app replaces #app on load. -->
+  <div id="app">
+    <section style="max-width:640px;margin:0 auto;padding:48px 24px;font-family:system-ui,-apple-system,sans-serif;line-height:1.6;color:#888">
+      <h1>Caustica</h1>
+      <p>Caustica is a free, interactive gravitational lensing simulator. Move a lens mass to warp background sources into Einstein rings, giant arcs, and caustics, and watch the images change in real time. It is a browser-based tool for exploring how gravity bends light, one of the cleanest ways to map dark matter.</p>
+      <p>This interactive tool runs in your browser. If it has not loaded, make sure JavaScript and WebGL2 (hardware acceleration) are enabled in your browser settings.</p>
+      <p><a href="https://cianmroche.github.io/side_projects/">More projects by Cian Roche</a></p>
+    </section>
+  </div>
   <script type="module" src="main.js"></script>
 </body>
 </html>
