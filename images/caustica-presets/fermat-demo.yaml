@@ -12,7 +12,7 @@ showMarkers: true
 showLegend: true
 showColorbar: true
 critGridN: 512
-psGridStep: 0.02
+psGridN: 300
 critZs: null
 contourSpacing: 1.2875
 fermatUseSourcePos: true

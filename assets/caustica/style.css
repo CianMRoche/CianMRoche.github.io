@@ -357,6 +357,52 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
 /* When the ruler tool is shown, lift the colorbar above it (both live bottom-left). */
 .sl-image-wrap.sl-ruler-visible .sl-colorbar { bottom: 44px; }
 
+/* Performance warning — orange badge, bottom-right (clear of the bottom-left
+   colorbar/ruler). Appears only while the overlay redraw is slow. */
+.sl-perf-warn {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  z-index: 12;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: var(--bg);
+  border: 1px solid #e8912e;
+  border-radius: 50%;
+  color: #e8912e;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.9;
+  pointer-events: auto;
+  animation: sl-perf-pulse 1.8s ease-in-out infinite;
+}
+.sl-perf-warn:hover { opacity: 1; background: #e8912e; color: #fff; }
+@keyframes sl-perf-pulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+
+.sl-perf-pop {
+  position: absolute;
+  bottom: 42px;
+  right: 8px;
+  z-index: 13;
+  width: 260px;
+  max-width: calc(100% - 16px);
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--fg-soft);
+  pointer-events: auto;
+}
+.sl-perf-pop b { color: var(--fg); }
+
 /* ── Right sidebar ────────────────────────────────────────────────────────── */
 
 /* Default (narrow): single column, params first then settings. */
@@ -579,6 +625,36 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   border-radius: 3px;
 }
 .sl-hybrid-hdr:hover { background: var(--bg-soft); }
+
+/* Per-part show/hide + delete buttons in a hybrid section header. */
+.sl-hybrid-part-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 0.1s, border-color 0.1s, background 0.1s;
+}
+.sl-hybrid-part-btn:hover { color: var(--fg); border-color: var(--fg); }
+.sl-hybrid-part-btn.sl-obj-hidden { opacity: 0.5; }
+.sl-hybrid-part-del:hover {
+  color: var(--bad);
+  border-color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 8%, transparent);
+}
+.sl-part-hidden-tag {
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  opacity: 0.7;
+}
 .sl-hybrid-arrow {
   font-size: 16px;
   color: var(--muted);

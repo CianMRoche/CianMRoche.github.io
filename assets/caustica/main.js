@@ -58,6 +58,30 @@ function invertHexColor(hex) {
 const CRIT_COLOR = 'rgba(248, 113, 196, 0.95)';
 const CAUS_COLOR = 'rgba(134, 239, 172, 0.95)';
 
+// Point-source image grid: number of sample points across the field. This is a
+// fixed count (not an absolute arcsec spacing) so the cost stays bounded as the
+// FOV grows to cluster scale. PS_GRID_MAX is a hard backstop on that count.
+const PS_GRID_MAX = 1200;
+const PS_GRID_OPTIONS = [150, 300, 600, 1200];
+
+// Overlay-redraw time (ms) above which the orange performance warning appears.
+// Hysteresis (0.6×) prevents the badge flickering on borderline frames.
+const PERF_WARN_MS = 120;
+let _perfWarnOn = false;
+function reportPerf(ms) {
+  const badge = document.getElementById('sl-perf-warn');
+  if (!badge) return;
+  if      (!_perfWarnOn && ms > PERF_WARN_MS)       _perfWarnOn = true;
+  else if ( _perfWarnOn && ms < PERF_WARN_MS * 0.6) _perfWarnOn = false;
+  if (_perfWarnOn) {
+    badge.style.display = '';
+  } else {
+    badge.style.display = 'none';
+    const pop = document.getElementById('sl-perf-pop');
+    if (pop) pop.style.display = 'none';
+  }
+}
+
 // ── App state ─────────────────────────────────────────────────────────────────
 // Scalar view/visual settings that round-trip through the YAML config. Centralised
 // so that loadConfigFromYaml() can fall back to these exact defaults for any field
@@ -73,7 +97,7 @@ const CONFIG_DEFAULTS = {
   showColorbar:       true,
   showRuler:          false,  // ruler tool + its measurement lines visible (off by default)
   critGridN:          512,
-  psGridStep:         0.02,   // arcsec — point source grid spacing
+  psGridN:            300,    // point-source grid: sample points across the field
   critZs:             null,   // null = auto (highest-z source plane)
   fermatUseSourcePos: false,  // when true, use lastFermatSource for Fermat β_s and source plane
   contourSpacing:     1.0,    // Fermat contour spacing multiplier (interval = 0.002·fov²·this)
@@ -243,11 +267,15 @@ function findPointSourceImages(srcObj, srcPlane) {
   }
 
   // ── Stage 1: coarse sign-change grid for starting guesses ──────────────
-  // Fixed grid step from settings — independent of FOV so positions don't shift on zoom.
-  const step = state.psGridStep ?? 0.005;
+  // Grid density is a fixed number of points ACROSS the field, not an absolute
+  // arcsec spacing, so the O(N²) cost cannot blow up as the FOV grows to cluster
+  // scale. Hard-capped at PS_GRID_MAX as a backstop against pathological configs.
+  // (Final image positions come from Newton-Raphson refinement, so they don't
+  // shift with grid density — only the completeness of faint-image detection does.)
   const RANGE = Math.max(state.fov * 1.1, 3.0);
-  const N    = Math.ceil(RANGE / step) + 1;
-  const half = RANGE / 2;
+  const N     = Math.min(Math.max(Math.round(state.psGridN ?? 300), 32), PS_GRID_MAX);
+  const step  = RANGE / (N - 1);
+  const half  = RANGE / 2;
 
   const Fx = new Float32Array(N * N);
   const Fy = new Float32Array(N * N);
@@ -367,7 +395,7 @@ function configToYaml() {
   y += `showCritCurves: ${state.showCritCurves}\nshowCaustics: ${state.showCaustics}\n`;
   y += `showMarkers: ${state.showMarkers}\nshowLegend: ${state.showLegend}\nshowColorbar: ${state.showColorbar}\n`;
   y += `showRuler: ${state.showRuler}\n`;
-  y += `critGridN: ${state.critGridN}\npsGridStep: ${state.psGridStep}\n`;
+  y += `critGridN: ${state.critGridN}\npsGridN: ${state.psGridN}\n`;
   y += `critZs: ${state.critZs === null ? 'null' : state.critZs}\n`;
   y += `contourSpacing: ${state.contourSpacing}\n`;
   y += `fermatUseSourcePos: ${state.fermatUseSourcePos}\n`;
@@ -545,7 +573,15 @@ function loadConfigFromYaml(yaml) {
     state.fermatUseSourcePos = _bool(cfg.fermatUseSourcePos, CONFIG_DEFAULTS.fermatUseSourcePos);
     // Numeric settings, validated against their allowed choices where applicable.
     state.critGridN     = [256, 512, 1024, 2048].includes(cfg.critGridN) ? cfg.critGridN : CONFIG_DEFAULTS.critGridN;
-    state.psGridStep    = [0.1, 0.05, 0.02, 0.01, 0.005].includes(cfg.psGridStep) ? cfg.psGridStep : CONFIG_DEFAULTS.psGridStep;
+    if (PS_GRID_OPTIONS.includes(cfg.psGridN)) {
+      state.psGridN = cfg.psGridN;
+    } else if (isFinite(cfg.psGridStep) && cfg.psGridStep > 0) {
+      // Legacy configs stored an absolute grid spacing (arcsec). Map to a point count.
+      const s = cfg.psGridStep;
+      state.psGridN = s >= 0.075 ? 150 : s >= 0.015 ? 300 : s >= 0.0075 ? 600 : 1200;
+    } else {
+      state.psGridN = CONFIG_DEFAULTS.psGridN;
+    }
     state.critZs        = (isFinite(cfg.critZs) && cfg.critZs > 0) ? cfg.critZs : CONFIG_DEFAULTS.critZs;
     state.contourSpacing = isFinite(cfg.contourSpacing) ? Math.max(0.05, cfg.contourSpacing) : CONFIG_DEFAULTS.contourSpacing;
     if (isFinite(cfg.fermatBetaX) && isFinite(cfg.fermatBetaY) && isFinite(cfg.fermatSrcPlaneZ)) {
@@ -599,6 +635,22 @@ function eyeIcon(hidden) {
        </svg>`;
 }
 
+function trashIcon() {
+  return `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block">
+        <polyline points="3 6 5 6 21 6"/>
+        <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+       </svg>`;
+}
+
+// Per-part show/hide + delete controls for one half of a hybrid object.
+// kind: 'lens' | 'src'. Rendered inside the section header, so their click
+// handlers must stopPropagation to avoid toggling the section's expansion.
+function hybridPartControls(part, kind) {
+  const label = kind === 'lens' ? 'lens' : 'source';
+  return `<button type="button" class="sl-hybrid-part-btn${part.hidden ? ' sl-obj-hidden' : ''}" id="sl-part-vis-${kind}" title="${part.hidden ? 'Show' : 'Hide'} ${label}">${eyeIcon(part.hidden)}</button>
+    <button type="button" class="sl-hybrid-part-btn sl-hybrid-part-del" id="sl-part-del-${kind}" title="Delete ${label} (keeps the other)">${trashIcon()}</button>`;
+}
+
 function addPlane(z) {
   const plane = { id: uid(), z, objects: [] };
   state.planes.push(plane);
@@ -628,6 +680,19 @@ function deleteSelectedObject() {
             .forEach(o => renderer?.clearPastedTexture(o.id));
   pl.objects = pl.objects.filter(o => !removeIds.has(o.id));
   state.selectedObjId = pl.objects[0]?.id ?? null;
+  renderSidebar(); rebuildPlaneBoxes(); redraw();
+}
+
+// Delete one half of a hybrid object, leaving its partner as a standalone
+// (non-hybrid) object. The partner keeps its params and position.
+function deleteHybridPart(plane, partId) {
+  const part = plane.objects.find(o => o.id === partId);
+  if (!part) return;
+  const partner = hybridPartner(plane, part);
+  if (part.model === 'pastedimage') renderer?.clearPastedTexture(part.id);
+  plane.objects = plane.objects.filter(o => o.id !== partId);
+  if (partner) { delete partner.hybridId; state.selectedObjId = partner.id; }
+  else         { state.selectedObjId = plane.objects[0]?.id ?? null; }
   renderSidebar(); rebuildPlaneBoxes(); redraw();
 }
 
@@ -760,6 +825,21 @@ function buildDOM() {
             <canvas id="sl-gl-canvas"></canvas>
             <canvas class="sl-overlay" id="sl-overlay"></canvas>
             <div class="sl-rec-dot" id="sl-rec-dot" style="display:none"></div>
+            <button class="sl-perf-warn" id="sl-perf-warn" style="display:none"
+                    title="This scene is slow to redraw — click for options" aria-label="Performance warning">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 4.5 L21 19.5 L3 19.5 Z"/>
+                <line x1="12" y1="10" x2="12" y2="14"/>
+                <line x1="12" y1="16.6" x2="12" y2="16.6"/>
+              </svg>
+            </button>
+            <div class="sl-perf-pop" id="sl-perf-pop" style="display:none">
+              <b style="color:#e8912e">⚠ This scene is slow to redraw</b><br>
+              Two settings dominate the cost of the overlays:<br><br>
+              <b>Critical-curve resolution</b> (Settings ▸ Critical Curves) traces the curves on an N×N grid — cost grows as N². Higher is sharper but slower.<br><br>
+              <b>Point-source grid density</b> (Settings ▸ Point Source) sets how many points across the field are searched for images. Denser grids catch fainter images but cost more.<br><br>
+              Lower either setting, or reduce the field of view, to speed things up.
+            </div>
             <div class="sl-viz-chip">
               <select id="sl-viz-mode">
                 <option value="0">Lensed image</option>
@@ -947,6 +1027,22 @@ function attachHandlers() {
 
   attachAxisHandlers();
   attachImageHandlers(document.getElementById('sl-image-wrap'));
+
+  // Performance warning badge (bottom-right of image). Lives in the persistent
+  // #app markup, so wire it once here rather than in the per-render handler block.
+  const _perfBtn = document.getElementById('sl-perf-warn');
+  const _perfPop = document.getElementById('sl-perf-pop');
+  _perfBtn?.addEventListener('pointerdown', e => e.stopPropagation()); // don't start an object drag
+  _perfBtn?.addEventListener('click', e => {
+    e.stopPropagation();
+    if (_perfPop) _perfPop.style.display = _perfPop.style.display === 'none' ? '' : 'none';
+  });
+  document.addEventListener('click', e => {
+    if (_perfPop && _perfPop.style.display !== 'none' &&
+        !_perfPop.contains(e.target) && e.target !== _perfBtn) {
+      _perfPop.style.display = 'none';
+    }
+  });
 
   // Ruler tool: toggle activates the crosshair; the × clears all measurements.
   // Stop pointerdown from bubbling to the image-wrap so clicking these buttons
@@ -1692,8 +1788,9 @@ function renderSidebar() {
           <div class="sl-hybrid-section">
             <div class="sl-hybrid-hdr" id="sl-hybrid-lens-hdr">
               <span class="sl-hybrid-arrow">${lensExp ? '▼' : '▶'}</span>
-              <span class="sl-panel-title" style="flex:1">Lens</span>
+              <span class="sl-panel-title" style="flex:1">Lens${lensObj.hidden ? ' <span class="sl-part-hidden-tag">(hidden)</span>' : ''}</span>
               ${infoSection('sl-param-info-lens', LENS_INFO[lensObj.model] ?? '')}
+              ${hybridPartControls(lensObj, 'lens')}
             </div>
             ${lensExp ? `<div class="sl-hybrid-body" data-hybrid-section="lens">
               <select class="sl-select" id="sl-model-select-lens">${lensModelOpts}</select>
@@ -1703,8 +1800,9 @@ function renderSidebar() {
           <div class="sl-hybrid-section">
             <div class="sl-hybrid-hdr" id="sl-hybrid-src-hdr">
               <span class="sl-hybrid-arrow">${srcExp ? '▼' : '▶'}</span>
-              <span class="sl-panel-title" style="flex:1">Source</span>
+              <span class="sl-panel-title" style="flex:1">Source${srcObj.hidden ? ' <span class="sl-part-hidden-tag">(hidden)</span>' : ''}</span>
               ${infoSection('sl-param-info-src', SOURCE_INFO[srcObj.model] ?? '')}
+              ${hybridPartControls(srcObj, 'src')}
             </div>
             ${srcExp ? `<div class="sl-hybrid-body" data-hybrid-section="src">
               <select class="sl-select" id="sl-model-select-src">${srcModelOpts}</select>
@@ -1764,7 +1862,7 @@ function renderSidebar() {
         ${_sg.general ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
           <div class="sl-global-input">
             <label>FOV (″)</label>
-            <input type="number" id="sl-fov" min="0.5" max="20" step="0.5" value="${state.fov}">
+            <input type="number" id="sl-fov" min="0.5" max="300" step="0.5" value="${state.fov}">
             <span class="sl-unit">"</span>
           </div>
           <div class="sl-global-input">
@@ -1900,14 +1998,14 @@ function renderSidebar() {
           <span class="sl-panel-title" style="flex:1">Point Source</span>
         </button>
         ${_sg.ps ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
+          <p class="sl-perf-note" style="margin-bottom:6px">(Denser grids find fainter images but are slower.)</p>
           <div class="sl-global-input">
-            <label>Grid spacing</label>
+            <label>Grid density</label>
             <select id="sl-ps-grid">
-              <option value="0.1"   ${state.psGridStep===0.1   ?'selected':''}>100 mas (fastest)</option>
-              <option value="0.05"  ${state.psGridStep===0.05  ?'selected':''}>50 mas</option>
-              <option value="0.02"  ${state.psGridStep===0.02  ?'selected':''}>20 mas</option>
-              <option value="0.01"  ${state.psGridStep===0.01  ?'selected':''}>10 mas</option>
-              <option value="0.005" ${state.psGridStep===0.005 ?'selected':''}>5 mas (slowest)</option>
+              <option value="150"  ${state.psGridN===150  ?'selected':''}>Coarse (150, fastest)</option>
+              <option value="300"  ${state.psGridN===300  ?'selected':''}>Medium (300)</option>
+              <option value="600"  ${state.psGridN===600  ?'selected':''}>Fine (600)</option>
+              <option value="1200" ${state.psGridN===1200 ?'selected':''}>Very fine (1200, slowest)</option>
             </select>
           </div>
         </div>` : ''}
@@ -2029,7 +2127,7 @@ function renderSidebar() {
 
   const _fovEl = document.getElementById('sl-fov');
   _fovEl?.addEventListener('change', e => { const v = parseFloat(e.target.value); if (v > 0) { state.fov = v; redraw(); } });
-  _attachScrub(_fovEl, { lo: 0.5, hi: 20, onChange: v => { state.fov = v; redraw(); } });
+  _attachScrub(_fovEl, { lo: 0.5, hi: 300, onChange: v => { state.fov = v; redraw(); } });
   const _zmaxEl = document.getElementById('sl-zmax');
   _zmaxEl?.addEventListener('change', e => { const v = parseFloat(e.target.value); if (v > 0) { state.zMax = v; drawAxisCanvas(); } });
   _attachScrub(_zmaxEl, { lo: 0.1, hi: 10, onChange: v => { state.zMax = v; drawAxisCanvas(); } });
@@ -2128,7 +2226,7 @@ function renderSidebar() {
     btn.addEventListener('click', () => removeFromProgram(btn.dataset.id));
   });
   document.getElementById('sl-crit-res')?.addEventListener('change', e => { state.critGridN = parseInt(e.target.value, 10); redraw(); });
-  document.getElementById('sl-ps-grid')?.addEventListener('change',  e => { state.psGridStep = parseFloat(e.target.value); redraw(); });
+  document.getElementById('sl-ps-grid')?.addEventListener('change',  e => { state.psGridN = parseInt(e.target.value, 10); redraw(); });
   document.getElementById('sl-crit-zs')?.addEventListener('change',     e => { const v = parseFloat(e.target.value); if (v > 0) { state.critZs = v; redraw(); } });
   const _zsEl = document.getElementById('sl-crit-zs-gen');
   _zsEl?.addEventListener('change', e => { const v = parseFloat(e.target.value); if (v > 0) { state.critZs = v; redraw(); } });
@@ -2180,6 +2278,20 @@ function renderSidebar() {
       // Keep the ⓘ popovers from toggling the section header they live in.
       document.getElementById('sl-param-info-lens')?.addEventListener('click', e => e.stopPropagation());
       document.getElementById('sl-param-info-src')?.addEventListener('click', e => e.stopPropagation());
+      // Per-part show/hide + delete. stopPropagation so the click doesn't also
+      // expand/collapse the section header these buttons sit inside.
+      document.getElementById('sl-part-vis-lens')?.addEventListener('click', e => {
+        e.stopPropagation(); lensObj.hidden = !lensObj.hidden; renderSidebar(); redraw();
+      });
+      document.getElementById('sl-part-vis-src')?.addEventListener('click', e => {
+        e.stopPropagation(); srcObj.hidden = !srcObj.hidden; renderSidebar(); redraw();
+      });
+      document.getElementById('sl-part-del-lens')?.addEventListener('click', e => {
+        e.stopPropagation(); deleteHybridPart(pl, lensObj.id);
+      });
+      document.getElementById('sl-part-del-src')?.addEventListener('click', e => {
+        e.stopPropagation(); deleteHybridPart(pl, srcObj.id);
+      });
       // Lens section model + params
       document.getElementById('sl-model-select-lens')?.addEventListener('change', e => {
         lensObj.model = e.target.value; lensObj.params = defaultParams(lensObj.model);
@@ -2341,21 +2453,21 @@ function lensParamRows(obj, showAttach) {
          + objFooter(obj, showAttach)
          + '<p style="font-size:11px;color:var(--muted);margin-top:4px;grid-column:1/-1">Deflection is always computed relative to the coordinate origin regardless of object position. Moving the marker only repositions the direction arrow.</p>';
   if (obj.model === 'pointmass')
-    return sliderRowLog('Strength (")', 'thetaE', 0.01, 8.0, p.thetaE ?? 1)
+    return sliderRowLog('Strength (")', 'thetaE', 0.01, 100, p.thetaE ?? 1)
          + objFooter(obj, showAttach);
   if (obj.model === 'sie')
-    return sliderRowLog('b (")',   'b',   0.01, 8.0,   p.b   ?? 1)
+    return sliderRowLog('b (")',   'b',   0.01, 100,   p.b   ?? 1)
          + sliderRow   ('q',       'q',   0.05, 1.0,   0.05, p.q   ?? 0.75)
          + sliderRow   ('φ (rad)', 'phi', 0,   Math.PI, 0.05, p.phi ?? 0)
          + objFooter(obj, showAttach);
   if (obj.model === 'nie')
-    return sliderRowLog('b (")',    'b',   0.01, 8.0,   p.b   ?? 1)
+    return sliderRowLog('b (")',    'b',   0.01, 100,   p.b   ?? 1)
          + sliderRow   ('q',        'q',   0.05, 1.0,   0.05, p.q   ?? 0.75)
          + sliderRow   ('φ (rad)',  'phi', 0,   Math.PI, 0.05, p.phi ?? 0)
-         + sliderRowLog('r<sub>c</sub> (")', 'rc', 0.005, 2.0, p.rc ?? 0.2)
+         + sliderRowLog('r<sub>c</sub> (")', 'rc', 0.005, 20, p.rc ?? 0.2)
          + objFooter(obj, showAttach);
   if (obj.model === 'epl')
-    return sliderRowLog('b (")',   'b',     0.01, 8.0,   p.b     ?? 1)
+    return sliderRowLog('b (")',   'b',     0.01, 100,   p.b     ?? 1)
          + sliderRow   ('q',       'q',     0.05, 1.0,   0.05, p.q     ?? 0.75)
          + sliderRow   ('φ (rad)', 'phi',   0,   Math.PI, 0.05, p.phi   ?? 0)
          + sliderRow   ('γ',       'gamma', 0.5, 3.0,     0.05, p.gamma ?? 2.0)
@@ -2363,7 +2475,7 @@ function lensParamRows(obj, showAttach) {
          + '<p style="font-size:11px;color:var(--muted);margin-top:4px;grid-column:1/-1">Fermat potential (T) uses the geometric term only for EPL: the potential has no closed form for the scaled-SIE approximation.</p>';
   if (obj.model === 'nfw')
     return sliderRowLog('κ<sub>s</sub>',     'kappaS', 0.01, 5.0, p.kappaS ?? 0.5)
-         + sliderRowLog('r<sub>s</sub> (")', 'rS',     0.01, 5.0, p.rS     ?? 0.4)
+         + sliderRowLog('r<sub>s</sub> (")', 'rS',     0.01, 60, p.rS     ?? 0.4)
          + objFooter(obj, showAttach);
   return '';
 }
@@ -2788,7 +2900,7 @@ function drawOverlay() {
     for (const obj of plane.objects) {
       if (obj.type !== 'source' || obj.model !== 'pointsource' || obj.hidden) continue;
       const imagePositions = findPointSourceImages(obj, plane);
-      const r_px = Math.max((obj.params.sigma ?? 0.05) / state.fov * Wl, 1.5);
+      const r_px = Math.max((obj.params.sigma ?? 0.05) / state.fov * Wl, 2.5);
       const dark = document.documentElement.getAttribute('data-theme') === 'dark';
       const storedColor = obj.params.color ?? '#ffffff';
       const col = dark ? storedColor : invertHexColor(storedColor);
@@ -3432,7 +3544,9 @@ function _doRedraw() {
   }
   for (const plane of state.planes) redrawPlaneCanvas(plane);
   drawAxisCanvas();
+  const _t0 = performance.now();
   drawOverlay();
+  reportPerf(performance.now() - _t0);
 }
 
 // ── Capture & recording ───────────────────────────────────────────────────────
