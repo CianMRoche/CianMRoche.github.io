@@ -11,7 +11,7 @@ showCaustics: true
 showMarkers: true
 showLegend: true
 showColorbar: true
-critGridN: 2048
+critGridN: 512
 psGridStep: 0.02
 critZs: null
 contourSpacing: 1
