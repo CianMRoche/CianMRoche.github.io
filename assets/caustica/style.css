@@ -320,6 +320,43 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   color: var(--fg-soft);
 }
 
+/* Ruler tool — bottom-left of image (clear of the top-left legend). */
+.sl-ruler-tools {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  z-index: 11;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  pointer-events: auto;
+}
+.sl-ruler-btn,
+.sl-ruler-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  color: var(--fg-soft);
+  cursor: pointer;
+  opacity: 0.85;
+  transition: opacity 0.15s, color 0.15s, border-color 0.15s;
+}
+.sl-ruler-btn { width: 26px; height: 26px; }
+.sl-ruler-clear { width: 22px; height: 26px; font-size: 15px; line-height: 1; }
+.sl-ruler-btn:hover,
+.sl-ruler-clear:hover { opacity: 1; color: var(--accent); border-color: var(--accent); }
+.sl-ruler-btn.active {
+  opacity: 1;
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+/* When the ruler tool is shown, lift the colorbar above it (both live bottom-left). */
+.sl-image-wrap.sl-ruler-visible .sl-colorbar { bottom: 44px; }
+
 /* ── Right sidebar ────────────────────────────────────────────────────────── */
 
 /* Default (narrow): single column, params first then settings. */

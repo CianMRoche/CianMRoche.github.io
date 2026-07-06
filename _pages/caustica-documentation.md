@@ -19,7 +19,8 @@ permalink: /caustica-documentation/
 3. **Click inside a plane panel** to place an object. Drag from an existing marker to move it. You can also drag objects directly in the main image panel.
 4. **Adjust parameters** in the Object Controls panel on the right. For hybrid objects, separate collapsible sections appear for the lens and source halves. The eye button excludes an object from the computation without deleting it.
 5. **The image panel** updates in real time. Press C to overlay critical curves and caustics. Use the recording tab to save a PNG, WebM, or GIF.
-6. **Save and load configurations** using the Save YAML / Load YAML buttons at the bottom of the Settings tab. The file stores all planes, objects, and parameters along with the full view state, so a loaded config reproduces the same picture: field of view, active quantity, per-quantity color mapping, contour spacing, the critical-curve and point-source resolution, and the overlay toggles. Any setting absent from a file (for instance one saved by an older version) loads at its default value.
+6. **Measure angular distances** with the ruler. Tick **Show ruler** in the Settings tab (off by default) to reveal the ruler button at the bottom-left of the image panel. Click it, then click-and-drag on the image between two points: a line appears with its separation in arcseconds and position angle (e.g. `1.42″ · 34°`). Measurements are additive — each drag adds another line, and they stay until cleared with **Esc**, the **×** button, or by turning the ruler off. The measurement lines are captured in saved PNGs and recordings; the ruler button itself is not.
+7. **Save and load configurations** using the Save YAML / Load YAML buttons at the bottom of the Settings tab. The file stores all planes, objects, and parameters along with the full view state, so a loaded config reproduces the same picture: field of view, active quantity, per-quantity color mapping, contour spacing, the critical-curve and point-source resolution, and the overlay toggles. Any setting absent from a file (for instance one saved by an older version) loads at its default value.
 
 ## Keyboard shortcuts
 
@@ -40,13 +41,19 @@ permalink: /caustica-documentation/
 | `D` | Toggle dark / light theme |
 | `↑ ↓ ← →` | Nudge selected object (hold for acceleration) |
 | `Delete` / `Backspace` | Delete the selected object |
-| `Escape` | Deselect |
+| `Escape` | Clear ruler measurements if any, otherwise deselect |
 
 ## 1. Coordinate system
 
 All angular positions are measured in **arcseconds** (″): object coordinates $(c_x, c_y)$, deflection angles, and size parameters all use this unit.
 The image panel shows a square patch of sky of side *field of view* `fov` (default 4″), centred on the optical axis.
 Radians appear only in intermediate formulae and are converted back to arcseconds throughout.
+
+### Measuring with the ruler
+
+To read an angular separation directly off the image, enable **Show ruler** in the Settings tab (off by default), which reveals a ruler button in the bottom-left corner of the image panel. With the tool active, click and drag between any two points: the line's length is reported in arcseconds and its **position angle** — measured counter-clockwise from the positive $x$-axis (rightward), with $y$ increasing upward — as `distance″ · angle°`.
+
+Endpoints are stored in sky coordinates, so a measurement stays anchored to the same points (and its readout stays constant) as you change the field of view. Measurements are additive: each drag adds another line, and all lines persist until cleared with **Esc**, the **×** button next to the ruler, or by turning the tool off. The ruler lines are drawn on the same overlay as the markers and critical curves, so they appear in saved PNGs and recordings; the ruler button, being ordinary UI chrome, is excluded from both.
 
 ## 2. Cosmological distances
 
@@ -585,7 +592,7 @@ Application shell (~2500 lines).
 - **Event wiring**: `attachHandlers()` for global keyboard/tab/toolbar events; `attachAxisHandlers()` for plane-dragging on the redshift axis; `attachPlaneCanvasHandlers(canvas, plane)` per plane panel; `attachImageHandlers(wrap)` for drag-to-move in the main image.
 - **`renderSidebar()`**: rebuilds the Object Controls and settings/recording tab content. Called whenever selection or state changes.
 - **`rebuildPlaneBoxes()`**: rebuilds the plane panel DOM from scratch, called when planes are added or removed.
-- **`_doRedraw()`**: packs the scene into the renderer, redraws the axis canvas, and redraws the overlay (critical curves, position markers, legend) on a 2D canvas layered above the WebGL output. In Fermat mode, `findStationaryPoints()` locates images of the source at $\boldsymbol{\beta}_s$ via a grid search followed by Newton-Raphson refinement, classifies them by Jacobian type, and computes their $\varphi$ values using `_computeFullFermat()` (a CPU-side mirror of the shader's comoving arrival-time surface) before passing saddle $\varphi$ levels to the renderer.
+- **`_doRedraw()`**: packs the scene into the renderer, redraws the axis canvas, and redraws the overlay (critical curves, position markers, legend, and ruler measurements) on a 2D canvas layered above the WebGL output. Ruler measurements live in `state.rulers` (arcsec endpoints) and are drawn by `drawOverlay()`; a ruler drag updates only the overlay, not the GPU scene. In Fermat mode, `findStationaryPoints()` locates images of the source at $\boldsymbol{\beta}_s$ via a grid search followed by Newton-Raphson refinement, classifies them by Jacobian type, and computes their $\varphi$ values using `_computeFullFermat()` (a CPU-side mirror of the shader's comoving arrival-time surface) before passing saddle $\varphi$ levels to the renderer.
 - **Recording**: `captureSnapshot()` composites the WebGL canvas and overlay into a PNG, reflecting the current view (lensed image or quantity map); `startRecording()` / `stopRecording()` drive a `MediaRecorder` for WebM or a gif.js encoder for GIF. UI chrome (the viz-mode chip, colour bar, sidebar) lives in separate DOM elements and is intentionally excluded from both PNG and recordings. The light-mode colour inversion that matches the on-screen lensed image is applied only in surface-brightness mode, since the quantity maps carry their own theming.
 - **Programmatic recording**: each selected object can have an initial and final position set; `startProgrammaticRecording()` interpolates all registered objects simultaneously.
 - **Config save/load**: `configToYaml()` serialises all planes and objects, plus the view state needed to reproduce the rendered image (field of view, $z_\text{max}$, active viz mode, per-mode color mapping, contour spacing, critical-curve and point-source resolution, the critical-curve redshift, and the marker/legend/colorbar/critical-curve/caustic toggles), to a human-readable YAML string. `parseYamlConfig()` parses it back with strict type and range validation (allowlisted model names, hex-only color strings, bounded numeric coordinates). The scalar view settings are centralised in a `CONFIG_DEFAULTS` table that both seeds the initial state and supplies the fallback for any field missing from a loaded file, so older or partial configs load to a fully defined visual state rather than inheriting whatever was on screen. The page theme and pasted-image textures are not part of the config (the former is a site-wide preference, the latter is binary data).

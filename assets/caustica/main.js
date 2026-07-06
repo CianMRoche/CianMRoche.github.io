@@ -71,6 +71,7 @@ const CONFIG_DEFAULTS = {
   showMarkers:        true,
   showLegend:         true,
   showColorbar:       true,
+  showRuler:          false,  // ruler tool + its measurement lines visible (off by default)
   critGridN:          512,
   psGridStep:         0.02,   // arcsec — point source grid spacing
   critZs:             null,   // null = auto (highest-z source plane)
@@ -84,6 +85,9 @@ const state = {
   selectedPlaneId: null,
   selectedObjId:   null,
   addMode:         'lens',   // 'lens' | 'source' | 'hybrid': global tool state
+  rulerActive:     false,    // ruler is the active pointer tool on the image panel (transient)
+  rulers:          [],       // committed measurements, each { x0, y0, x1, y1 } in arcsec (session-only)
+  rulerDraft:      null,     // in-progress ruler drag { x0, y0, x1, y1 } or null (transient)
   // Per-viz-mode colour mapping: { scale, param, min, max }. scale: 0=linear 1=sqrt
   // 2=power 3=asinh 4=log. Modes: 0=surface brightness, 1=κ, 2=γ, 3=|μ|, 5=|α|.
   vizScale:        null,     // initialised from DEFAULT_VIZ_SCALE below
@@ -362,6 +366,7 @@ function configToYaml() {
   }
   y += `showCritCurves: ${state.showCritCurves}\nshowCaustics: ${state.showCaustics}\n`;
   y += `showMarkers: ${state.showMarkers}\nshowLegend: ${state.showLegend}\nshowColorbar: ${state.showColorbar}\n`;
+  y += `showRuler: ${state.showRuler}\n`;
   y += `critGridN: ${state.critGridN}\npsGridStep: ${state.psGridStep}\n`;
   y += `critZs: ${state.critZs === null ? 'null' : state.critZs}\n`;
   y += `contourSpacing: ${state.contourSpacing}\n`;
@@ -536,6 +541,7 @@ function loadConfigFromYaml(yaml) {
     state.showMarkers    = _bool(cfg.showMarkers,    CONFIG_DEFAULTS.showMarkers);
     state.showLegend     = _bool(cfg.showLegend,     CONFIG_DEFAULTS.showLegend);
     state.showColorbar   = _bool(cfg.showColorbar,   CONFIG_DEFAULTS.showColorbar);
+    state.showRuler      = _bool(cfg.showRuler,      CONFIG_DEFAULTS.showRuler);
     state.fermatUseSourcePos = _bool(cfg.fermatUseSourcePos, CONFIG_DEFAULTS.fermatUseSourcePos);
     // Numeric settings, validated against their allowed choices where applicable.
     state.critGridN     = [256, 512, 1024, 2048].includes(cfg.critGridN) ? cfg.critGridN : CONFIG_DEFAULTS.critGridN;
@@ -552,7 +558,8 @@ function loadConfigFromYaml(yaml) {
     if (_vizSel) _vizSel.value = state.vizMode;
     glCanvas?.classList.toggle('sl-viz-active', state.vizMode !== 0);
     invalidateDistances();
-    rebuildPlaneBoxes(); renderSidebar(); _updateColorbar(); redraw();
+    state.rulerActive = false; state.rulers = []; state.rulerDraft = null;  // measurements are not part of a config
+    rebuildPlaneBoxes(); renderSidebar(); _updateColorbar(); updateRulerUI(); redraw();
   } catch (err) {
     alert('Failed to load config: ' + err.message);
     console.error(err);
@@ -771,6 +778,17 @@ function buildDOM() {
                 <span id="sl-colorbar-max"></span>
               </div>
             </div>
+            <div class="sl-ruler-tools" id="sl-ruler-tools" style="display:none">
+              <button class="sl-ruler-btn" id="sl-ruler-btn" title="Ruler — measure angular distance">
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="1.5" y="5" width="13" height="6" rx="1"/>
+                  <line x1="4.5"  y1="5" x2="4.5"  y2="8"/>
+                  <line x1="8"    y1="5" x2="8"    y2="8.5"/>
+                  <line x1="11.5" y1="5" x2="11.5" y2="8"/>
+                </svg>
+              </button>
+              <button class="sl-ruler-clear" id="sl-ruler-clear" title="Clear measurements" style="display:none">×</button>
+            </div>
           </div>
           <!-- Controls group: right-justified, right-grows -->
           <div class="sl-controls-col" id="sl-controls-col" data-mobile-tab="object">
@@ -930,6 +948,24 @@ function attachHandlers() {
   attachAxisHandlers();
   attachImageHandlers(document.getElementById('sl-image-wrap'));
 
+  // Ruler tool: toggle activates the crosshair; the × clears all measurements.
+  // Stop pointerdown from bubbling to the image-wrap so clicking these buttons
+  // never starts an object drag or a stray ruler measurement.
+  document.getElementById('sl-ruler-tools')?.addEventListener('pointerdown', e => e.stopPropagation());
+  document.getElementById('sl-ruler-btn')?.addEventListener('click', () => {
+    state.rulerActive = !state.rulerActive;
+    if (!state.rulerActive) { state.rulers = []; state.rulerDraft = null; }  // toggling off clears
+    updateRulerUI();
+    const wrap = document.getElementById('sl-image-wrap');
+    if (wrap) wrap.style.cursor = state.rulerActive ? 'crosshair' : '';
+    drawOverlay();
+  });
+  document.getElementById('sl-ruler-clear')?.addEventListener('click', () => {
+    state.rulers = []; state.rulerDraft = null;
+    updateRulerUI(); drawOverlay();
+  });
+  updateRulerUI();
+
   // Paste image from clipboard: applies to the currently selected pastedimage object.
   document.addEventListener('paste', e => {
     const obj = selectedObj();
@@ -1037,6 +1073,12 @@ function attachHandlers() {
       return;
     }
     if (e.key === 'Escape') {
+      // Clear ruler measurements first if any exist; otherwise deselect.
+      if (state.rulers.length || state.rulerDraft) {
+        state.rulers = []; state.rulerDraft = null;
+        updateRulerUI(); drawOverlay();
+        return;
+      }
       state.selectedObjId = null;
       renderSidebar(); rebuildPlaneBoxes(); redraw();
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -1090,11 +1132,36 @@ function hitTestImage(wrap, e) {
   return null;
 }
 
+// Sync the ruler tool's DOM chrome with state: container visibility (showRuler),
+// active highlight on the toggle button, and the clear button (shown only when
+// there are committed measurements).
+function updateRulerUI() {
+  const tools = document.getElementById('sl-ruler-tools');
+  const btn   = document.getElementById('sl-ruler-btn');
+  const clr   = document.getElementById('sl-ruler-clear');
+  const wrap  = document.getElementById('sl-image-wrap');
+  if (tools) tools.style.display = state.showRuler ? '' : 'none';
+  if (btn)   btn.classList.toggle('active', state.rulerActive);
+  if (clr)   clr.style.display = (state.showRuler && state.rulers.length > 0) ? '' : 'none';
+  if (wrap)  wrap.classList.toggle('sl-ruler-visible', state.showRuler);
+}
+
 function attachImageHandlers(wrap) {
-  let imgDrag = null; // { obj, plane, startCx, startCy, startMx, startMy }
+  let imgDrag   = null; // { obj, plane, startCx, startCy, startMx, startMy }
+  let rulerDrag = null; // { x0, y0, x1, y1 } while dragging a ruler measurement
 
   wrap.addEventListener('pointerdown', e => {
     if (e.button !== 0 && e.pointerType === 'mouse') return;
+    // Ruler tool intercepts the pointer entirely: no object hit-test / selection / move.
+    if (state.rulerActive && state.showRuler) {
+      e.preventDefault();
+      wrap.setPointerCapture(e.pointerId);
+      const p = imageWrapToArcsec(wrap, e);
+      rulerDrag = state.rulerDraft = { x0: p.x, y0: p.y, x1: p.x, y1: p.y };
+      wrap.style.cursor = 'crosshair';
+      drawOverlay();
+      return;
+    }
     const hit = hitTestImage(wrap, e);
     if (!hit) return;
     e.preventDefault();
@@ -1110,7 +1177,16 @@ function attachImageHandlers(wrap) {
   });
 
   wrap.addEventListener('pointermove', e => {
+    if (rulerDrag) {
+      e.preventDefault();
+      const p = imageWrapToArcsec(wrap, e);
+      rulerDrag.x1 = p.x; rulerDrag.y1 = p.y;
+      drawOverlay();  // overlay only — the GL scene is unchanged by a ruler drag
+      return;
+    }
     if (!imgDrag) {
+      // While the ruler tool is armed, keep the crosshair and never show the object grab cursor.
+      if (state.rulerActive && state.showRuler) { wrap.style.cursor = 'crosshair'; return; }
       wrap.style.cursor = hitTestImage(wrap, e) ? 'grab' : '';
       return;
     }
@@ -1127,11 +1203,25 @@ function attachImageHandlers(wrap) {
   });
 
   wrap.addEventListener('pointerup', e => {
+    if (rulerDrag) {
+      // Commit only a real drag; ignore near-zero-length taps.
+      if (Math.hypot(rulerDrag.x1 - rulerDrag.x0, rulerDrag.y1 - rulerDrag.y0) >= state.fov * 0.01) {
+        state.rulers.push({ ...rulerDrag });
+      }
+      rulerDrag = state.rulerDraft = null;
+      wrap.style.cursor = 'crosshair';
+      updateRulerUI(); drawOverlay();
+      return;
+    }
     if (!imgDrag) return;
     invalidateDistances();
     redraw();
     wrap.style.cursor = '';
     imgDrag = null;
+  });
+
+  wrap.addEventListener('pointercancel', () => {
+    if (rulerDrag) { rulerDrag = state.rulerDraft = null; updateRulerUI(); drawOverlay(); }
   });
 }
 
@@ -1688,6 +1778,7 @@ function renderSidebar() {
           <div class="sl-checkbox-row">
             <label><input type="checkbox" id="sl-show-markers" ${state.showMarkers?'checked':''}> Show positions</label>
             <label><input type="checkbox" id="sl-show-legend"  ${state.showLegend ?'checked':''}> Show legend</label>
+            <label><input type="checkbox" id="sl-show-ruler"   ${state.showRuler ?'checked':''}> Show ruler</label>
           </div>
         </div>` : ''}
       </div>
@@ -1950,6 +2041,14 @@ function renderSidebar() {
   document.getElementById('sl-settings-hdr-ps')?.addEventListener('click',      () => { _settingsExpanded.ps      = !_settingsExpanded.ps;      renderSidebar(); });
   document.getElementById('sl-show-markers')?.addEventListener('change',e => { state.showMarkers = e.target.checked; redraw(); });
   document.getElementById('sl-show-legend')?.addEventListener('change', e => { state.showLegend  = e.target.checked; redraw(); });
+  document.getElementById('sl-show-ruler')?.addEventListener('change', e => {
+    state.showRuler = e.target.checked;
+    if (!state.showRuler) state.rulerActive = false;  // hidden tool can't stay armed
+    updateRulerUI();
+    const wrap = document.getElementById('sl-image-wrap');
+    if (wrap && !state.rulerActive) wrap.style.cursor = '';
+    drawOverlay();
+  });
   document.getElementById('sl-show-colorbar')?.addEventListener('change', e => { state.showColorbar = e.target.checked; _updateColorbar(); });
   document.getElementById('sl-viz-scale')?.addEventListener('change', e => {
     const vs = vizScaleFor(state.vizMode);
@@ -2673,7 +2772,8 @@ function drawOverlay() {
   const needEllipse      = state.planes.some(pl => pl.objects.some(o => o.showShape));
   const needPointSources = state.planes.some(pl => pl.objects.some(o => o.type === 'source' && o.model === 'pointsource' && !o.hidden));
   const needFermatPts = state.fermatPoints && state.fermatPoints.length > 0;
-  if (!needCurve && !state.showMarkers && !needEllipse && !needPointSources && !needFermatPts) return;
+  const needRuler = state.showRuler && ((state.rulers && state.rulers.length) || state.rulerDraft);
+  if (!needCurve && !state.showMarkers && !needEllipse && !needPointSources && !needFermatPts && !needRuler) return;
 
   const Wl = W/dpr, Hl = H/dpr;
   overlayCtx.save();
@@ -3056,6 +3156,69 @@ function drawOverlay() {
       overlayCtx.textAlign   = 'center';
       overlayCtx.textBaseline = 'middle';
       overlayCtx.fillText(typeLabel(type), px, py + 0.5);
+    }
+  }
+
+  // ── 5. Ruler measurements (committed + live draft) ───────────────────────────
+  if (needRuler) {
+    const dark    = document.documentElement.getAttribute('data-theme') === 'dark';
+    const mainCol = dark ? 'rgba(255,255,255,0.92)' : 'rgba(0,0,0,0.82)';
+    const haloCol = dark ? 'rgba(0,0,0,0.55)'       : 'rgba(255,255,255,0.7)';
+    const pillBg  = dark ? 'rgba(0,0,0,0.7)'        : 'rgba(255,255,255,0.82)';
+    const _mob    = window.innerWidth <= 640;
+    const fsize   = _mob ? 12 : 14;
+    const segs    = [...state.rulers, state.rulerDraft].filter(Boolean);
+
+    overlayCtx.setLineDash([]);
+    overlayCtx.lineCap = 'round';
+    for (const seg of segs) {
+      const [x0, y0] = toPixel(seg.x0, seg.y0);
+      const [x1, y1] = toPixel(seg.x1, seg.y1);
+
+      // Line: wide translucent halo underneath, then the crisp main stroke.
+      overlayCtx.strokeStyle = haloCol; overlayCtx.lineWidth = 4;
+      overlayCtx.beginPath(); overlayCtx.moveTo(x0, y0); overlayCtx.lineTo(x1, y1); overlayCtx.stroke();
+      overlayCtx.strokeStyle = mainCol; overlayCtx.lineWidth = 1.6;
+      overlayCtx.beginPath(); overlayCtx.moveTo(x0, y0); overlayCtx.lineTo(x1, y1); overlayCtx.stroke();
+
+      // Endpoint dots.
+      overlayCtx.fillStyle = mainCol;
+      for (const [ex, ey] of [[x0, y0], [x1, y1]]) {
+        overlayCtx.beginPath(); overlayCtx.arc(ex, ey, 3, 0, Math.PI * 2); overlayCtx.fill();
+      }
+
+      // Distance (arcsec) + position angle (CCW from +x, y-up), normalised to 0–360°.
+      const dx = seg.x1 - seg.x0, dy = seg.y1 - seg.y0;
+      const dist = Math.hypot(dx, dy);
+      const ang  = ((Math.atan2(dy, dx) * 180 / Math.PI) + 360) % 360;
+      const label = `${dist.toFixed(2)}″ · ${Math.round(ang)}°`;
+
+      // Label pill near the midpoint, nudged perpendicular to the line, clamped on-screen.
+      overlayCtx.font = `${fsize}px system-ui, -apple-system, sans-serif`;
+      overlayCtx.textAlign = 'center';
+      overlayCtx.textBaseline = 'middle';
+      const tw = overlayCtx.measureText(label).width;
+      const padX = 6, padY = 4, boxW = tw + padX * 2, boxH = fsize + padY * 2;
+      const midX = (x0 + x1) / 2, midY = (y0 + y1) / 2;
+      const segLen = Math.hypot(x1 - x0, y1 - y0) || 1;
+      const nx = -(y1 - y0) / segLen, ny = (x1 - x0) / segLen; // unit normal
+      const off = boxH / 2 + 6;
+      let cx = midX + nx * off, cy = midY + ny * off;
+      cx = Math.min(Wl - boxW / 2 - 2, Math.max(boxW / 2 + 2, cx));
+      cy = Math.min(Hl - boxH / 2 - 2, Math.max(boxH / 2 + 2, cy));
+
+      overlayCtx.fillStyle = pillBg;
+      const bx = cx - boxW / 2, by = cy - boxH / 2, rr = 4;
+      overlayCtx.beginPath();
+      overlayCtx.moveTo(bx + rr, by);
+      overlayCtx.arcTo(bx + boxW, by,        bx + boxW, by + boxH, rr);
+      overlayCtx.arcTo(bx + boxW, by + boxH,  bx,        by + boxH, rr);
+      overlayCtx.arcTo(bx,        by + boxH,  bx,        by,        rr);
+      overlayCtx.arcTo(bx,        by,         bx + boxW, by,        rr);
+      overlayCtx.closePath();
+      overlayCtx.fill();
+      overlayCtx.fillStyle = mainCol;
+      overlayCtx.fillText(label, cx, cy + 0.5);
     }
   }
 
