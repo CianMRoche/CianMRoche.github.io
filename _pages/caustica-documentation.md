@@ -12,6 +12,10 @@ permalink: /caustica-documentation/
   <figcaption>The Caustica interface recreating a zigzag lens configuration. The image panel shows the lensed view; the redshift axis and plane panels hold the lens and source objects.</figcaption>
 </figure>
 
+<div class="doc-cyan" markdown="1">
+Caustica was built with heavy use of AI tools for code generation, and its calculations have not been peer-reviewed or independently validated. It is intended for education, intuition-building, visualization and media creation only, and should not be relied on for research.
+</div>
+
 ## Quick start
 
 1. **Click the redshift axis** (bottom left) to add an empty plane. Drag existing plane markers to reposition them along the axis.
@@ -596,7 +600,7 @@ Every listed object is interpolated linearly and **simultaneously** from its ini
 <figure>
   <img class="img-light" src="/images/caustica-prog-2pointmass-light.gif" alt="Programmatic animation of two point-mass lenses moving apart, their critical curves and caustics evolving.">
   <img class="img-dark"  src="/images/caustica-prog-2pointmass.gif"  alt="Programmatic animation of two point-mass lenses moving apart, their critical curves and caustics evolving.">
-  <figcaption>A programmatic GIF recording of two point-mass lenses driven along set paths past a central source. Each lens carries a circular critical curve (pink) and cuspy caustic (green).</figcaption>
+  <figcaption>A programmatic GIF recording of two point-mass lenses, one moving left and one moving right, passing in front of a central background source. Each lens carries a circular critical curve (pink) and cuspy caustic (green).</figcaption>
 </figure>
 
 ## 9. Code structure
