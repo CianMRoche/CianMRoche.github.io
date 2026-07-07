@@ -332,10 +332,13 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   pointer-events: auto;
 }
 .sl-ruler-btn,
-.sl-ruler-clear {
+.sl-ruler-clear,
+.sl-ruler-del {
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 26px;
+  height: 26px;
   background: var(--bg);
   border: 1px solid var(--hairline);
   border-radius: 4px;
@@ -344,10 +347,9 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   opacity: 0.85;
   transition: opacity 0.15s, color 0.15s, border-color 0.15s;
 }
-.sl-ruler-btn { width: 26px; height: 26px; }
-.sl-ruler-clear { width: 22px; height: 26px; font-size: 15px; line-height: 1; }
 .sl-ruler-btn:hover,
-.sl-ruler-clear:hover { opacity: 1; color: var(--accent); border-color: var(--accent); }
+.sl-ruler-clear:hover,
+.sl-ruler-del:hover { opacity: 1; color: var(--accent); border-color: var(--accent); }
 .sl-ruler-btn.active {
   opacity: 1;
   color: var(--accent);

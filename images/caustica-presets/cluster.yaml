@@ -1,0 +1,220 @@
+fov: 40
+zMax: 3
+vizMode: 0
+vizScale0: 1 0.4 0 1 0
+vizScale1: 0 0.5 0 2 0
+vizScale2: 0 0.5 0 1.5 0
+vizScale3: 4 0.5 1 100 0
+vizScale5: 1 0.5 8 15 0
+showCritCurves: false
+showCaustics: false
+showMarkers: true
+showLegend: true
+showColorbar: true
+showRuler: false
+critGridN: 512
+psGridN: 300
+critZs: 2
+contourSpacing: 1
+fermatUseSourcePos: true
+fermatBetaX: -1.832952
+fermatBetaY: 0.7479
+fermatSrcPlaneZ: 2.0000
+planes:
+  - z: 0.500
+    objects:
+      - type: lens
+        model: sie
+        cx: 0.86
+        cy: 0.74777
+        hidden: false
+        showShape: false
+        hybridId: '6'
+        params:
+          b: 16.29296
+          q: 0.75
+          phi: 0
+      - type: source
+        model: gaussian
+        cx: 0.86
+        cy: 0.74777
+        hidden: false
+        showShape: false
+        hybridId: '6'
+        params:
+          sigma: 1.049733
+          q: 0.85
+          phi: 0.6
+          amplitude: 0.9
+          color: '#fce5a4'
+      - type: lens
+        model: sie
+        cx: -8.63372
+        cy: -8.79034
+        hidden: false
+        showShape: false
+        hybridId: '14'
+        params:
+          b: 1.432188
+          q: 0.75
+          phi: 0
+      - type: source
+        model: gaussian
+        cx: -8.63372
+        cy: -8.79034
+        hidden: false
+        showShape: false
+        hybridId: '14'
+        params:
+          sigma: 0.567147
+          q: 0.85
+          phi: 0
+          amplitude: 1
+          color: '#f2c881'
+      - type: lens
+        model: sie
+        cx: -6.61123
+        cy: 7.18988
+        hidden: false
+        showShape: false
+        hybridId: '21'
+        params:
+          b: 1
+          q: 0.75
+          phi: 0
+      - type: source
+        model: gaussian
+        cx: -6.61123
+        cy: 7.18988
+        hidden: false
+        showShape: false
+        hybridId: '21'
+        params:
+          sigma: 0.575834
+          q: 0.8
+          phi: 2.35
+          amplitude: 1
+          color: '#f2cd70'
+      - type: lens
+        model: sie
+        cx: 5.23908
+        cy: -1.43798
+        hidden: false
+        showShape: false
+        hybridId: '24'
+        params:
+          b: 1
+          q: 0.75
+          phi: 0
+      - type: source
+        model: gaussian
+        cx: 5.23908
+        cy: -1.43798
+        hidden: false
+        showShape: false
+        hybridId: '24'
+        params:
+          sigma: 0.550163
+          q: 0.85
+          phi: 0.05
+          amplitude: 1
+          color: '#ffedb4'
+      - type: lens
+        model: shear
+        cx: -15.86279
+        cy: -16.09495
+        hidden: false
+        showShape: false
+        params:
+          gamma: 0.09875
+          phi: 0.95
+      - type: lens
+        model: sie
+        cx: 9.08524
+        cy: 10.41233
+        hidden: false
+        showShape: false
+        hybridId: '28'
+        params:
+          b: 1
+          q: 0.75
+          phi: 0
+      - type: source
+        model: exponential
+        cx: 9.08524
+        cy: 10.41233
+        hidden: false
+        showShape: false
+        hybridId: '28'
+        params:
+          sigma: 0.59361
+          q: 0.4
+          phi: 0
+          amplitude: 2.2
+          color: '#74dcff'
+      - type: lens
+        model: sie
+        cx: -8.17048
+        cy: -2.68538
+        hidden: false
+        showShape: false
+        hybridId: '31'
+        params:
+          b: 1
+          q: 0.75
+          phi: 0
+      - type: source
+        model: gaussian
+        cx: -8.17048
+        cy: -2.68538
+        hidden: false
+        showShape: false
+        hybridId: '31'
+        params:
+          sigma: 0.29499
+          q: 0.9
+          phi: 0
+          amplitude: 0.5
+          color: '#fff68e'
+  - z: 1.150
+    objects:
+      - type: source
+        model: gaussian
+        cx: 2.09979
+        cy: 0.32917
+        hidden: false
+        showShape: false
+        params:
+          sigma: 0.06
+          q: 1
+          phi: 0
+          amplitude: 1
+          color: '#75effb'
+  - z: 2.000
+    objects:
+      - type: source
+        model: exponential
+        cx: -1.83295
+        cy: 0.7479
+        hidden: false
+        showShape: false
+        params:
+          sigma: 0.05
+          q: 0.4
+          phi: 0
+          amplitude: 2.2
+          color: '#38caff'
+  - z: 3.000
+    objects:
+      - type: source
+        model: gaussian
+        cx: 6.59484
+        cy: -3.96059
+        hidden: false
+        showShape: false
+        params:
+          sigma: 0.292756
+          q: 0.25
+          phi: 2.45
+          amplitude: 0.2
+          color: '#dd4047'

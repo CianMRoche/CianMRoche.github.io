@@ -42,6 +42,10 @@ function hybridLensHalf(plane, obj) {
 // Per-hybrid panel expansion state; reset when a different hybrid is selected.
 let _hybridExpanded   = { lens: false, src: false };
 let _lastHybridId     = null;
+
+// Internal object clipboard for copy/paste (Cmd/Ctrl+C then Cmd/Ctrl+V). Separate
+// from the system clipboard so it never clashes with the pasted-image workflow.
+let _objClipboard     = null;
 let _settingsExpanded = { general: false, cmap: false, contours: false, crit: false, ps: false };
 let _progExpanded     = false;
 
@@ -95,7 +99,7 @@ const CONFIG_DEFAULTS = {
   showMarkers:        true,
   showLegend:         true,
   showColorbar:       true,
-  showRuler:          false,  // ruler tool + its measurement lines visible (off by default)
+  showRuler:          true,   // ruler tool + its measurement lines visible (on by default)
   critGridN:          512,
   psGridN:            300,    // point-source grid: sample points across the field
   critZs:             null,   // null = auto (highest-z source plane)
@@ -110,8 +114,9 @@ const state = {
   selectedObjId:   null,
   addMode:         'lens',   // 'lens' | 'source' | 'hybrid': global tool state
   rulerActive:     false,    // ruler is the active pointer tool on the image panel (transient)
-  rulers:          [],       // committed measurements, each { x0, y0, x1, y1 } in arcsec (session-only)
+  rulers:          [],       // committed measurements, each { id, x0, y0, x1, y1 } in arcsec (session-only)
   rulerDraft:      null,     // in-progress ruler drag { x0, y0, x1, y1 } or null (transient)
+  selectedRulerId: null,     // id of the ruler currently selected for edit/delete (transient)
   // Per-viz-mode colour mapping: { scale, param, min, max }. scale: 0=linear 1=sqrt
   // 2=power 3=asinh 4=log. Modes: 0=surface brightness, 1=κ, 2=γ, 3=|μ|, 5=|α|.
   vizScale:        null,     // initialised from DEFAULT_VIZ_SCALE below
@@ -490,6 +495,7 @@ const PRESETS = [
   { file: 'two-plane.yaml',     name: 'Two lens planes (multiplane)' },
   { file: 'fermat-demo.yaml',   name: 'Fermat surface demo' },
   { file: 'zigzag.yaml',        name: 'ZigZag Lens' },
+  { file: 'cluster.yaml',       name: 'Galaxy cluster (wide field)' },
 ];
 
 // Name of the preset last loaded from the dropdown, so the box keeps showing it.
@@ -696,6 +702,54 @@ function deleteHybridPart(plane, partId) {
   renderSidebar(); rebuildPlaneBoxes(); redraw();
 }
 
+// Copy the selected object (and its hybrid partner, if any) into the internal
+// clipboard. Returns true if something was copied.
+function copySelectedObject() {
+  const pl = selectedPlane(), obj = selectedObj();
+  if (!pl || !obj) return false;
+  const partner = hybridPartner(pl, obj);
+  const group = partner ? [obj, partner] : [obj];
+  _objClipboard = {
+    planeId:  pl.id,
+    isHybrid: !!partner,
+    objects:  group.map(o => ({
+      type: o.type, model: o.model, cx: o.cx, cy: o.cy,
+      params: { ...o.params }, showShape: o.showShape, hidden: o.hidden,
+      pasteCanvas: o.pasteCanvas || null,   // pastedimage: preserve the image
+    })),
+  };
+  return true;
+}
+
+// Paste the copied object(s) into the same plane at the same position, with fresh
+// ids (and a fresh shared hybridId if it was a hybrid). Selects the new object.
+function pasteCopiedObject() {
+  if (!_objClipboard) return false;
+  const pl = state.planes.find(p => p.id === _objClipboard.planeId) ?? selectedPlane();
+  if (!pl) return false;
+  const newHybridId = _objClipboard.isHybrid ? uid() : null;
+  let firstId = null;
+  for (const spec of _objClipboard.objects) {
+    const o = {
+      id: uid(), type: spec.type, model: spec.model, cx: spec.cx, cy: spec.cy,
+      params: { ...spec.params }, showShape: spec.showShape, hidden: spec.hidden,
+    };
+    if (newHybridId) o.hybridId = newHybridId;
+    pl.objects.push(o);
+    // A pasted image is stored per-object id, so register a texture for the copy.
+    if (spec.model === 'pastedimage' && spec.pasteCanvas) {
+      o.pasteCanvas = spec.pasteCanvas;
+      renderer?.setPastedTexture(o.id, spec.pasteCanvas);
+    }
+    if (!firstId) firstId = o.id;
+  }
+  state.selectedPlaneId = pl.id;
+  state.selectedObjId   = firstId;
+  clearRulerSelectionForObject();  // one selection at a time
+  rebuildPlaneBoxes(); renderSidebar(); redraw();
+  return true;
+}
+
 function selectedPlane() { return state.planes.find(p => p.id === state.selectedPlaneId) ?? null; }
 function selectedObj() {
   const pl = selectedPlane();
@@ -826,7 +880,7 @@ function buildDOM() {
             <canvas class="sl-overlay" id="sl-overlay"></canvas>
             <div class="sl-rec-dot" id="sl-rec-dot" style="display:none"></div>
             <button class="sl-perf-warn" id="sl-perf-warn" style="display:none"
-                    title="This scene is slow to redraw — click for options" aria-label="Performance warning">
+                    title="This scene is slow to redraw. Click for options." aria-label="Performance warning">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M12 4.5 L21 19.5 L3 19.5 Z"/>
                 <line x1="12" y1="10" x2="12" y2="14"/>
@@ -834,11 +888,12 @@ function buildDOM() {
               </svg>
             </button>
             <div class="sl-perf-pop" id="sl-perf-pop" style="display:none">
-              <b style="color:#e8912e">⚠ This scene is slow to redraw</b><br>
-              Two settings dominate the cost of the overlays:<br><br>
-              <b>Critical-curve resolution</b> (Settings ▸ Critical Curves) traces the curves on an N×N grid — cost grows as N². Higher is sharper but slower.<br><br>
-              <b>Point-source grid density</b> (Settings ▸ Point Source) sets how many points across the field are searched for images. Denser grids catch fainter images but cost more.<br><br>
-              Lower either setting, or reduce the field of view, to speed things up.
+              <b style="color:#e8912e">⚠ Slow redraw</b><br>
+              If you would like to reduce the time to draw new frames, try the following:<br><br>
+              • Turn off critical curves or lower the <b>Critical-curve resolution</b> (Settings ▸ Critical Curves)<br>
+              • If a point source is present, lower the <b>Point-source grid density</b> (Settings ▸ Point Source)<br>
+              • Reduce the number of objects<br>
+              • Reduce the field of view
             </div>
             <div class="sl-viz-chip">
               <select id="sl-viz-mode">
@@ -859,7 +914,7 @@ function buildDOM() {
               </div>
             </div>
             <div class="sl-ruler-tools" id="sl-ruler-tools" style="display:none">
-              <button class="sl-ruler-btn" id="sl-ruler-btn" title="Ruler — measure angular distance">
+              <button class="sl-ruler-btn" id="sl-ruler-btn" title="Ruler: measure distance/angle (L)">
                 <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
                   <rect x="1.5" y="5" width="13" height="6" rx="1"/>
                   <line x1="4.5"  y1="5" x2="4.5"  y2="8"/>
@@ -867,7 +922,19 @@ function buildDOM() {
                   <line x1="11.5" y1="5" x2="11.5" y2="8"/>
                 </svg>
               </button>
-              <button class="sl-ruler-clear" id="sl-ruler-clear" title="Clear measurements" style="display:none">×</button>
+              <button class="sl-ruler-del" id="sl-ruler-del" title="Delete selected measurement (Backspace)" style="display:none">
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="3" y1="4.5" x2="13" y2="4.5"/>
+                  <path d="M4.5 4.5 L5.1 13 a1 1 0 0 0 1 .9 H9.4 a1 1 0 0 0 1 -.9 L11.5 4.5"/>
+                  <path d="M6.3 4.5 V3.3 a0.9 0.9 0 0 1 .9 -.9 H8.8 a0.9 0.9 0 0 1 .9 .9 V4.5"/>
+                </svg>
+              </button>
+              <button class="sl-ruler-clear" id="sl-ruler-clear" title="Clear all measurements" style="display:none">
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="4.5" y1="4.5" x2="11.5" y2="11.5"/>
+                  <line x1="11.5" y1="4.5" x2="4.5" y2="11.5"/>
+                </svg>
+              </button>
             </div>
           </div>
           <!-- Controls group: right-justified, right-grows -->
@@ -1048,31 +1115,31 @@ function attachHandlers() {
   // Stop pointerdown from bubbling to the image-wrap so clicking these buttons
   // never starts an object drag or a stray ruler measurement.
   document.getElementById('sl-ruler-tools')?.addEventListener('pointerdown', e => e.stopPropagation());
-  document.getElementById('sl-ruler-btn')?.addEventListener('click', () => {
-    state.rulerActive = !state.rulerActive;
-    if (!state.rulerActive) { state.rulers = []; state.rulerDraft = null; }  // toggling off clears
-    updateRulerUI();
-    const wrap = document.getElementById('sl-image-wrap');
-    if (wrap) wrap.style.cursor = state.rulerActive ? 'crosshair' : '';
-    drawOverlay();
-  });
+  document.getElementById('sl-ruler-btn')?.addEventListener('click', toggleRulerTool);
+  document.getElementById('sl-ruler-del')?.addEventListener('click', deleteSelectedRuler);
   document.getElementById('sl-ruler-clear')?.addEventListener('click', () => {
-    state.rulers = []; state.rulerDraft = null;
+    state.rulers = []; state.rulerDraft = null; state.selectedRulerId = null;
     updateRulerUI(); drawOverlay();
   });
   updateRulerUI();
 
-  // Paste image from clipboard: applies to the currently selected pastedimage object.
+  // Paste handler, two cases (image-paste takes priority so it never breaks):
+  //  1. A pastedimage object is selected AND the clipboard holds an image → load it.
+  //  2. Otherwise, paste a copy of the internally-copied object (Cmd/Ctrl+C).
   document.addEventListener('paste', e => {
     const obj = selectedObj();
-    if (!obj || obj.model !== 'pastedimage') return;
-    const items = e.clipboardData?.items;
-    if (!items) return;
-    for (const item of items) {
-      if (!item.type.startsWith('image/')) continue;
-      _applyImageFile(item.getAsFile(), obj);
-      break;
+    if (obj && obj.model === 'pastedimage') {
+      const items = e.clipboardData?.items;
+      if (items) {
+        for (const item of items) {
+          if (item.type.startsWith('image/')) { _applyImageFile(item.getAsFile(), obj); return; }
+        }
+      }
     }
+    // Object paste — but don't hijack a normal text paste into a focused field.
+    const tag = document.activeElement?.tagName || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (_objClipboard) { e.preventDefault(); pasteCopiedObject(); }
   });
 
   // Global keyboard: Delete/Backspace removes selected object; Esc deselects.
@@ -1081,6 +1148,15 @@ function attachHandlers() {
     const type = (document.activeElement?.type)    || '';
     // Allow shortcuts when a range slider has focus (range inputs don't consume C/R/etc).
     if ((tag === 'INPUT' && type !== 'checkbox' && type !== 'range') || tag === 'TEXTAREA') return;
+
+    // Cmd/Ctrl+C copies the selected object (whole hybrid if applicable). The
+    // matching paste is handled in the 'paste' event so it coexists with the
+    // pasted-image workflow. Plain 'c' (no modifier) still toggles critical curves.
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'c' || e.key === 'C')) {
+      if (selectedObj()) { e.preventDefault(); copySelectedObject(); }
+      return;
+    }
+
     // Arrow keys nudge the selected object; skip if any input has focus
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' ||
         e.key === 'ArrowUp'   || e.key === 'ArrowDown') {
@@ -1146,7 +1222,11 @@ function attachHandlers() {
       recState.active ? stopRecording() : startRecording();
       return;
     }
-    if (e.key === 'c' || e.key === 'C') {
+    if ((e.key === 'l' || e.key === 'L') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      toggleRulerTool();  // arm/disarm the ruler tool (r is taken by recording)
+      return;
+    }
+    if ((e.key === 'c' || e.key === 'C') && !e.metaKey && !e.ctrlKey) {
       const either = state.showCritCurves || state.showCaustics;
       state.showCritCurves = !either;
       state.showCaustics   = !either;
@@ -1169,15 +1249,22 @@ function attachHandlers() {
       return;
     }
     if (e.key === 'Escape') {
-      // Clear ruler measurements first if any exist; otherwise deselect.
-      if (state.rulers.length || state.rulerDraft) {
-        state.rulers = []; state.rulerDraft = null;
+      // 1. Deselect a selected ruler. 2. Else disarm the ruler tool if armed
+      // (measurements stay; clear them with the buttons). 3. Else deselect object.
+      if (state.selectedRulerId) {
+        state.selectedRulerId = null;
         updateRulerUI(); drawOverlay();
+        return;
+      }
+      if (state.rulerActive) {
+        toggleRulerTool();  // rulerActive is true here, so this turns it off
         return;
       }
       state.selectedObjId = null;
       renderSidebar(); rebuildPlaneBoxes(); redraw();
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
+      // A selected ruler takes priority over the selected object.
+      if (state.selectedRulerId) { deleteSelectedRuler(); return; }
       const pl = selectedPlane();
       if (!pl) return;
       deleteSelectedObject();
@@ -1235,29 +1322,135 @@ function updateRulerUI() {
   const tools = document.getElementById('sl-ruler-tools');
   const btn   = document.getElementById('sl-ruler-btn');
   const clr   = document.getElementById('sl-ruler-clear');
+  const del   = document.getElementById('sl-ruler-del');
   const wrap  = document.getElementById('sl-image-wrap');
+  // Drop a stale selection if that ruler no longer exists.
+  if (state.selectedRulerId && !state.rulers.some(r => r.id === state.selectedRulerId))
+    state.selectedRulerId = null;
   if (tools) tools.style.display = state.showRuler ? '' : 'none';
   if (btn)   btn.classList.toggle('active', state.rulerActive);
+  if (del)   del.style.display = (state.showRuler && state.selectedRulerId) ? '' : 'none';
   if (clr)   clr.style.display = (state.showRuler && state.rulers.length > 0) ? '' : 'none';
   if (wrap)  wrap.classList.toggle('sl-ruler-visible', state.showRuler);
 }
 
+// Delete the currently selected ruler measurement. Returns true if one was removed.
+function deleteSelectedRuler() {
+  if (!state.selectedRulerId) return false;
+  state.rulers = state.rulers.filter(r => r.id !== state.selectedRulerId);
+  state.selectedRulerId = null;
+  updateRulerUI(); drawOverlay();
+  return true;
+}
+
+// Single-selection: selecting a ruler overtakes any object selection (and vice
+// versa), so only one thing is ever selected at a time.
+function selectRulerExclusive(id) {
+  const hadObj = state.selectedObjId != null;
+  state.selectedRulerId = id;
+  state.selectedObjId   = null;
+  updateRulerUI();
+  if (hadObj) renderSidebar();  // refresh the object panel to "nothing selected"
+  redraw();                     // plane-box highlights + overlay (ruler highlight + marker rings)
+}
+
+// Clear a ruler selection because an object is being selected. Callers already
+// re-render the sidebar / redraw, so this only updates the ruler tool chrome.
+function clearRulerSelectionForObject() {
+  if (!state.selectedRulerId) return;
+  state.selectedRulerId = null;
+  updateRulerUI();
+}
+
+// Arm/disarm the ruler drawing tool. Shared by the toolbar button and the "L"
+// shortcut. Enables the tool if it was hidden; keeps committed measurements.
+function toggleRulerTool() {
+  const wasHidden = !state.showRuler;
+  if (wasHidden) state.showRuler = true;
+  state.rulerActive = !state.rulerActive;
+  state.rulerDraft  = null;   // cancel any in-progress draw; measurements persist
+  updateRulerUI();
+  if (wasHidden) renderSidebar();  // sync the "Show ruler" checkbox
+  const wrap = document.getElementById('sl-image-wrap');
+  if (wrap) wrap.style.cursor = state.rulerActive ? 'crosshair' : '';
+  drawOverlay();
+}
+
+// Point-to-segment distance (arcsec), used for ruler line hit-testing.
+function pointSegDist(px, py, x0, y0, x1, y1) {
+  const dx = x1 - x0, dy = y1 - y0;
+  const L2 = dx * dx + dy * dy;
+  if (L2 === 0) return Math.hypot(px - x0, py - y0);
+  let t = ((px - x0) * dx + (py - y0) * dy) / L2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (x0 + t * dx), py - (y0 + t * dy));
+}
+
+// Hit-test committed rulers against a pointer event. Endpoints win over the line
+// so an endpoint near the line can still be grabbed. Returns { ruler, mode, end }.
+function hitTestRuler(wrap, e) {
+  if (!state.rulers.length) return null;
+  const p = imageWrapToArcsec(wrap, e);
+  const asPerPx = state.fov / wrap.getBoundingClientRect().width; // square canvas
+  const END_HIT  = 10 * asPerPx;
+  const LINE_HIT = 7  * asPerPx;
+  let best = null, bestD = Infinity;
+  for (let i = state.rulers.length - 1; i >= 0; i--) {   // topmost (last drawn) first
+    const r = state.rulers[i];
+    const d0 = Math.hypot(p.x - r.x0, p.y - r.y0);
+    const d1 = Math.hypot(p.x - r.x1, p.y - r.y1);
+    if (d0 <= END_HIT && d0 < bestD) { best = { ruler: r, mode: 'endpoint', end: 0 }; bestD = d0; }
+    if (d1 <= END_HIT && d1 < bestD) { best = { ruler: r, mode: 'endpoint', end: 1 }; bestD = d1; }
+  }
+  if (best) return best;
+  for (let i = state.rulers.length - 1; i >= 0; i--) {
+    const r = state.rulers[i];
+    const d = pointSegDist(p.x, p.y, r.x0, r.y0, r.x1, r.y1);
+    if (d <= LINE_HIT && d < bestD) { best = { ruler: r, mode: 'line', end: -1 }; bestD = d; }
+  }
+  return best;
+}
+
 function attachImageHandlers(wrap) {
   let imgDrag   = null; // { obj, plane, startCx, startCy, startMx, startMy }
-  let rulerDrag = null; // { x0, y0, x1, y1 } while dragging a ruler measurement
+  let rulerDrag = null; // { x0, y0, x1, y1 } while dragging a NEW ruler measurement
+  let rulerEdit = null; // { ruler, mode, end, sx0.. , px, py } while editing an existing one
 
   wrap.addEventListener('pointerdown', e => {
     if (e.button !== 0 && e.pointerType === 'mouse') return;
-    // Ruler tool intercepts the pointer entirely: no object hit-test / selection / move.
+
+    // 1. Edit an existing ruler (drag an endpoint or the whole line). Available
+    //    whenever measurements are shown, and takes priority over drawing / objects.
+    if (state.showRuler) {
+      const rh = hitTestRuler(wrap, e);
+      if (rh) {
+        e.preventDefault();
+        wrap.setPointerCapture(e.pointerId);
+        const p = imageWrapToArcsec(wrap, e);
+        rulerEdit = { ruler: rh.ruler, mode: rh.mode, end: rh.end,
+                      sx0: rh.ruler.x0, sy0: rh.ruler.y0, sx1: rh.ruler.x1, sy1: rh.ruler.y1,
+                      px: p.x, py: p.y };
+        wrap.style.cursor = rh.mode === 'endpoint' ? 'grabbing' : 'move';
+        selectRulerExclusive(rh.ruler.id);  // selecting a ruler deselects any object
+        return;
+      }
+    }
+
+    // 2. Draw a new ruler when the tool is armed. Clicking empty space also clears
+    //    any current ruler selection.
     if (state.rulerActive && state.showRuler) {
       e.preventDefault();
       wrap.setPointerCapture(e.pointerId);
+      if (state.selectedRulerId) { state.selectedRulerId = null; updateRulerUI(); }
       const p = imageWrapToArcsec(wrap, e);
       rulerDrag = state.rulerDraft = { x0: p.x, y0: p.y, x1: p.x, y1: p.y };
       wrap.style.cursor = 'crosshair';
       drawOverlay();
       return;
     }
+
+    // 3. Otherwise: deselect any ruler, then hit-test / drag objects.
+    if (state.selectedRulerId) { state.selectedRulerId = null; updateRulerUI(); drawOverlay(); }
     const hit = hitTestImage(wrap, e);
     if (!hit) return;
     e.preventDefault();
@@ -1273,6 +1466,20 @@ function attachImageHandlers(wrap) {
   });
 
   wrap.addEventListener('pointermove', e => {
+    if (rulerEdit) {
+      e.preventDefault();
+      const p = imageWrapToArcsec(wrap, e), r = rulerEdit.ruler;
+      if (rulerEdit.mode === 'endpoint') {
+        if (rulerEdit.end === 0) { r.x0 = p.x; r.y0 = p.y; }
+        else                     { r.x1 = p.x; r.y1 = p.y; }
+      } else {
+        const dx = p.x - rulerEdit.px, dy = p.y - rulerEdit.py;
+        r.x0 = rulerEdit.sx0 + dx; r.y0 = rulerEdit.sy0 + dy;
+        r.x1 = rulerEdit.sx1 + dx; r.y1 = rulerEdit.sy1 + dy;
+      }
+      drawOverlay();  // overlay only — the GL scene is unchanged by a ruler edit
+      return;
+    }
     if (rulerDrag) {
       e.preventDefault();
       const p = imageWrapToArcsec(wrap, e);
@@ -1281,6 +1488,11 @@ function attachImageHandlers(wrap) {
       return;
     }
     if (!imgDrag) {
+      // Hovering an existing ruler shows a move/grab cursor (it's editable).
+      if (state.showRuler) {
+        const rh = hitTestRuler(wrap, e);
+        if (rh) { wrap.style.cursor = rh.mode === 'endpoint' ? 'grab' : 'move'; return; }
+      }
       // While the ruler tool is armed, keep the crosshair and never show the object grab cursor.
       if (state.rulerActive && state.showRuler) { wrap.style.cursor = 'crosshair'; return; }
       wrap.style.cursor = hitTestImage(wrap, e) ? 'grab' : '';
@@ -1299,14 +1511,23 @@ function attachImageHandlers(wrap) {
   });
 
   wrap.addEventListener('pointerup', e => {
+    if (rulerEdit) {
+      rulerEdit = null;
+      wrap.style.cursor = (state.rulerActive && state.showRuler) ? 'crosshair' : '';
+      updateRulerUI(); drawOverlay();
+      return;
+    }
     if (rulerDrag) {
       // Commit only a real drag; ignore near-zero-length taps.
+      let newId = null;
       if (Math.hypot(rulerDrag.x1 - rulerDrag.x0, rulerDrag.y1 - rulerDrag.y0) >= state.fov * 0.01) {
-        state.rulers.push({ ...rulerDrag });
+        newId = uid();
+        state.rulers.push({ id: newId, ...rulerDrag });
       }
       rulerDrag = state.rulerDraft = null;
       wrap.style.cursor = 'crosshair';
-      updateRulerUI(); drawOverlay();
+      if (newId) selectRulerExclusive(newId);      // new measurement becomes the selection
+      else       { updateRulerUI(); drawOverlay(); }
       return;
     }
     if (!imgDrag) return;
@@ -1317,6 +1538,7 @@ function attachImageHandlers(wrap) {
   });
 
   wrap.addEventListener('pointercancel', () => {
+    if (rulerEdit) { rulerEdit = null; drawOverlay(); }
     if (rulerDrag) { rulerDrag = state.rulerDraft = null; updateRulerUI(); drawOverlay(); }
   });
 }
@@ -1495,6 +1717,7 @@ function attachPlaneCanvasHandlers(canvas, plane) {
       hitObj = _makeAddObjects(plane, pStart.mx, pStart.my);
       state.selectedPlaneId = plane.id;
       state.selectedObjId   = hitObj.id;
+      clearRulerSelectionForObject();  // one selection at a time
       pStart.cx = pStart.mx; pStart.cy = pStart.my;
       istate = 'add-dragging'; canvas.style.cursor = 'grabbing';
       updatePlaneBoxColor(plane); renderSidebar();
@@ -1526,6 +1749,7 @@ function attachPlaneCanvasHandlers(canvas, plane) {
       pStart = { cx: hitObj.cx, cy: hitObj.cy, mx: pos.x, my: pos.y };
       state.selectedPlaneId = plane.id;
       state.selectedObjId   = hitObj.id;
+      clearRulerSelectionForObject();  // one selection at a time
       renderSidebar(); redraw();
     } else {
       istate = 'add-pending';
@@ -1541,6 +1765,7 @@ function attachPlaneCanvasHandlers(canvas, plane) {
       const obj = _makeAddObjects(plane, pos.x, pos.y);
       state.selectedPlaneId = plane.id;
       state.selectedObjId   = obj.id;
+      clearRulerSelectionForObject();  // one selection at a time
       updatePlaneBoxColor(plane); redrawPlaneCanvas(plane); renderSidebar(); redraw();
     } else if (istate === 'dragging' || istate === 'add-dragging') {
       invalidateDistances(); redraw();
@@ -2011,15 +2236,16 @@ function renderSidebar() {
         </div>` : ''}
       </div>
 
-      <div class="sl-subsection-header" style="margin-top:8px">Configuration</div>
-      <select class="sl-select" id="sl-preset-select" style="margin-top:8px" aria-label="Load a preset scene">
-        <option value="" ${_selectedPreset ? '' : 'selected'}>Load a preset scene…</option>
-        ${PRESETS.map(p => `<option value="${p.file}" ${_selectedPreset === p.file ? 'selected' : ''}>${p.name}</option>`).join('')}
-      </select>
-      <div class="sl-capture-row">
-        <button class="sl-capture-btn" id="sl-save-config">↓ Save YAML</button>
-        <button class="sl-capture-btn" id="sl-load-config">↑ Load YAML</button>
-        <input type="file" id="sl-config-file" accept=".yaml,.yml" style="display:none">
+      <div class="sl-hybrid-section" style="padding-top:8px">
+        <select class="sl-select" id="sl-preset-select" style="margin-bottom:6px" aria-label="Load a preset scene">
+          <option value="" ${_selectedPreset ? '' : 'selected'}>Load a preset scene…</option>
+          ${PRESETS.map(p => `<option value="${p.file}" ${_selectedPreset === p.file ? 'selected' : ''}>${p.name}</option>`).join('')}
+        </select>
+        <div class="sl-capture-row" style="margin-top:0">
+          <button class="sl-capture-btn" id="sl-save-config">↓ Save YAML</button>
+          <button class="sl-capture-btn" id="sl-load-config">↑ Load YAML</button>
+          <input type="file" id="sl-config-file" accept=".yaml,.yml" style="display:none">
+        </div>
       </div>
     </div>
     `;
@@ -3279,6 +3505,7 @@ function drawOverlay() {
     const pillBg  = dark ? 'rgba(0,0,0,0.7)'        : 'rgba(255,255,255,0.82)';
     const _mob    = window.innerWidth <= 640;
     const fsize   = _mob ? 12 : 14;
+    const accent  = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#4da3ff';
     const segs    = [...state.rulers, state.rulerDraft].filter(Boolean);
 
     overlayCtx.setLineDash([]);
@@ -3286,17 +3513,23 @@ function drawOverlay() {
     for (const seg of segs) {
       const [x0, y0] = toPixel(seg.x0, seg.y0);
       const [x1, y1] = toPixel(seg.x1, seg.y1);
+      const selected = seg.id && seg.id === state.selectedRulerId;
+      const lineCol  = selected ? accent : mainCol;
 
       // Line: wide translucent halo underneath, then the crisp main stroke.
-      overlayCtx.strokeStyle = haloCol; overlayCtx.lineWidth = 4;
+      overlayCtx.strokeStyle = haloCol; overlayCtx.lineWidth = selected ? 5 : 4;
       overlayCtx.beginPath(); overlayCtx.moveTo(x0, y0); overlayCtx.lineTo(x1, y1); overlayCtx.stroke();
-      overlayCtx.strokeStyle = mainCol; overlayCtx.lineWidth = 1.6;
+      overlayCtx.strokeStyle = lineCol; overlayCtx.lineWidth = selected ? 2.4 : 1.6;
       overlayCtx.beginPath(); overlayCtx.moveTo(x0, y0); overlayCtx.lineTo(x1, y1); overlayCtx.stroke();
 
-      // Endpoint dots.
-      overlayCtx.fillStyle = mainCol;
+      // Endpoints: plain dots, or larger ringed grab handles when selected.
+      const er = selected ? 4.5 : 3;
       for (const [ex, ey] of [[x0, y0], [x1, y1]]) {
-        overlayCtx.beginPath(); overlayCtx.arc(ex, ey, 3, 0, Math.PI * 2); overlayCtx.fill();
+        overlayCtx.beginPath(); overlayCtx.arc(ex, ey, er, 0, Math.PI * 2);
+        overlayCtx.fillStyle = lineCol; overlayCtx.fill();
+        if (selected) {
+          overlayCtx.strokeStyle = haloCol; overlayCtx.lineWidth = 1.5; overlayCtx.stroke();
+        }
       }
 
       // Distance (arcsec) + position angle (CCW from +x, y-up), normalised to 0–360°.
