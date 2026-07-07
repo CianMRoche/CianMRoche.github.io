@@ -72,9 +72,11 @@ const PS_GRID_OPTIONS = [150, 300, 600, 1200];
 // Hysteresis (0.6×) prevents the badge flickering on borderline frames.
 const PERF_WARN_MS = 120;
 let _perfWarnOn = false;
+let _perfWarnDismissed = false;  // user closed the warning; stay hidden for the rest of the session
 function reportPerf(ms) {
   const badge = document.getElementById('sl-perf-warn');
   if (!badge) return;
+  if (_perfWarnDismissed) { badge.style.display = 'none'; return; }
   if      (!_perfWarnOn && ms > PERF_WARN_MS)       _perfWarnOn = true;
   else if ( _perfWarnOn && ms < PERF_WARN_MS * 0.6) _perfWarnOn = false;
   if (_perfWarnOn) {
@@ -888,6 +890,12 @@ function buildDOM() {
               </svg>
             </button>
             <div class="sl-perf-pop" id="sl-perf-pop" style="display:none">
+              <button class="sl-perf-pop-close" id="sl-perf-dismiss" title="Don't show this warning again this session" aria-label="Dismiss warning">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+                  <line x1="4.5" y1="4.5" x2="11.5" y2="11.5"/>
+                  <line x1="11.5" y1="4.5" x2="4.5" y2="11.5"/>
+                </svg>
+              </button>
               <b style="color:#e8912e">⚠ Slow redraw</b><br>
               If you would like to reduce the time to draw new frames, try the following:<br><br>
               • Turn off critical curves or lower the <b>Critical-curve resolution</b> (Settings ▸ Critical Curves)<br>
@@ -1103,6 +1111,15 @@ function attachHandlers() {
   _perfBtn?.addEventListener('click', e => {
     e.stopPropagation();
     if (_perfPop) _perfPop.style.display = _perfPop.style.display === 'none' ? '' : 'none';
+  });
+  // The × dismisses the warning for the rest of the session: hide the badge and
+  // popover now, and reportPerf() will keep them hidden regardless of frame time.
+  document.getElementById('sl-perf-dismiss')?.addEventListener('click', e => {
+    e.stopPropagation();
+    _perfWarnDismissed = true;
+    _perfWarnOn = false;
+    if (_perfPop) _perfPop.style.display = 'none';
+    if (_perfBtn) _perfBtn.style.display = 'none';
   });
   document.addEventListener('click', e => {
     if (_perfPop && _perfPop.style.display !== 'none' &&
