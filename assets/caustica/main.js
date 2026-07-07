@@ -998,17 +998,20 @@ function buildDOM() {
                   <line x1="11.5" y1="5" x2="11.5" y2="8"/>
                 </svg>
               </button>
+              <!-- Clear-all comes before delete so its horizontal position stays
+                   fixed whether or not a ruler is selected (delete appears/disappears
+                   at the far right instead of shifting clear-all over). -->
+              <button class="sl-ruler-clear" id="sl-ruler-clear" title="Clear all measurements" style="display:none">
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="4.5" y1="4.5" x2="11.5" y2="11.5"/>
+                  <line x1="11.5" y1="4.5" x2="4.5" y2="11.5"/>
+                </svg>
+              </button>
               <button class="sl-ruler-del" id="sl-ruler-del" title="Delete selected measurement (Backspace)" style="display:none">
                 <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
                   <line x1="3" y1="4.5" x2="13" y2="4.5"/>
                   <path d="M4.5 4.5 L5.1 13 a1 1 0 0 0 1 .9 H9.4 a1 1 0 0 0 1 -.9 L11.5 4.5"/>
                   <path d="M6.3 4.5 V3.3 a0.9 0.9 0 0 1 .9 -.9 H8.8 a0.9 0.9 0 0 1 .9 .9 V4.5"/>
-                </svg>
-              </button>
-              <button class="sl-ruler-clear" id="sl-ruler-clear" title="Clear all measurements" style="display:none">
-                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
-                  <line x1="4.5" y1="4.5" x2="11.5" y2="11.5"/>
-                  <line x1="11.5" y1="4.5" x2="4.5" y2="11.5"/>
                 </svg>
               </button>
             </div>
