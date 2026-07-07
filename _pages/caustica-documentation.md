@@ -596,7 +596,7 @@ Every listed object is interpolated linearly and **simultaneously** from its ini
 <figure>
   <img class="img-light" src="/images/caustica-prog-2pointmass-light.gif" alt="Programmatic animation of two point-mass lenses moving apart, their critical curves and caustics evolving.">
   <img class="img-dark"  src="/images/caustica-prog-2pointmass.gif"  alt="Programmatic animation of two point-mass lenses moving apart, their critical curves and caustics evolving.">
-  <figcaption>A programmatic GIF recording of two point-mass lenses driven along set paths past a central source. Each lens carries a circular critical curve (pink) and a small astroid caustic (green), which grow, shrink, and shift as the masses move. This animation also serves as the Caustica logo on the <a href="/side_projects/">side projects page</a>, and being a GIF it includes the critical curves at full resolution.</figcaption>
+  <figcaption>A programmatic GIF recording of two point-mass lenses driven along set paths past a central source. Each lens carries a circular critical curve (pink) and cuspy caustic (green).</figcaption>
 </figure>
 
 ## 9. Code structure
