@@ -17,7 +17,11 @@
 //   r.destroy()
 
 const MAX_PLANES  = 6;
-const MAX_OBJECTS = 10;
+// Per-type cap on objects uploaded to the shader (lenses and sources counted
+// separately). Exported so the UI can warn when a scene exceeds it. Each slot
+// costs a few uniform vectors; 32 stays within the WebGL2 fragment-uniform
+// budget on the hardware this runs on.
+export const MAX_OBJECTS = 32;
 const MAX_PASTED  = 4;   // simultaneous pasted-image texture slots
 
 // ── Vertex shader ─────────────────────────────────────────────────────────────
@@ -31,7 +35,10 @@ void main() {
 }`;
 
 // ── Fragment shader ───────────────────────────────────────────────────────────
-const FRAG_SRC =
+// Parameterised by the per-type object cap: the constructor rebuilds at a
+// smaller MAX_OBJECTS if a constrained GPU rejects the full-size uniform arrays
+// (see the build ladder in the constructor). MAX_PLANES is fixed.
+const makeFragSrc = (MAX_OBJECTS) =>
 `#version 300 es
 precision highp float;
 in  vec2 v_uv;
@@ -691,7 +698,29 @@ export class Renderer {
     if (!gl) throw new Error('WebGL2 not available in this browser.');
     this.gl = gl;
 
-    this._prog  = this._buildProgram(VERT_SRC, FRAG_SRC);
+    // Build at the largest object cap the GPU accepts. Start at MAX_OBJECTS and
+    // step down only if the program fails to compile/link — the symptom of a GPU
+    // whose fragment uniform-vector budget can't hold the full-size arrays. On
+    // every mainstream GPU the first (MAX_OBJECTS) build succeeds, so the cap
+    // defaults to MAX_OBJECTS; the ladder is a safety net for constrained
+    // hardware. If even the smallest cap fails, the last error propagates
+    // (→ the "WebGL2 required" screen), exactly as before.
+    const ladder = [MAX_OBJECTS, 24, 16, 12, 8].filter(v => v <= MAX_OBJECTS);
+    let lastErr = null;
+    for (const cap of ladder) {
+      try {
+        this._prog = this._buildProgram(VERT_SRC, makeFragSrc(cap));
+        this._maxObjects = cap;
+        break;
+      } catch (err) {
+        lastErr = err;
+        this._prog = null;
+        if (cap !== ladder[ladder.length - 1])
+          console.warn(`Caustica: shader build failed at ${cap} objects, retrying smaller.`, err.message);
+      }
+    }
+    if (!this._prog) throw lastErr ?? new Error('Shader build failed.');
+
     this._quad  = this._buildQuad();
     this._locs  = this._getLocations();
     this._scene = null;
@@ -701,6 +730,10 @@ export class Renderer {
     // Dummy 1×1 black texture for unoccupied slots.
     this._dummyTex = this._buildDummyTex();
   }
+
+  // Per-type object cap this renderer actually built with (≤ MAX_OBJECTS). The
+  // UI reads it to know how many objects can appear before the display limit.
+  get maxObjects() { return this._maxObjects; }
 
   // Upload (or update) the pasted image for a specific source object.
   setPastedTexture(objId, imageCanvas) {
@@ -755,6 +788,10 @@ export class Renderer {
   _draw() {
     const { gl, _prog, _locs } = this;
     const { planes, dist, fovArcsec, viz, vizMode, vizSrcIdx, isDark, saddlePhis, fermatBeta } = this._scene;
+    // Local cap for the packing loops below: matches the value baked into the
+    // shader this instance built with (may be < the module MAX_OBJECTS on a
+    // constrained GPU). Shadows the module const so the packing code is unchanged.
+    const MAX_OBJECTS = this._maxObjects;
 
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     gl.useProgram(_prog);

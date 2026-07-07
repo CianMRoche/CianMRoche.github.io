@@ -1,6 +1,6 @@
 // Caustica: main.js
 
-import { Renderer }                            from './renderer.js';
+import { Renderer, MAX_OBJECTS }               from './renderer.js';
 import { precomputeDistances,
          computeCriticalCurves,
          angDiamDist,
@@ -86,6 +86,55 @@ function reportPerf(ms) {
     const pop = document.getElementById('sl-perf-pop');
     if (pop) pop.style.display = 'none';
   }
+}
+
+// Objects beyond the shader's per-type cap (some number of lenses and the same
+// number of sources) are silently dropped from the GPU render — they still
+// appear in the sidebar and as overlay markers, but contribute no light/mass.
+// Show a badge whenever the visible count exceeds the cap so the drop isn't
+// invisible. The cap is whatever the renderer actually built with (usually
+// MAX_OBJECTS, less on a constrained GPU). The × dismisses it for the session,
+// exactly like the performance warning.
+let _capWarnDismissed = false;   // user closed the warning; stay hidden for the rest of the session
+function reportObjectCap() {
+  const badge = document.getElementById('sl-cap-warn');
+  if (!badge) return;
+  const pop = document.getElementById('sl-cap-pop');
+  if (_capWarnDismissed) {
+    badge.style.display = 'none';
+    if (pop) pop.style.display = 'none';
+    return;
+  }
+  const cap = renderer?.maxObjects ?? MAX_OBJECTS;
+  let nLens = 0, nSrc = 0;
+  for (const pl of state.planes)
+    for (const o of pl.objects) {
+      if (o.hidden) continue;
+      if (o.type === 'lens')        nLens++;
+      else if (o.type === 'source') nSrc++;
+    }
+  const overL = Math.max(0, nLens - cap);
+  const overS = Math.max(0, nSrc - cap);
+  const over  = overL + overS;
+  if (over === 0) {
+    badge.style.display = 'none';
+    if (pop) pop.style.display = 'none';
+    return;
+  }
+  const label = document.getElementById('sl-cap-warn-label');
+  if (label) label.textContent = `${over} object${over > 1 ? 's' : ''} not shown`;
+  const detail = document.getElementById('sl-cap-pop-detail');
+  if (detail) {
+    const parts = [];
+    if (overL) parts.push(`<b>${overL}</b> lens${overL > 1 ? 'es' : ''}`);
+    if (overS) parts.push(`<b>${overS}</b> source${overS > 1 ? 's' : ''}`);
+    detail.innerHTML =
+      `The image can display at most <b>${cap}</b> lenses and <b>${cap}</b> sources. ` +
+      `${parts.join(' and ')} beyond that limit ${over > 1 ? 'are' : 'is'} not rendered — ` +
+      `they still appear in the object list and as markers, but add no light or lensing. ` +
+      `Hide or delete objects to bring the count under the limit.`;
+  }
+  badge.style.display = '';
 }
 
 // ── App state ─────────────────────────────────────────────────────────────────
@@ -903,6 +952,25 @@ function buildDOM() {
               • Reduce the number of objects<br>
               • Reduce the field of view
             </div>
+            <button class="sl-cap-warn" id="sl-cap-warn" style="display:none"
+                    title="Some objects exceed the display limit. Click for details." aria-label="Object display-limit warning">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 4.5 L21 19.5 L3 19.5 Z"/>
+                <line x1="12" y1="10" x2="12" y2="14"/>
+                <line x1="12" y1="16.6" x2="12" y2="16.6"/>
+              </svg>
+              <span class="sl-cap-warn-label" id="sl-cap-warn-label">objects not shown</span>
+            </button>
+            <div class="sl-cap-pop" id="sl-cap-pop" style="display:none">
+              <button class="sl-perf-pop-close" id="sl-cap-dismiss" title="Don't show this warning again this session" aria-label="Dismiss warning">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+                  <line x1="4.5" y1="4.5" x2="11.5" y2="11.5"/>
+                  <line x1="11.5" y1="4.5" x2="4.5" y2="11.5"/>
+                </svg>
+              </button>
+              <b style="color:#e8912e">⚠ Display limit reached</b><br>
+              <span id="sl-cap-pop-detail"></span>
+            </div>
             <div class="sl-viz-chip">
               <select id="sl-viz-mode">
                 <option value="0">Lensed image</option>
@@ -1125,6 +1193,30 @@ function attachHandlers() {
     if (_perfPop && _perfPop.style.display !== 'none' &&
         !_perfPop.contains(e.target) && e.target !== _perfBtn) {
       _perfPop.style.display = 'none';
+    }
+  });
+
+  // Object display-limit warning (top-left of image). Badge is shown/hidden by
+  // reportObjectCap() based on live count; clicking it toggles the explanation.
+  const _capBtn = document.getElementById('sl-cap-warn');
+  const _capPop = document.getElementById('sl-cap-pop');
+  _capBtn?.addEventListener('pointerdown', e => e.stopPropagation()); // don't start an object drag
+  _capBtn?.addEventListener('click', e => {
+    e.stopPropagation();
+    if (_capPop) _capPop.style.display = _capPop.style.display === 'none' ? '' : 'none';
+  });
+  // The × dismisses the warning for the rest of the session: hide the badge and
+  // popover now, and reportObjectCap() will keep them hidden regardless of count.
+  document.getElementById('sl-cap-dismiss')?.addEventListener('click', e => {
+    e.stopPropagation();
+    _capWarnDismissed = true;
+    if (_capPop) _capPop.style.display = 'none';
+    if (_capBtn) _capBtn.style.display = 'none';
+  });
+  document.addEventListener('click', e => {
+    if (_capPop && _capPop.style.display !== 'none' &&
+        !_capPop.contains(e.target) && e.target !== _capBtn && !_capBtn?.contains(e.target)) {
+      _capPop.style.display = 'none';
     }
   });
 
@@ -3797,6 +3889,7 @@ function _doRedraw() {
   const _t0 = performance.now();
   drawOverlay();
   reportPerf(performance.now() - _t0);
+  reportObjectCap();
 }
 
 // ── Capture & recording ───────────────────────────────────────────────────────
