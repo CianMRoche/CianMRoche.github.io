@@ -347,9 +347,14 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   opacity: 0.85;
   transition: opacity 0.15s, color 0.15s, border-color 0.15s;
 }
-.sl-ruler-btn:hover,
-.sl-ruler-clear:hover,
-.sl-ruler-del:hover { opacity: 1; color: var(--accent); border-color: var(--accent); }
+/* Gate hover to real pointers: on touch, :hover sticks after a tap, and since
+   this hover style is nearly identical to .active it made the ruler button look
+   stuck "on" after toggling off. */
+@media (hover: hover) {
+  .sl-ruler-btn:hover,
+  .sl-ruler-clear:hover,
+  .sl-ruler-del:hover { opacity: 1; color: var(--accent); border-color: var(--accent); }
+}
 .sl-ruler-btn.active {
   opacity: 1;
   color: var(--accent);
