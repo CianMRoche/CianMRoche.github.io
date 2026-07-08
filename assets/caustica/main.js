@@ -1224,12 +1224,22 @@ function attachHandlers() {
   });
 
   // Ruler tool: toggle activates the crosshair; the × clears all measurements.
-  // Stop pointerdown from bubbling to the image-wrap so clicking these buttons
-  // never starts an object drag or a stray ruler measurement.
-  document.getElementById('sl-ruler-tools')?.addEventListener('pointerdown', e => e.stopPropagation());
-  document.getElementById('sl-ruler-btn')?.addEventListener('click', toggleRulerTool);
-  document.getElementById('sl-ruler-del')?.addEventListener('click', deleteSelectedRuler);
-  document.getElementById('sl-ruler-clear')?.addEventListener('click', () => {
+  // Bind on pointerup rather than click: on touch devices the synthesized click
+  // for these small overlay buttons is unreliable (it was being dropped when the
+  // ruler was armed, so it couldn't be toggled off), whereas pointerup always
+  // fires. The wrap's pointerdown handler ignores taps inside .sl-ruler-tools,
+  // so a tap here never starts a stray measurement or object drag.
+  const _onTap = (id, fn) => {
+    const el = document.getElementById(id);
+    el?.addEventListener('pointerup', e => {
+      if (e.button != null && e.button !== 0 && e.pointerType === 'mouse') return;
+      e.preventDefault();
+      fn();
+    });
+  };
+  _onTap('sl-ruler-btn', toggleRulerTool);
+  _onTap('sl-ruler-del', deleteSelectedRuler);
+  _onTap('sl-ruler-clear', () => {
     state.rulers = []; state.rulerDraft = null; state.selectedRulerId = null;
     updateRulerUI(); drawOverlay();
   });
@@ -1529,6 +1539,11 @@ function attachImageHandlers(wrap) {
   let rulerEdit = null; // { ruler, mode, end, sx0.. , px, py } while editing an existing one
 
   wrap.addEventListener('pointerdown', e => {
+    // Taps on the ruler toolbar are handled by its own buttons; never let one
+    // fall through to start a measurement or object drag on the image beneath.
+    // (Replaces the toolbar's old pointerdown stopPropagation, which interfered
+    // with reliable tap handling on touch devices.)
+    if (e.target?.closest?.('.sl-ruler-tools')) return;
     if (e.button !== 0 && e.pointerType === 'mouse') return;
 
     // 1. Edit an existing ruler (drag an endpoint or the whole line). Available

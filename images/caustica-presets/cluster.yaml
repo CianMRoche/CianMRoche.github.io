@@ -16,7 +16,7 @@ critGridN: 512
 psGridN: 300
 critZs: 2
 contourSpacing: 1
-fermatUseSourcePos: true
+fermatUseSourcePos: false
 fermatBetaX: -1.832952
 fermatBetaY: 0.7479
 fermatSrcPlaneZ: 2.0000
