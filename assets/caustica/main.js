@@ -1224,16 +1224,19 @@ function attachHandlers() {
   });
 
   // Ruler tool: toggle activates the crosshair; the × clears all measurements.
-  // Bind on pointerup rather than click: on touch devices the synthesized click
-  // for these small overlay buttons is unreliable (it was being dropped when the
-  // ruler was armed, so it couldn't be toggled off), whereas pointerup always
-  // fires. The wrap's pointerdown handler ignores taps inside .sl-ruler-tools,
-  // so a tap here never starts a stray measurement or object drag.
+  // Handle the tap on the button's own pointerdown and stopPropagation, so the
+  // image-wrap beneath never sees it. This is essential on touch: while the ruler
+  // is armed, if the wrap sees the pointerdown it calls setPointerCapture and
+  // steals the pointer, so the follow-up pointerup/click lands on the wrap and
+  // the button never fires — which is why the ruler couldn't be toggled off on
+  // mobile. Firing on pointerdown also sidesteps the unreliable synthesized
+  // click. Works identically for mouse and touch.
   const _onTap = (id, fn) => {
     const el = document.getElementById(id);
-    el?.addEventListener('pointerup', e => {
+    el?.addEventListener('pointerdown', e => {
       if (e.button != null && e.button !== 0 && e.pointerType === 'mouse') return;
       e.preventDefault();
+      e.stopPropagation();
       fn();
     });
   };

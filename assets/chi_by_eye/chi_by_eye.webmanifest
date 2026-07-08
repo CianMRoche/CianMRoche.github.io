@@ -1,6 +1,10 @@
 {
-  "name": "Cian Roche",
-  "short_name": "Cian Roche",
+  "id": "/assets/chi_by_eye/",
+  "name": "χ by eye: Fit Models to Data by Eye",
+  "short_name": "χ by eye",
+  "description": "An interactive tool for fitting models to data by eye. Build intuition for chi-squared, goodness of fit, and parameter estimation.",
+  "start_url": "/assets/chi_by_eye/",
+  "scope": "/assets/chi_by_eye/",
   "icons": [
     {
       "src": "/images/web-app-manifest-192x192.png",
@@ -17,5 +21,5 @@
   ],
   "theme_color": "#ffffff",
   "background_color": "#ffffff",
-  "display": "browser"
+  "display": "standalone"
 }
