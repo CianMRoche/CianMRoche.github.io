@@ -546,7 +546,7 @@ const PRESETS = [
   { file: 'two-plane.yaml',     name: 'Two lens planes (multiplane)' },
   { file: 'fermat-demo.yaml',   name: 'Fermat surface demo' },
   { file: 'zigzag.yaml',        name: 'ZigZag Lens' },
-  { file: 'cluster.yaml',       name: 'Galaxy cluster (wide field)' },
+  { file: 'group.yaml',         name: 'Galaxy group (wide field)' },
 ];
 
 // Name of the preset last loaded from the dropdown, so the box keeps showing it.
@@ -652,6 +652,7 @@ function loadConfigFromYaml(yaml) {
     glCanvas?.classList.toggle('sl-viz-active', state.vizMode !== 0);
     invalidateDistances();
     state.rulerActive = false; state.rulers = []; state.rulerDraft = null;  // measurements are not part of a config
+    resetHistory();  // a freshly loaded scene is a new document; don't undo into the previous one
     rebuildPlaneBoxes(); renderSidebar(); _updateColorbar(); updateRulerUI(); redraw();
   } catch (err) {
     alert('Failed to load config: ' + err.message);
@@ -724,11 +725,123 @@ function removePlane(id) {
 
 function invalidateDistances() { state.dist = precomputeDistances(state.planes); }
 
+// ── Undo / redo (scene edits only: planes, objects, params — not view settings) ──
+// Memento approach: snapshot the scene before a change, restore it on undo. The
+// snapshot reuses the deep-clone shape from copySelectedObject; pasted-image
+// canvases are kept by reference so images survive undo/redo. View settings (FOV,
+// viz mode, colour mapping, overlays) are deliberately excluded.
+const _history = { undo: [], redo: [], MAX: 80, pending: null, pendingSig: null };
+
+function _sceneSnapshot() {
+  return {
+    planes: state.planes.map(p => ({
+      id: p.id, z: p.z,
+      objects: p.objects.map(o => ({ ...o, params: { ...o.params } })),
+    })),
+    selPlaneId: state.selectedPlaneId,
+    selObjId:   state.selectedObjId,
+  };
+}
+// Signature of just the undoable content (structure, positions, params) — excludes
+// view settings, selection and ids — used to decide whether anything really changed.
+function _sceneSig() {
+  return JSON.stringify(state.planes.map(p =>
+    [p.z, p.objects.map(o => [o.type, o.model, o.cx, o.cy, o.hidden, o.showShape, o.hybridId ?? '', o.params])]));
+}
+function _pushUndo(snap) {
+  _history.undo.push(snap);
+  if (_history.undo.length > _history.MAX) _history.undo.shift();
+  _history.redo.length = 0;
+  updateUndoRedoButtons();
+}
+// Discrete edit: call immediately BEFORE mutating (keyboard / paste / async paths).
+// Clears any open gesture snapshot so it can't later record a stale baseline.
+function record() {
+  _history.pending = null; _history.pendingSig = null;
+  _pushUndo(_sceneSnapshot());
+}
+// Gesture: snapshot at the start, commit once at the end if the scene changed.
+// beginAction is idempotent so continuous events (a drag, a slider) share one snapshot.
+function beginAction() {
+  if (_history.pending) return;
+  _history.pending    = _sceneSnapshot();
+  _history.pendingSig = _sceneSig();
+}
+// Commit fires on pointerup, click AND change, because different controls mutate at
+// different moments (drags/sliders before pointerup; buttons on click; selects/
+// checkboxes/colours on change — all after pointerup). On a no-op we deliberately
+// KEEP the pending snapshot so a later click/change in the same interaction can still
+// record it; the scene is unchanged meanwhile, so the held snapshot stays valid.
+function commitAction() {
+  if (!_history.pending) return;
+  if (_sceneSig() !== _history.pendingSig) {
+    _pushUndo(_history.pending);
+    _history.pending = null; _history.pendingSig = null;
+  }
+}
+function resetHistory() {
+  _history.undo.length = 0; _history.redo.length = 0;
+  _history.pending = null; _history.pendingSig = null;
+  updateUndoRedoButtons();
+}
+// Attach gesture boundaries to a persistent container: begin before its inner
+// handlers mutate (capture), commit after (bubble). Any pointer-driven scene edit
+// inside `el` becomes exactly one undo step; non-edits (selection, ruler) are no-ops.
+function _attachHistoryBoundary(el) {
+  if (!el) return;
+  el.addEventListener('pointerdown', beginAction, true);  // capture: before inner handlers mutate
+  el.addEventListener('focusin', beginAction);             // keyboard-focused sliders/inputs
+  el.addEventListener('pointerup', commitAction);          // drags & sliders
+  el.addEventListener('pointercancel', commitAction);
+  el.addEventListener('click', commitAction);              // buttons (fire after pointerup)
+  el.addEventListener('change', commitAction);             // selects, checkboxes, colours
+}
+function _applyHistorySnapshot(snap) {
+  _history.pending = null; _history.pendingSig = null;  // discard any open gesture snapshot
+  const keep = new Set(snap.planes.flatMap(p => p.objects.map(o => o.id)));
+  // Drop GPU textures for pasted images that won't exist after the restore.
+  for (const p of state.planes)
+    for (const o of p.objects)
+      if (o.model === 'pastedimage' && !keep.has(o.id)) renderer?.clearPastedTexture(o.id);
+  state.planes = snap.planes.map(p => ({
+    id: p.id, z: p.z,
+    objects: p.objects.map(o => ({ ...o, params: { ...o.params } })),
+  }));
+  state.selectedPlaneId = state.planes.some(p => p.id === snap.selPlaneId)
+    ? snap.selPlaneId : (state.planes[0]?.id ?? null);
+  const selPlane = state.planes.find(p => p.id === state.selectedPlaneId);
+  state.selectedObjId = selPlane?.objects.some(o => o.id === snap.selObjId)
+    ? snap.selObjId : (selPlane?.objects[0]?.id ?? null);
+  // Re-register pasted textures from the preserved canvases.
+  for (const p of state.planes)
+    for (const o of p.objects)
+      if (o.model === 'pastedimage' && o.pasteCanvas) renderer?.setPastedTexture(o.id, o.pasteCanvas);
+  invalidateDistances();
+  rebuildPlaneBoxes(); renderSidebar(); redraw();
+  updateUndoRedoButtons();
+}
+function undo() {
+  if (!_history.undo.length) return;
+  _history.redo.push(_sceneSnapshot());
+  _applyHistorySnapshot(_history.undo.pop());
+}
+function redo() {
+  if (!_history.redo.length) return;
+  _history.undo.push(_sceneSnapshot());
+  _applyHistorySnapshot(_history.redo.pop());
+}
+function updateUndoRedoButtons() {
+  const u = document.getElementById('sl-undo'), r = document.getElementById('sl-redo');
+  if (u) u.disabled = _history.undo.length === 0;
+  if (r) r.disabled = _history.redo.length === 0;
+}
+
 function deleteSelectedObject() {
   const pl = selectedPlane();
   if (!pl) return;
   const toDelete = pl.objects.find(o => o.id === state.selectedObjId);
   if (!toDelete) return;
+  record();
   // Delete hybrid partner too (both halves always travel together).
   const removeIds = new Set(pl.objects
     .filter(o => o.id === toDelete.id || (toDelete.hybridId && o.hybridId === toDelete.hybridId))
@@ -745,6 +858,7 @@ function deleteSelectedObject() {
 function deleteHybridPart(plane, partId) {
   const part = plane.objects.find(o => o.id === partId);
   if (!part) return;
+  record();  // its buttons stopPropagation, so the container boundary can't see this click
   const partner = hybridPartner(plane, part);
   if (part.model === 'pastedimage') renderer?.clearPastedTexture(part.id);
   plane.objects = plane.objects.filter(o => o.id !== partId);
@@ -778,6 +892,7 @@ function pasteCopiedObject() {
   if (!_objClipboard) return false;
   const pl = state.planes.find(p => p.id === _objClipboard.planeId) ?? selectedPlane();
   if (!pl) return false;
+  record();
   const newHybridId = _objClipboard.isHybrid ? uid() : null;
   let firstId = null;
   for (const spec of _objClipboard.objects) {
@@ -844,6 +959,7 @@ function init() {
   attachHandlers();
   rebuildPlaneBoxes();
   renderSidebar();
+  resetHistory();  // the initial demo scene is the baseline, not an undoable edit
 
   requestAnimationFrame(() => { renderer?.resize(); redraw(); });
 
@@ -913,6 +1029,18 @@ function buildDOM() {
     <div class="app-inner">
       <div class="sl-topbar">
         <h1>Caustica</h1>
+        <div class="sl-undo-group">
+          <button class="sl-undo-btn" id="sl-undo" title="Undo (⌘/Ctrl+Z)" aria-label="Undo" disabled>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-4"/>
+            </svg>
+          </button>
+          <button class="sl-undo-btn" id="sl-redo" title="Redo (⌘/Ctrl+Shift+Z)" aria-label="Redo" disabled>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M15 14 20 9l-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h4"/>
+            </svg>
+          </button>
+        </div>
 <a class="sl-demo-btn" href="/caustica-documentation/" target="_blank" rel="noopener">Docs</a>
         <button class="sl-demo-btn" id="sl-demo" title="Walk through a tour of the controls">Tour</button>
         <button class="sl-theme-btn" id="sl-theme" title="Toggle dark mode (D)" aria-label="Toggle dark mode">
@@ -1267,6 +1395,23 @@ function attachHandlers() {
     if (_objClipboard) { e.preventDefault(); pasteCopiedObject(); }
   });
 
+  // ── Undo / redo wiring ────────────────────────────────────────────────────
+  // Gesture boundaries on the persistent containers: any pointer-driven scene
+  // edit inside them becomes one undo step; selection/ruler interactions produce
+  // no entry (the scene signature is unchanged).
+  _attachHistoryBoundary(document.getElementById('sl-image-wrap'));
+  _attachHistoryBoundary(document.getElementById('sl-axis-canvas'));
+  _attachHistoryBoundary(document.getElementById('sl-planes'));
+  _attachHistoryBoundary(document.getElementById('sl-obj-panel'));
+  // Arrow-key nudge: beginAction() fired on the first keydown; commit on release.
+  document.addEventListener('keyup', e => {
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' ||
+        e.key === 'ArrowUp'   || e.key === 'ArrowDown') commitAction();
+  });
+  document.getElementById('sl-undo')?.addEventListener('click', undo);
+  document.getElementById('sl-redo')?.addEventListener('click', redo);
+  updateUndoRedoButtons();
+
   // Global keyboard: Delete/Backspace removes selected object; Esc deselects.
   document.addEventListener('keydown', e => {
     const tag  = (document.activeElement?.tagName) || '';
@@ -1282,6 +1427,17 @@ function attachHandlers() {
       return;
     }
 
+    // Undo / redo (scene edits). Placed after the input guard above, so while a
+    // text field is focused the browser's own text undo still applies.
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'z' || e.key === 'Z')) {
+      e.preventDefault();
+      e.shiftKey ? redo() : undo();
+      return;
+    }
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || e.key === 'Y')) {
+      e.preventDefault(); redo(); return;
+    }
+
     // Arrow keys nudge the selected object; skip if any input has focus
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' ||
         e.key === 'ArrowUp'   || e.key === 'ArrowDown') {
@@ -1290,7 +1446,9 @@ function attachHandlers() {
       if (!obj || !pl) return;
       e.preventDefault();
       // Reset timer on the first press; use elapsed time to pick speed tier.
-      if (!e.repeat) _arrowKeyStart = Date.now();
+      // Snapshot once at the start of a nudge; commitAction() on keyup groups the
+      // whole hold (with acceleration) into a single undo step.
+      if (!e.repeat) { _arrowKeyStart = Date.now(); beginAction(); }
       const held = Date.now() - _arrowKeyStart;
       const nudge = held < 400 ? 0.01 : held < 1200 ? 0.04 : 0.12;
       if (e.key === 'ArrowLeft')  obj.cx -= nudge;
@@ -1312,6 +1470,7 @@ function attachHandlers() {
     if (e.key === 'h' || e.key === 'H') {
       const obj = selectedObj(), pl = selectedPlane();
       if (!obj || !pl) return;
+      record();
       const partner = hybridPartner(pl, obj);
       if (partner) {
         const newHidden = !(obj.hidden && partner.hidden);
@@ -1331,6 +1490,7 @@ function attachHandlers() {
     if (e.key === 'o' || e.key === 'O') {
       const pl = selectedPlane();
       if (!pl) return;
+      record();
       pl.objects.filter(o => o.model === 'pastedimage').forEach(o => renderer?.clearPastedTexture(o.id));
       pl.objects = [];
       state.selectedObjId = null;
@@ -1340,6 +1500,7 @@ function attachHandlers() {
     if (e.key === 'x' || e.key === 'X') {
       const pl = selectedPlane();
       if (!pl) return;
+      record();
       removePlane(pl.id); rebuildPlaneBoxes(); renderSidebar(); redraw();
       return;
     }
@@ -1915,6 +2076,7 @@ function _applyImageFile(file, obj) {
     cvs.height = img.naturalHeight || img.height;
     cvs.getContext('2d').drawImage(img, 0, 0);
     URL.revokeObjectURL(url);
+    record();  // async load lands outside any pointer gesture, so snapshot here
     obj.pasteCanvas = cvs;
     renderer?.setPastedTexture(obj.id, cvs);
     rebuildPlaneBoxes(); renderSidebar(); redraw();
@@ -2637,10 +2799,10 @@ function renderSidebar() {
       // Per-part show/hide + delete. stopPropagation so the click doesn't also
       // expand/collapse the section header these buttons sit inside.
       document.getElementById('sl-part-vis-lens')?.addEventListener('click', e => {
-        e.stopPropagation(); lensObj.hidden = !lensObj.hidden; renderSidebar(); redraw();
+        e.stopPropagation(); record(); lensObj.hidden = !lensObj.hidden; renderSidebar(); redraw();
       });
       document.getElementById('sl-part-vis-src')?.addEventListener('click', e => {
-        e.stopPropagation(); srcObj.hidden = !srcObj.hidden; renderSidebar(); redraw();
+        e.stopPropagation(); record(); srcObj.hidden = !srcObj.hidden; renderSidebar(); redraw();
       });
       document.getElementById('sl-part-del-lens')?.addEventListener('click', e => {
         e.stopPropagation(); deleteHybridPart(pl, lensObj.id);
