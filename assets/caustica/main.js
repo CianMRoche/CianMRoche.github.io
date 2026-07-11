@@ -1946,18 +1946,32 @@ const HIT_R = 10; // px desktop
 function hitRadius() { return window.innerWidth <= 640 ? 18 : HIT_R; }
 
 function attachPlaneCanvasHandlers(canvas, plane) {
-  // 'idle' | 'hit-pending' | 'dragging' | 'add-pending' | 'add-dragging'
+  // 'idle' | 'hit-pending' | 'dragging' | 'add-pending' | 'add-dragging' | 'panning'
   let istate  = 'idle';
   let hitObj  = null;
-  let pStart  = null; // { cx, cy, mx, my } for dragging
-  const DRAG_THRESH = 3; // px
+  let pStart  = null; // drag/tap start info
+  const DRAG_THRESH = 3; // px — mouse object-drag / create-drag threshold
+  const TAP_SLOP    = 8; // px — touch: moving beyond this turns a would-be tap into a scroll
+  const scroller = planesEl;  // #sl-planes: the horizontally-scrolling strip of plane boxes
 
   canvas.addEventListener('pointermove', e => {
     if (istate === 'idle') {
       canvas.style.cursor = hitTestPlane(plane, canvas, e) ? 'grab' : 'crosshair';
       return;
     }
-    if (istate !== 'idle') e.preventDefault();
+    e.preventDefault();
+
+    // Touch swipe that began on empty space → scroll the strip instead of creating
+    // an object. Once we commit to panning we stay in it until the finger lifts.
+    if (istate === 'add-pending' && pStart.touch &&
+        Math.hypot(e.clientX - pStart.clientX, e.clientY - pStart.clientY) > TAP_SLOP) {
+      istate = 'panning';
+    }
+    if (istate === 'panning') {
+      if (scroller) scroller.scrollLeft = pStart.scrollLeft - (e.clientX - pStart.clientX);
+      return;
+    }
+
     const pos = canvasToArcsec(canvas, e);
     const dx  = pos.x - pStart.mx, dy = pos.y - pStart.my;
     const dpx = dx / state.fov * canvas.offsetWidth;
@@ -1965,7 +1979,10 @@ function attachPlaneCanvasHandlers(canvas, plane) {
     if (istate === 'hit-pending' && Math.hypot(dpx, dy / state.fov * canvas.offsetHeight) > DRAG_THRESH) {
       istate = 'dragging'; canvas.style.cursor = 'grabbing';
     }
-    if (istate === 'add-pending' && Math.hypot(dpx, dy / state.fov * canvas.offsetHeight) > DRAG_THRESH) {
+    // Mouse only: dragging on empty space creates the object and places it under the
+    // cursor. On touch, empty-space drags scroll (handled above), so this never fires.
+    if (istate === 'add-pending' && !pStart.touch &&
+        Math.hypot(dpx, dy / state.fov * canvas.offsetHeight) > DRAG_THRESH) {
       hitObj = _makeAddObjects(plane, pStart.mx, pStart.my);
       state.selectedPlaneId = plane.id;
       state.selectedObjId   = hitObj.id;
@@ -1994,18 +2011,23 @@ function attachPlaneCanvasHandlers(canvas, plane) {
   canvas.addEventListener('pointerdown', e => {
     e.preventDefault();
     canvas.setPointerCapture(e.pointerId);
-    const pos  = canvasToArcsec(canvas, e);
-    hitObj     = hitTestPlane(plane, canvas, e);
+    const touch = e.pointerType === 'touch' || e.pointerType === 'pen';
+    const pos   = canvasToArcsec(canvas, e);
+    hitObj      = hitTestPlane(plane, canvas, e);
     if (hitObj) {
+      // Started on an existing object → drag it; never scroll.
       istate = 'hit-pending'; canvas.style.cursor = 'grab';
-      pStart = { cx: hitObj.cx, cy: hitObj.cy, mx: pos.x, my: pos.y };
+      pStart = { cx: hitObj.cx, cy: hitObj.cy, mx: pos.x, my: pos.y, touch };
       state.selectedPlaneId = plane.id;
       state.selectedObjId   = hitObj.id;
       clearRulerSelectionForObject();  // one selection at a time
       renderSidebar(); redraw();
     } else {
+      // Started on empty space → a tap (down + up in ~same spot) creates an object;
+      // a touch swipe scrolls the strip. Record the start point + current scroll.
       istate = 'add-pending';
-      pStart = { mx: pos.x, my: pos.y };
+      pStart = { mx: pos.x, my: pos.y, clientX: e.clientX, clientY: e.clientY,
+                 scrollLeft: scroller ? scroller.scrollLeft : 0, touch };
     }
   });
 
@@ -2013,6 +2035,7 @@ function attachPlaneCanvasHandlers(canvas, plane) {
 
   canvas.addEventListener('pointerup', e => {
     if (istate === 'add-pending') {
+      // Down + up with little/no movement → a tap → create an object here.
       const pos = canvasToArcsec(canvas, e);
       const obj = _makeAddObjects(plane, pos.x, pos.y);
       state.selectedPlaneId = plane.id;
@@ -2022,6 +2045,7 @@ function attachPlaneCanvasHandlers(canvas, plane) {
     } else if (istate === 'dragging' || istate === 'add-dragging') {
       invalidateDistances(); redraw();
     }
+    // 'panning' → nothing to commit; the strip just scrolled.
     istate = 'idle'; hitObj = null;
     canvas.style.cursor = hitTestPlane(plane, canvas, e) ? 'grab' : 'crosshair';
   });
