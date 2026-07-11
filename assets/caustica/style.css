@@ -1521,57 +1521,47 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   /* Axis label hidden on mobile — canvas draws it inline with the hint text */
   .sl-timeline .sl-axis-label { display: none; }
 
-  /* Timeline lives in the "Planes" tab: hidden until that tab is active, then shown
-     inline (normal flow) below the tab bar — no longer a fixed slide-up drawer. */
+  /* Timeline in the "Planes" tab: hidden until that tab is active, then laid out as
+     a grid so the L/S/H toolbar stays a vertical column on the LEFT (as on desktop),
+     with the plane boxes to its right and the redshift axis full-width below. */
   .sl-timeline {
     display: none;
-    flex-direction: column;
     height: auto;
     margin-top: 0;
   }
-  .sl-body[data-mobile-tab="planes"] .sl-timeline { display: flex; }
-
-  /* Toolbar: horizontal row above the planes, left-aligned */
-  .sl-timeline .sl-plane-toolbar {
-    order: 0;
-    flex-direction: row;
-    width: 100%;
-    height: auto;
-    border-right: none;
-    border-bottom: 1px solid var(--hairline);
-    padding: 6px 8px;
-    justify-content: flex-start;
-    gap: 6px;
+  .sl-body[data-mobile-tab="planes"] .sl-timeline {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    grid-template-areas:
+      "toolbar planes"
+      "axis    axis";
   }
-  /* Show full labels in horizontal layout */
-  .sl-timeline .sl-tool-s { display: none; }
-  .sl-timeline .sl-tool-l { display: inline; }
-  .sl-timeline .sl-tool-btn { width: auto; padding: 0 10px; font-size: 12px; }
-  .sl-timeline .sl-tool-del { margin-top: 0; margin-left: auto; width: 32px; padding: 0; }
-  .sl-timeline .sl-tool-sep { flex: 0; width: 1px; height: 18px; min-height: 0;
-                               background: var(--hairline); align-self: center; }
+
+  /* Toolbar: keep the desktop vertical column (short L/S/H labels, delete bottom-
+     justified), pinned to the left. No mobile row overrides — inherits the base. */
+  .sl-timeline .sl-plane-toolbar { grid-area: toolbar; }
 
   /* Show scroll arrows on mobile */
   .sl-planes-arrow { display: flex; }
 
-  /* Inside the drawer: planes on top, axis below.
-     flex: 0 0 auto on planes prevents them from filling max-height. */
-  .sl-timeline .sl-planes-wrap { order: 1; flex: 0 0 auto; width: 100%; }
-  .sl-timeline .sl-planes {
-    flex: 1;
-    overflow-x: auto;
-    overflow-y: hidden;
-  }
+  /* Plane boxes (top-right); smaller so the whole timeline fits with less scrolling.
+     The canvas redraws at this size (buffer derived from offsetWidth), staying crisp. */
+  .sl-timeline .sl-planes-wrap { grid-area: planes; min-width: 0; }
+  .sl-timeline .sl-planes       { overflow-x: auto; overflow-y: hidden; }
+  .sl-timeline .sl-plane-box    { width: 116px; }
+  .sl-timeline .sl-plane-canvas { width: 112px; height: 112px; }
+
+  /* Redshift axis: full width along the bottom. Fixed canvas height keeps the
+     timeline height stable across widths; drawAxisCanvas() scales the marker bump
+     to fit this box (no clip, no gap). */
   .sl-timeline .sl-axis-wrap {
-    order: 2;
-    width: 100%;
+    grid-area: axis;
+    width: auto;
     height: auto;
-    flex-shrink: 0;
     border-right: none;
     border-top: 1px solid var(--hairline);
   }
-  /* Fixed canvas height keeps the timeline the same height at every mobile width;
-     drawAxisCanvas() scales the marker bump to fit this box (no clip, no gap). */
   .sl-timeline .sl-axis-canvas {
     flex: 0 0 90px;
     height: 90px;

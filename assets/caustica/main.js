@@ -1902,7 +1902,7 @@ function rebuildPlaneBoxes() {
         <button class="sl-plane-clear" title="Clear all objects">○</button>
         <button class="sl-plane-del" title="Delete plane">×</button>
       </div>
-      <canvas class="sl-plane-canvas" width="148" height="148" style="width:148px;height:148px"></canvas>`;
+      <canvas class="sl-plane-canvas" width="148" height="148"></canvas>`;
 
     planesEl.appendChild(box);
 
