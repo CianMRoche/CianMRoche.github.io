@@ -1052,7 +1052,7 @@ function buildDOM() {
           </svg>
         </button>
       </div>
-      <div class="sl-body">
+      <div class="sl-body" data-mobile-tab="object">
         <div class="sl-upper">
           <div class="sl-image-wrap" id="sl-image-wrap">
             <canvas id="sl-gl-canvas"></canvas>
@@ -1145,11 +1145,12 @@ function buildDOM() {
             </div>
           </div>
           <!-- Controls group: right-justified, right-grows -->
-          <div class="sl-controls-col" id="sl-controls-col" data-mobile-tab="object">
+          <div class="sl-controls-col" id="sl-controls-col">
             <div class="sl-mobile-tabs" id="sl-mobile-tabs">
               <button class="sl-mobile-tab-btn active" data-tab="object">Object</button>
               <button class="sl-mobile-tab-btn" data-tab="settings">Settings</button>
               <button class="sl-mobile-tab-btn" data-tab="recording">Recording</button>
+              <button class="sl-mobile-tab-btn" data-tab="planes">Planes</button>
             </div>
             <div class="sl-param-col">
               <div class="sl-tabs">
@@ -1166,9 +1167,6 @@ function buildDOM() {
               <div class="sl-tab-content" id="sl-tab-recording" style="display:none"></div>
             </div>
           </div><!-- end sl-controls-col -->
-        </div>
-        <div class="sl-plane-setup-bar" id="sl-plane-setup-bar">
-          <button class="sl-plane-setup-btn" id="sl-plane-setup-btn">▲ Plane Setup</button>
         </div>
         <div class="sl-timeline" id="sl-timeline">
           <div class="sl-axis-wrap">
@@ -1214,40 +1212,11 @@ function attachHandlers() {
     document.getElementById('sl-tab-recording').style.display = activeTab === 'recording' ? '' : 'none';
   });
 
-  // Mobile tab bar.
+  // Mobile tab bar (Object / Settings / Recording / Planes).
   document.getElementById('sl-mobile-tabs').addEventListener('click', e => {
     const btn = e.target.closest('.sl-mobile-tab-btn');
-    if (!btn) return;
-    const tab = btn.dataset.tab;
-    document.querySelectorAll('.sl-mobile-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-    document.getElementById('sl-controls-col').dataset.mobileTab = tab;
-    if (tab === 'settings' || tab === 'recording') {
-      activeTab = tab;
-      document.querySelectorAll('.sl-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-      document.getElementById('sl-tab-settings').style.display  = tab === 'settings'  ? '' : 'none';
-      document.getElementById('sl-tab-recording').style.display = tab === 'recording' ? '' : 'none';
-    }
+    if (btn) setMobileTab(btn.dataset.tab);
   });
-
-  // Mobile plane setup toggle.
-  document.getElementById('sl-plane-setup-btn').addEventListener('click', () => {
-    const tl  = document.getElementById('sl-timeline');
-    const bar = document.getElementById('sl-plane-setup-bar');
-    const btn = document.getElementById('sl-plane-setup-btn');
-    const open = tl.classList.toggle('plane-setup-open');
-    btn.textContent = open ? '▼ Plane Setup' : '▲ Plane Setup';
-    if (open) {
-      // After drawer renders, float the pill to sit on top of it.
-      setTimeout(() => {
-        const h = tl.getBoundingClientRect().height;
-        if (bar && h > 0) bar.style.bottom = `${h}px`;
-        drawAxisCanvas();
-      }, 50);
-    } else {
-      if (bar) bar.style.bottom = '';
-    }
-  });
-  document.getElementById('sl-plane-setup-btn').textContent = '▲ Plane Setup';
 
   // Global plane toolbar: L / S / H mode + delete selected object.
   document.getElementById('sl-plane-toolbar').addEventListener('click', e => {
@@ -1270,19 +1239,7 @@ function attachHandlers() {
     document.getElementById('sl-planes')?.scrollBy({ left:  162, behavior: 'smooth' });
   });
 
-  // Align the plane-setup tab with the canvas right edge (canvas is inside
-  // .sl-body which has a scrollbar; fixed-positioned tab needs the extra offset).
-  function _syncSetupBarRight() {
-    const bar  = document.getElementById('sl-plane-setup-bar');
-    const body = document.querySelector('.sl-body');
-    if (!bar || !body || window.innerWidth > 640) return;
-    const sw = body.offsetWidth - body.clientWidth; // scrollbar width
-    bar.style.right = `${8 + sw}px`;
-  }
-  _syncSetupBarRight();
-  window.addEventListener('resize', _syncSetupBarRight);
-
-  const _VIZ_LABELS = { '0':'Lensed image','1':'Convergence κ','2':'Shear γ','3':'Magnification |μ|','5':'Deflection |α|','6':'Fermat potential φ' };
+  const _VIZ_LABELS ={ '0':'Lensed image','1':'Convergence κ','2':'Shear γ','3':'Magnification |μ|','5':'Deflection |α|','6':'Fermat potential φ' };
   const _VIZ_LABELS_SHORT = { '0':'[I] Lensed image','1':'[K] Convergence κ','2':'[G] Shear γ','3':'[M] Magnification |μ|','5':'[A] Deflection |α|','6':'[T] Fermat potential φ' };
   function _setVizOptionLabels(withShortcuts) {
     const sel = document.getElementById('sl-viz-mode');
@@ -4460,42 +4417,30 @@ function _initGifEncoder(fps, liveCanvas) {
 
 // ── Tour / tutorial ───────────────────────────────────────────────────────────
 
-// Mobile helpers: open/close the plane setup drawer and switch mobile tabs.
-function _tourOpenPlaneSetup() {
-  if (window.innerWidth > 640) return;
-  const tl  = document.getElementById('sl-timeline');
-  const bar = document.getElementById('sl-plane-setup-bar');
-  const btn = document.getElementById('sl-plane-setup-btn');
-  tl.classList.add('plane-setup-open');
-  if (btn) btn.textContent = '▼';
-  setTimeout(() => {
-    const h = tl.getBoundingClientRect().height;
-    if (bar && h > 0) bar.style.bottom = `${h + 8}px`;
-    drawAxisCanvas();
-  }, 50);
-}
-function _tourClosePlaneSetup() {
-  if (window.innerWidth > 640) return;
-  const tl  = document.getElementById('sl-timeline');
-  const bar = document.getElementById('sl-plane-setup-bar');
-  const btn = document.getElementById('sl-plane-setup-btn');
-  tl.classList.remove('plane-setup-open');
-  if (btn) btn.textContent = '▲';
-  if (bar) bar.style.bottom = '';
-}
-function _tourSetMobileTab(tab) {
-  if (window.innerWidth > 640) return;
-  const col = document.getElementById('sl-controls-col');
-  if (!col) return;
-  col.dataset.mobileTab = tab;
+// Switch the mobile tab bar (Object / Settings / Recording / Planes). Drives the
+// .sl-body[data-mobile-tab] attribute the mobile CSS reads to show one panel — or
+// the plane-setup timeline — at a time. Inert on desktop: the tab bar is hidden and
+// the attribute-gated rules live inside the mobile media query.
+function setMobileTab(tab) {
+  document.querySelector('.sl-body').dataset.mobileTab = tab;
   document.querySelectorAll('.sl-mobile-tab-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.tab === tab));
+  // Keep the desktop sidebar's Settings/Recording sub-tabs in sync.
   if (tab === 'settings' || tab === 'recording') {
     activeTab = tab;
+    document.querySelectorAll('.sl-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
     document.getElementById('sl-tab-settings').style.display  = tab === 'settings'  ? '' : 'none';
     document.getElementById('sl-tab-recording').style.display = tab === 'recording' ? '' : 'none';
   }
+  // The axis canvas can't measure itself while hidden; redraw once the tab reveals it.
+  if (tab === 'planes') requestAnimationFrame(drawAxisCanvas);
 }
+
+// Tour helpers (mobile): the plane setup now lives in the "Planes" tab, so
+// "opening" it just selects that tab and "closing" returns to the Object tab.
+function _tourOpenPlaneSetup()  { if (window.innerWidth <= 640) setMobileTab('planes'); }
+function _tourClosePlaneSetup() { if (window.innerWidth <= 640) setMobileTab('object'); }
+function _tourSetMobileTab(tab) { if (window.innerWidth <= 640) setMobileTab(tab); }
 
 const TOUR_STEPS = [
   {

@@ -1405,7 +1405,6 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
 
 /* Mobile tab bar — hidden on desktop */
 .sl-mobile-tabs { display: none; }
-.sl-plane-setup-bar { display: none; }
 
 /* ── Narrow screens: tighter padding, sidebars wrap to full rows ───────────── */
 
@@ -1425,9 +1424,8 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   .sl-body {
     overflow-y: scroll;
     -webkit-overflow-scrolling: touch;
-    /* Pad enough that the last element scrolls clear of the fixed bar +
-       device safe-area (iPhone home indicator etc.) */
-    padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+    /* Breathing room at the end of the scroll + device safe-area (home indicator). */
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   }
 
   /* Stack image above controls, stretch children to full width */
@@ -1459,8 +1457,7 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
     flex-direction: column;
     flex-wrap: nowrap;
     gap: 0;
-    /* Pad bottom so content isn't hidden under the fixed Plane Setup bar */
-    padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: 12px;
   }
   .sl-controls-col > .sl-param-col,
   .sl-controls-col > .sl-sidebar {
@@ -1481,7 +1478,7 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   .sl-sidebar { overflow: visible; height: auto; min-height: 0; flex: 0 0 auto; }
   .sl-param-col { overflow: visible; height: auto; min-height: 0; }
 
-  /* Mobile tab bar — full width, equal thirds */
+  /* Mobile tab bar — full width, equal columns */
   .sl-mobile-tabs {
     display: flex;
     width: 100%;
@@ -1506,13 +1503,16 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
     border-bottom-color: var(--accent);
   }
 
-  /* Object tab: show/hide param-col and sidebar based on data-mobile-tab */
-  #sl-controls-col[data-mobile-tab="object"]    .sl-param-col { display: flex; }
-  #sl-controls-col[data-mobile-tab="object"]    .sl-sidebar   { display: none; }
-  #sl-controls-col[data-mobile-tab="settings"]  .sl-param-col { display: none; }
-  #sl-controls-col[data-mobile-tab="settings"]  .sl-sidebar   { display: flex; }
-  #sl-controls-col[data-mobile-tab="recording"] .sl-param-col { display: none; }
-  #sl-controls-col[data-mobile-tab="recording"] .sl-sidebar   { display: flex; }
+  /* Which panel shows is driven by .sl-body[data-mobile-tab]. The Planes tab hides
+     these panels and reveals the timeline (rule further down). */
+  .sl-body[data-mobile-tab="object"]    .sl-param-col { display: flex; }
+  .sl-body[data-mobile-tab="object"]    .sl-sidebar   { display: none; }
+  .sl-body[data-mobile-tab="settings"]  .sl-param-col { display: none; }
+  .sl-body[data-mobile-tab="settings"]  .sl-sidebar   { display: flex; }
+  .sl-body[data-mobile-tab="recording"] .sl-param-col { display: none; }
+  .sl-body[data-mobile-tab="recording"] .sl-sidebar   { display: flex; }
+  .sl-body[data-mobile-tab="planes"]    .sl-param-col { display: none; }
+  .sl-body[data-mobile-tab="planes"]    .sl-sidebar   { display: none; }
 
   /* Desktop tab header inside sidebar hidden — mobile tab bar takes over */
   .sl-sidebar #sl-tabs { display: none; }
@@ -1521,21 +1521,15 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   /* Axis label hidden on mobile — canvas draws it inline with the hint text */
   .sl-timeline .sl-axis-label { display: none; }
 
-  /* Timeline hidden in normal flow; becomes a slide-up drawer */
+  /* Timeline lives in the "Planes" tab: hidden until that tab is active, then shown
+     inline (normal flow) below the tab bar — no longer a fixed slide-up drawer. */
   .sl-timeline {
     display: none;
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    z-index: 200;
     flex-direction: column;
     height: auto;
     margin-top: 0;
-    border-top: 1px solid var(--hairline);
-    box-shadow: 0 -4px 16px rgba(0,0,0,0.25);
   }
-  .sl-timeline.plane-setup-open { display: flex; }
+  .sl-body[data-mobile-tab="planes"] .sl-timeline { display: flex; }
 
   /* Toolbar: horizontal row above the planes, left-aligned */
   .sl-timeline .sl-plane-toolbar {
@@ -1581,40 +1575,6 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
     flex: 0 0 64px;
     height: 64px;
   }
-
-  /* Plane setup bar: fixed footer strip */
-  .sl-plane-setup-bar {
-    display: flex;
-    position: fixed;
-    bottom: 0;
-    right: 8px;
-    left: auto;
-    z-index: 201;
-    height: auto;
-    background: transparent;
-    border: none;
-    transition: bottom 0.2s ease;
-  }
-  .sl-plane-setup-btn {
-    font-size: 13px;
-    font-weight: 500;
-    line-height: 1;
-    color: var(--fg-soft);
-    background: var(--bg-soft);
-    border: 1px solid var(--hairline);
-    border-bottom: none;
-    border-radius: 8px 8px 0 0;
-    height: 34px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 5px;
-    cursor: pointer;
-    box-shadow: -2px -2px 8px rgba(0,0,0,0.12);
-    padding: 0 14px;
-    white-space: nowrap;
-  }
-  .sl-plane-setup-btn:active { opacity: 0.75; }
 
   /* axis canvas: prevent scroll-hijack when dragging plane markers */
   .sl-axis-canvas { touch-action: none; }

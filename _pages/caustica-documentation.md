@@ -634,7 +634,7 @@ WebGL2 GPU renderer.
 Application shell (~4500 lines).
 
 - **`state`**: single object holding all mutable app state: planes and their objects, selected IDs, display flags, add mode, per-viz-mode colour-mapping settings (`vizScale`: scale, parameter, limits, and palette for each of surface brightness, $\kappa$, $\gamma$, $\lvert\mu\rvert$, $\lvert\hat{\boldsymbol{\alpha}}\rvert$), recording state.
-- **`buildDOM()`**: constructs the entire UI tree in one pass (image panel, sidebar tabs, redshift axis, plane boxes area, toolbar, plane setup bar).
+- **`buildDOM()`**: constructs the entire UI tree in one pass (image panel, sidebar tabs, mobile tab bar, redshift axis, plane boxes area, toolbar).
 - **Event wiring**: `attachHandlers()` for global keyboard/tab/toolbar events; `attachAxisHandlers()` for plane-dragging on the redshift axis; `attachPlaneCanvasHandlers(canvas, plane)` per plane panel; `attachImageHandlers(wrap)` for drag-to-move in the main image.
 - **`renderSidebar()`**: rebuilds the Object Controls and settings/recording tab content. Called whenever selection or state changes.
 - **`rebuildPlaneBoxes()`**: rebuilds the plane panel DOM from scratch, called when planes are added or removed.
@@ -642,12 +642,12 @@ Application shell (~4500 lines).
 - **Recording**: `captureSnapshot()` composites the WebGL canvas and overlay into a PNG, reflecting the current view (lensed image or quantity map); `startRecording()` / `stopRecording()` drive a `MediaRecorder` for WebM or a gif.js encoder for GIF. UI chrome (the viz-mode chip, colour bar, sidebar, ruler buttons, and the performance badge) lives in separate DOM elements and is intentionally excluded from both PNG and recordings. The light-mode colour inversion that matches the on-screen lensed image is applied only in surface-brightness mode, since the quantity maps carry their own theming.
 - **Programmatic recording**: each selected object can have an initial and final position set; `startProgrammaticRecording()` interpolates all registered objects simultaneously.
 - **Config save/load**: `configToYaml()` serialises all planes and objects, plus the view state needed to reproduce the rendered image (field of view, $z_\text{max}$, active viz mode, per-mode color mapping, contour spacing, critical-curve resolution and point-source grid density, the critical-curve redshift, and the marker/legend/colorbar/critical-curve/caustic toggles), to a human-readable YAML string. `parseYamlConfig()` parses it back with strict type and range validation (allowlisted model names, hex-only color strings, bounded numeric coordinates). The scalar view settings are centralised in a `CONFIG_DEFAULTS` table that both seeds the initial state and supplies the fallback for any field missing from a loaded file, so older or partial configs load to a fully defined visual state rather than inheriting whatever was on screen. The page theme and pasted-image textures are not part of the config (the former is a site-wide preference, the latter is binary data).
-- **Tour**: `startTour()` / `showTourStep()`: spotlight-and-tooltip tutorial with mobile-aware step callbacks that open/close the plane setup drawer and switch mobile tabs as needed.
+- **Tour**: `startTour()` / `showTourStep()`: spotlight-and-tooltip tutorial with mobile-aware step callbacks that switch mobile tabs (including the Planes tab that reveals the plane setup) as needed.
 
 ### `style.css`
 
 Single stylesheet using CSS custom properties for theming (`--accent`, `--lens-color`, `--src-color`, `--hybrid-color`, and others) with `html[data-theme="dark"]` overrides.
-The layout uses flexbox throughout: three-column on wide screens, collapsing to a single-column mobile layout with a fixed Plane Setup drawer at the bottom that slides up to reveal the redshift axis and plane panels.
+The layout uses flexbox throughout: three-column on wide screens, collapsing to a single-column mobile layout with a tab bar (Object / Settings / Recording / Planes); the Planes tab reveals the redshift axis and plane panels.
 
 ### `gif.js` + `gif.worker.js`
 
