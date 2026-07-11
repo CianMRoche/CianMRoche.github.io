@@ -65,6 +65,7 @@ uniform float u_saddlePhi[8]; // φ values at Type-II saddle images (Fermat mode
 uniform int   u_nSaddle;      // number of valid entries in u_saddlePhi
 uniform vec2  u_fermatBeta;   // source position β_s for Fermat potential (arcsec)
 uniform float u_contourSpacing; // Fermat contour spacing multiplier (interval = 0.002·fov²·this)
+uniform int   u_contourScale;   // Fermat contour scale: 0=linear, 1=asinh (compress steep skirt)
 
 uniform float u_D_obs [${MAX_PLANES}];
 uniform float u_D_btwn[${MAX_PLANES * MAX_PLANES}];
@@ -582,6 +583,20 @@ float vizWarp(float v, float lo, float hi, int scale, float p) {
 
 // ── Visualization Jacobian ────────────────────────────────────────────────────
 
+// Fermat contour level coordinate — contour lines are drawn where this hits an integer.
+// scale 0 (linear): level = φ / interval.
+// scale 1 (asinh):  level = asinh(φ/s)·s / interval — identical to linear for |φ| ≪ s,
+// but log-compressed beyond, so a steep multiplane surface with a huge dynamic range
+// (e.g. a lens core at field centre) stays resolvable instead of aliasing into noise.
+float fermatLevel(float phi) {
+  float interval = max(u_fov * u_fov * 0.002 * u_contourSpacing, EPS);
+  if (u_contourScale == 1) {
+    float s = 6.0;                       // transition scale (arcsec²); tuned for O(1–10) φ
+    return asinh(phi / s) * s / interval;
+  }
+  return phi / interval;
+}
+
 vec3 computeViz(vec2 theta) {
   int tgt = u_vizSrcIdx;
 
@@ -590,18 +605,17 @@ vec3 computeViz(vec2 theta) {
   // are thicker and brighter. fwidth() auto-fades where contours are too
   // dense to resolve (outer field far from lens).
   if (u_vizMode == 6) {
-    float phi = fermatPotential(theta, tgt);
-    float interval = max(u_fov * u_fov * 0.002 * u_contourSpacing, EPS);
-    float phi_n    = phi / interval;
-    float fw       = fwidth(phi_n) * 0.5;
-    float d        = min(fract(phi_n), 1.0 - fract(phi_n));
+    float phi   = fermatPotential(theta, tgt);
+    float phi_n = fermatLevel(phi);
+    float fw    = fwidth(phi_n) * 0.5;
+    float d     = min(fract(phi_n), 1.0 - fract(phi_n));
 
     // Identify whether this contour level matches a Type-II saddle image.
     float phi_level = floor(phi_n + 0.5);
     bool isSaddle = false;
     for (int i = 0; i < 8; i++) {
       if (i >= u_nSaddle) break;
-      if (abs(phi_level - floor(u_saddlePhi[i] / interval + 0.5)) < 0.5) {
+      if (abs(phi_level - floor(fermatLevel(u_saddlePhi[i]) + 0.5)) < 0.5) {
         isSaddle = true; break;
       }
     }
@@ -820,6 +834,7 @@ export class Renderer {
     const _fb = fermatBeta ?? [0, 0];
     gl.uniform2f(_locs.u_fermatBeta, _fb[0] ?? 0, _fb[1] ?? 0);
     gl.uniform1f(_locs.u_contourSpacing, _viz.contourSpacing ?? 1.0);
+    gl.uniform1i(_locs.u_contourScale,   _viz.contourScale ?? 0);
 
     const allPlanes = [...planes].sort((a, b) => a.z - b.z);
     const N = Math.min(allPlanes.length, MAX_PLANES);
@@ -1033,6 +1048,7 @@ export class Renderer {
       u_nSaddle:      u('u_nSaddle'),
       u_fermatBeta:   u('u_fermatBeta'),
       u_contourSpacing: u('u_contourSpacing'),
+      u_contourScale:   u('u_contourScale'),
     };
   }
 }

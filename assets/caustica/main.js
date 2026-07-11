@@ -156,6 +156,7 @@ const CONFIG_DEFAULTS = {
   critZs:             null,   // null = auto (highest-z source plane)
   fermatUseSourcePos: false,  // when true, use lastFermatSource for Fermat β_s and source plane
   contourSpacing:     1.0,    // Fermat contour spacing multiplier (interval = 0.002·fov²·this)
+  contourScale:       0,      // Fermat contour scale: 0=linear, 1=asinh (compress steep skirt)
 };
 
 const state = {
@@ -454,6 +455,7 @@ function configToYaml() {
   y += `critGridN: ${state.critGridN}\npsGridN: ${state.psGridN}\n`;
   y += `critZs: ${state.critZs === null ? 'null' : state.critZs}\n`;
   y += `contourSpacing: ${state.contourSpacing}\n`;
+  y += `contourScale: ${state.contourScale === 1 ? 'asinh' : 'linear'}\n`;
   y += `fermatUseSourcePos: ${state.fermatUseSourcePos}\n`;
   if (state.lastFermatSource) {
     const fsp = state.planes.find(p => p.id === state.lastFermatSource.planeId);
@@ -599,8 +601,17 @@ function loadConfigFromYaml(yaml) {
       })
     }));
     state.planes.sort((a, b) => a.z - b.z);
-    state.selectedPlaneId = state.planes[0]?.id ?? null;
-    state.selectedObjId   = state.planes[0]?.objects[0]?.id ?? null;
+    // Prefer a pure (non-hybrid) source as the initial selection. A hybrid lens is a
+    // poor default focus, and selecting it would hijack the Fermat β_s through its
+    // partner source (see _doRedraw). Fall back to the first object when none exists.
+    let _selPlane = state.planes[0] ?? null;
+    let _selObj   = _selPlane?.objects[0] ?? null;
+    for (const _pl of state.planes) {
+      const _src = _pl.objects.find(o => o.type === 'source' && !o.hybridId);
+      if (_src) { _selPlane = _pl; _selObj = _src; break; }
+    }
+    state.selectedPlaneId = _selPlane?.id ?? null;
+    state.selectedObjId   = _selObj?.id ?? null;
     state.vizMode = (typeof cfg.vizMode === 'number') ? cfg.vizMode : CONFIG_DEFAULTS.vizMode;
     // Per-mode colour mapping: "scale param min max" strings.
     state.vizScale = _cloneVizScaleDefaults();
@@ -641,6 +652,7 @@ function loadConfigFromYaml(yaml) {
     }
     state.critZs        = (isFinite(cfg.critZs) && cfg.critZs > 0) ? cfg.critZs : CONFIG_DEFAULTS.critZs;
     state.contourSpacing = isFinite(cfg.contourSpacing) ? Math.max(0.05, cfg.contourSpacing) : CONFIG_DEFAULTS.contourSpacing;
+    state.contourScale = (cfg.contourScale === 'asinh' || cfg.contourScale === 1) ? 1 : 0;
     if (isFinite(cfg.fermatBetaX) && isFinite(cfg.fermatBetaY) && isFinite(cfg.fermatSrcPlaneZ)) {
       const fsp = state.planes.find(p => Math.abs(p.z - cfg.fermatSrcPlaneZ) < 1e-4);
       state.lastFermatSource = fsp ? { cx: cfg.fermatBetaX, cy: cfg.fermatBetaY, planeId: fsp.id } : null;
@@ -2482,6 +2494,13 @@ function renderSidebar() {
           </p>` : ''}
           <p style="font-size:11px;color:var(--muted);margin:10px 0 6px">Iso-arrival-time contour spacing</p>
           <div class="sl-global-input">
+            <label>Scale</label>
+            <select id="sl-contour-scale">
+              <option value="0" ${state.contourScale===0?'selected':''}>Linear</option>
+              <option value="1" ${state.contourScale===1?'selected':''}>Asinh</option>
+            </select>
+          </div>
+          <div class="sl-global-input">
             <label>Spacing (&times;)</label>
             <input type="number" class="sl-scrub" id="sl-contour-spacing" min="0.05" step="${_numStep(state.contourSpacing)}" value="${state.contourSpacing}">
           </div>
@@ -2728,8 +2747,12 @@ function renderSidebar() {
     _csEl.addEventListener('change', e => applyCS(parseFloat(e.target.value)));
     _attachScrub(_csEl, { lo: 0.05, hi: 50, onChange: applyCS });
   }
+  document.getElementById('sl-contour-scale')?.addEventListener('change', e => {
+    state.contourScale = e.target.value === '1' ? 1 : 0;
+    redraw();
+  });
   document.getElementById('sl-contour-reset')?.addEventListener('click', () => {
-    state.contourSpacing = 1.0; renderSidebar(); redraw();
+    state.contourSpacing = 1.0; state.contourScale = 0; renderSidebar(); redraw();
   });
   document.getElementById('sl-fermat-use-src')?.addEventListener('change', e => {
     state.fermatUseSourcePos = e.target.checked;
@@ -4033,7 +4056,7 @@ function activeVizSettings(mode = state.vizMode) {
   // Return a copy (never mutate the stored vizScale) augmented with the Fermat
   // contour spacing; the shader ignores contourSpacing outside Fermat mode.
   const vs = vizScaleFor(vizModeHasScale(mode) ? mode : 0);
-  return { ...vs, contourSpacing: state.contourSpacing };
+  return { ...vs, contourSpacing: state.contourSpacing, contourScale: state.contourScale };
 }
 
 function redraw() {

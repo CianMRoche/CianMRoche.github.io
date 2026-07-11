@@ -1,5 +1,11 @@
 fov: 7
 zMax: 3
+fermatUseSourcePos: true
+fermatBetaX: 1.29543
+fermatBetaY: 0.9554
+fermatSrcPlaneZ: 2.3800
+contourSpacing: 6
+contourScale: asinh
 planes:
   - z: 0.180
     objects:
