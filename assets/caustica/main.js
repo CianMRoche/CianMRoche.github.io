@@ -3090,12 +3090,12 @@ function drawAxisCanvas() {
   // On mobile the strip is short: shrink the bump when markers crowd (no clipping on
   // narrow widths) and vertically centre the stack (no big gap on wide widths). This
   // is what keeps the timeline looking identical across mobile widths.
-  const BELOW = 36;   // px below the axis for tick + L/S labels
-  const ABOVE = 28;   // diamond + z-label text height above the axis at level 0
+  const BELOW = 30;   // px below the axis for tick + L/S labels (tight, so the caption sits close)
+  const ABOVE = 20;   // just the diamond above the axis (z-numbers sit beside it on mobile)
   let BUMP_STEP = 28;
   let axisY;
   if (_mobAxis) {
-    if (maxLv > 0) BUMP_STEP = Math.min(28, Math.max(8, (Hl - BELOW - ABOVE - 2) / maxLv));
+    if (maxLv > 0) BUMP_STEP = Math.min(28, Math.max(6, (Hl - BELOW - ABOVE - 2) / maxLv));
     const upExtent = ABOVE + maxLv * BUMP_STEP;
     axisY = Math.round((Hl + upExtent - BELOW) / 2);
     axisY = Math.min(Math.max(axisY, upExtent + 1), Hl - BELOW - 1);
@@ -3149,9 +3149,16 @@ function drawAxisCanvas() {
     ctx.moveTo(x, dTop); ctx.lineTo(x+5, dMid); ctx.lineTo(x, dBot); ctx.lineTo(x-5, dMid);
     ctx.closePath(); ctx.fill();
 
-    // z label above diamond
-    ctx.font = '9.5px system-ui, sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText(plane.z.toFixed(2), x, dTop - 3);
+    // z label: beside the diamond on mobile (saves vertical space), above on desktop.
+    ctx.font = '9.5px system-ui, sans-serif';
+    if (_mobAxis) {
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillText(plane.z.toFixed(2), x + 7, dMid);
+    } else {
+      ctx.textAlign = 'center';
+      ctx.fillText(plane.z.toFixed(2), x, dTop - 3);
+    }
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';  // reset for the L/S tag
 
     // L/S tag below axis
     ctx.fillStyle = dark ? '#8b949e' : '#6b7280';

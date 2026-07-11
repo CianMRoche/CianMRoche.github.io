@@ -1520,7 +1520,15 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   .sl-sidebar #sl-tabs { display: none; }
   /* Object Controls title hidden — mobile tab bar already labels it */
   .sl-param-col-title { display: none; }
-  /* Axis label hidden on mobile — canvas draws it inline with the hint text */
+
+  /* Zero gap between the mobile tab bar and the content below it: drop the now-empty
+     Object-Controls title bar, the param-col gap, the settings/recording top padding,
+     and (Planes tab) the controls-col bottom padding above the timeline. */
+  .sl-controls-col > .sl-param-col { gap: 0; }
+  .sl-param-col > .sl-tabs { display: none; }
+  .sl-tab-content { padding-top: 0; }
+  .sl-body[data-mobile-tab="planes"] .sl-controls-col { padding-bottom: 0; }
+  /* Axis label hidden on mobile — the .sl-timeline-caption below the axis shows it */
   .sl-timeline .sl-axis-label { display: none; }
 
   /* Timeline in the "Planes" tab: hidden until that tab is active, then laid out as
@@ -1561,12 +1569,13 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
     grid-area: axis;
     width: auto;
     height: auto;
+    padding: 0;                 /* drop the base 8px top pad above the axis canvas */
     border-right: none;
     border-top: 1px solid var(--hairline);
   }
   .sl-timeline .sl-axis-canvas {
-    flex: 0 0 90px;
-    height: 90px;
+    flex: 0 0 60px;
+    height: 60px;
   }
 
   /* Axis labels sit in this caption BELOW the axis (they used to crowd the top of
@@ -1576,7 +1585,8 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
     justify-content: space-between;
     align-items: baseline;
     gap: 8px;
-    padding: 5px 12px 2px;
+    margin-top: -3px;      /* pull it snug under the axis / L/S row */
+    padding: 0 12px 2px;
     font-size: 10.5px;
     color: var(--muted);
   }
