@@ -1591,8 +1591,9 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
     color: var(--muted);
   }
 
-  /* axis canvas: prevent scroll-hijack when dragging plane markers */
-  .sl-axis-canvas { touch-action: none; }
+  /* Axis canvas: allow vertical swipes to scroll the page; horizontal moves stay
+     with the app so plane markers can still be dragged along z. */
+  .sl-axis-canvas { touch-action: pan-y; }
 }
 
 /* ── Tour overlay (mirrors chi-by-eye tutorial styles) ───────────────────── */

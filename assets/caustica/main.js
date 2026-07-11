@@ -1798,7 +1798,8 @@ function attachImageHandlers(wrap) {
 }
 
 function attachAxisHandlers() {
-  let dragPlane = null, didDrag = false;
+  let dragPlane = null, tapStart = null;
+  const TAP_SLOP = 10;  // px — a tap (down+up in ~same spot) adds a plane; a swipe scrolls the page
 
   function nearestMarker(clientX, clientY) {
     const r   = axisCanvas.getBoundingClientRect();
@@ -1834,7 +1835,6 @@ function attachAxisHandlers() {
       e.preventDefault();
       // Cursor locked to grabbing during drag.
       axisCanvas.style.cursor = 'grabbing';
-      didDrag = true;
       const r = axisCanvas.getBoundingClientRect();
       const z = Math.round(axisXToZ(e.clientX - r.left, r.width) * 100) / 100;
       dragPlane.z = z;
@@ -1856,31 +1856,45 @@ function attachAxisHandlers() {
   axisCanvas.addEventListener('pointerdown', e => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;  // only left-click adds/drags planes
     if (dragPlane) return;  // never re-target while a drag is already active
-    axisCanvas.setPointerCapture(e.pointerId);
-    didDrag = false;
     dragPlane = nearestMarker(e.clientX, e.clientY);
     if (dragPlane) {
+      // Started on a marker → drag it along z. Capture so the whole drag stays with us.
+      axisCanvas.setPointerCapture(e.pointerId);
       _draggingPlaneId = dragPlane.id;
       axisCanvas.style.cursor = 'grabbing';
       state.selectedPlaneId = dragPlane.id;
       state.selectedObjId   = dragPlane.objects[0]?.id ?? null;
       renderSidebar();
+    } else {
+      // Started on empty axis → a tap adds a plane; a swipe just scrolls the page
+      // (touch-action: pan-y). Don't capture, so vertical scrolling stays free.
+      tapStart = { x: e.clientX, y: e.clientY };
     }
   });
 
   axisCanvas.addEventListener('pointerup', e => {
-    if (!dragPlane && !didDrag) {
-      const r    = axisCanvas.getBoundingClientRect();
-      const z    = Math.round(axisXToZ(e.clientX - r.left, r.width) * 100) / 100;
+    // Tap on empty axis (down + up in ~the same spot) adds a plane; a swipe does not
+    // (it scrolled the page instead).
+    if (!dragPlane && tapStart &&
+        Math.hypot(e.clientX - tapStart.x, e.clientY - tapStart.y) <= TAP_SLOP) {
+      const r  = axisCanvas.getBoundingClientRect();
+      const z  = Math.round(axisXToZ(e.clientX - r.left, r.width) * 100) / 100;
       const pl = addPlane(z);
       state.selectedPlaneId = pl.id;
       state.selectedObjId   = pl.objects[0]?.id ?? null;
       rebuildPlaneBoxes(); renderSidebar(); redraw();
     }
-    dragPlane = null;
+    dragPlane = null; tapStart = null;
     _draggingPlaneId = null;
     drawAxisCanvas();  // recalculate settled levels immediately on release
     axisCanvas.style.cursor = nearestMarker(e.clientX, e.clientY) ? 'grab' : 'crosshair';
+  });
+
+  axisCanvas.addEventListener('pointercancel', () => {
+    // Browser claimed the gesture for scrolling (pan-y) — reset without adding a plane.
+    dragPlane = null; tapStart = null; _draggingPlaneId = null;
+    axisCanvas.style.cursor = 'crosshair';
+    drawAxisCanvas();
   });
 }
 
