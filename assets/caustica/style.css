@@ -1405,6 +1405,8 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
 
 /* Mobile tab bar — hidden on desktop */
 .sl-mobile-tabs { display: none; }
+/* Timeline caption (axis labels) — mobile-only, below the axis */
+.sl-timeline-caption { display: none; }
 
 /* ── Narrow screens: tighter padding, sidebars wrap to full rows ───────────── */
 
@@ -1565,6 +1567,18 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   .sl-timeline .sl-axis-canvas {
     flex: 0 0 90px;
     height: 90px;
+  }
+
+  /* Axis labels sit in this caption BELOW the axis (they used to crowd the top of
+     the axis canvas). Only shown while the Planes tab is active. */
+  .sl-body[data-mobile-tab="planes"] .sl-timeline-caption {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    padding: 5px 12px 2px;
+    font-size: 10.5px;
+    color: var(--muted);
   }
 
   /* axis canvas: prevent scroll-hijack when dragging plane markers */

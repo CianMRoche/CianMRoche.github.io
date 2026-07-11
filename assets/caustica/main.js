@@ -1188,6 +1188,10 @@ function buildDOM() {
             <button class="sl-planes-arrow sl-planes-arrow-r" id="sl-planes-arrow-r" aria-label="Scroll planes right">›</button>
           </div>
         </div>
+        <div class="sl-timeline-caption" id="sl-timeline-caption">
+          <span>redshift z →</span>
+          <span>Tap to add a plane</span>
+        </div>
       </div>
     </div>`;
 
@@ -1850,6 +1854,7 @@ function attachAxisHandlers() {
   axisCanvas.addEventListener('pointerleave', () => { axisCanvas.style.cursor = 'crosshair'; });
 
   axisCanvas.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;  // only left-click adds/drags planes
     if (dragPlane) return;  // never re-target while a drag is already active
     axisCanvas.setPointerCapture(e.pointerId);
     didDrag = false;
@@ -2009,6 +2014,7 @@ function attachPlaneCanvasHandlers(canvas, plane) {
   canvas.addEventListener('pointerleave', () => { if (istate === 'idle') canvas.style.cursor = 'crosshair'; });
 
   canvas.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;  // only left-click creates/drags
     e.preventDefault();
     canvas.setPointerCapture(e.pointerId);
     const touch = e.pointerType === 'touch' || e.pointerType === 'pen';
@@ -3155,24 +3161,15 @@ function drawAxisCanvas() {
     if (_lbl) ctx.fillText(_lbl, x, axisY + 26);
   }
 
-  ctx.font        = '10.5px system-ui, sans-serif';
-  ctx.fillStyle   = dark ? '#8b949e' : '#6b7280';
-  ctx.globalAlpha = _textAlpha;
-  if (_mobAxis) {
-    // On mobile the HTML label is hidden; draw both texts on one line in the canvas.
-    const _ty = 13;
-    ctx.textAlign    = 'left';
-    ctx.textBaseline = 'top';
-    ctx.fillText('redshift z →', PAD, _ty);
-    ctx.textAlign    = 'right';
-    ctx.fillText('(Click/tap to add a plane)', Wl - PAD, _ty);
-  } else {
-    // Desktop: centred hint at the bottom.
+  // Desktop: centred hint at the bottom of the canvas. On mobile these labels live
+  // in the HTML caption below the axis (.sl-timeline-caption), so nothing is drawn.
+  if (!_mobAxis) {
+    ctx.font        = '10.5px system-ui, sans-serif';
+    ctx.fillStyle   = dark ? '#8b949e' : '#6b7280';
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'bottom';
     ctx.fillText('Click to add a lens or source plane', Wl / 2, Hl - 4);
   }
-  ctx.globalAlpha = 1;
 
   ctx.restore();
 }
