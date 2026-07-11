@@ -1570,10 +1570,11 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
     border-right: none;
     border-top: 1px solid var(--hairline);
   }
-  /* Fixed canvas height ensures getBoundingClientRect() is reliable on mobile */
+  /* Fixed canvas height keeps the timeline the same height at every mobile width;
+     drawAxisCanvas() scales the marker bump to fit this box (no clip, no gap). */
   .sl-timeline .sl-axis-canvas {
-    flex: 0 0 64px;
-    height: 64px;
+    flex: 0 0 90px;
+    height: 90px;
   }
 
   /* axis canvas: prevent scroll-hijack when dragging plane markers */

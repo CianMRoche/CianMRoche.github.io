@@ -938,6 +938,8 @@ function updatePlaneArrows() {
   r.style.display = el.scrollLeft < el.scrollWidth - el.clientWidth - 1 ? '' : 'none';
 }
 let _planeLevels      = new Map();  // plane.id → bump level, kept in sync with drawAxisCanvas
+let _axisBaselineY    = 0;          // axis line y (CSS px); set by drawAxisCanvas, read by nearestMarker
+let _axisBumpStep     = 28;         // per-level marker bump (CSS px); adaptive on mobile
 let _draggingPlaneId  = null;       // id of the plane currently being axis-dragged
 let _arrowKeyStart    = 0;          // timestamp of the first keydown in the current arrow-key hold
 
@@ -1800,8 +1802,10 @@ function attachAxisHandlers() {
     const my  = clientY - r.top;
     const Wl  = r.width;
     const Hl  = r.height;
-    const axisY = Hl * 0.55;
-    const BUMP_STEP = 28;
+    // Use the baseline + bump the last draw actually used (adaptive on mobile), so
+    // the grab targets line up with the diamonds as drawn.
+    const axisY = _axisBaselineY || Hl * 0.55;
+    const BUMP_STEP = _axisBumpStep;
     const HIT = 14;  // px radius around diamond centre
     let best = null, bestDist = Infinity;
     for (const p of state.planes) {
@@ -3024,30 +3028,14 @@ function drawAxisCanvas() {
   ctx.save(); ctx.scale(dpr, dpr);
 
   const Wl = W/dpr, Hl = H/dpr;
-  const PAD = 12, axisY = Hl * 0.55;
+  const PAD = 12;
   const _mobAxis = window.innerWidth <= 640;
   const _textAlpha = _mobAxis ? 0.45 : 1.0;
 
-  ctx.strokeStyle = dark ? '#30363d' : '#e5e7eb';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.moveTo(PAD, axisY); ctx.lineTo(Wl-PAD, axisY); ctx.stroke();
-
-  ctx.font = '10px system-ui, sans-serif'; ctx.textAlign = 'center';
-  ctx.globalAlpha = _textAlpha;
-  for (const z of [0, 0.5, 1, 1.5, 2, 2.5, 3, 4, 5].filter(z => z <= state.zMax)) {
-    const x = axisZToX(z, Wl);
-    ctx.strokeStyle = dark ? '#30363d' : '#e5e7eb'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(x, axisY-4); ctx.lineTo(x, axisY+4); ctx.stroke();
-    ctx.fillStyle = dark ? '#8b949e' : '#6b7280';
-    ctx.fillText(String(z), x, axisY + 15);
-  }
-  ctx.globalAlpha = 1;
-
-  // Assign vertical levels so close markers bump up instead of overlapping.
-  const BUMP_STEP = 28;   // px per level (taller bump for clear separation)
-  const MIN_SEP   = 26;   // min px between markers on the same level
-  // Assign levels to all non-dragged planes first, then pin the dragged plane
-  // above everything so it never flips under a neighbour mid-drag.
+  // ── Assign bump levels FIRST so the axis layout can be sized to the stack.
+  // Close markers stack upward instead of overlapping; the dragged plane is pinned
+  // one level above everything so it never flips under a neighbour mid-drag.
+  const MIN_SEP = 26;   // min px between markers sharing a level
   const sorted = [...state.planes]
     .filter(p => p.id !== _draggingPlaneId)
     .sort((a, b) => a.z - b.z);
@@ -3063,11 +3051,43 @@ function drawAxisCanvas() {
       lv++;
     }
   }
-  if (_draggingPlaneId) {
-    const topLevel = levelMaxX.length; // one above the current highest
-    planeLevel.set(_draggingPlaneId, topLevel);
-  }
+  if (_draggingPlaneId) planeLevel.set(_draggingPlaneId, levelMaxX.length);
   _planeLevels = planeLevel;  // share with hit-testing
+  const maxLv = planeLevel.size ? Math.max(0, ...planeLevel.values()) : 0;
+
+  // ── Place the axis baseline + per-level bump so the whole stack fits the FIXED
+  // canvas height at any width. Desktop keeps the classic centred axis and 28px bump.
+  // On mobile the strip is short: shrink the bump when markers crowd (no clipping on
+  // narrow widths) and vertically centre the stack (no big gap on wide widths). This
+  // is what keeps the timeline looking identical across mobile widths.
+  const BELOW = 36;   // px below the axis for tick + L/S labels
+  const ABOVE = 28;   // diamond + z-label text height above the axis at level 0
+  let BUMP_STEP = 28;
+  let axisY;
+  if (_mobAxis) {
+    if (maxLv > 0) BUMP_STEP = Math.min(28, Math.max(8, (Hl - BELOW - ABOVE - 2) / maxLv));
+    const upExtent = ABOVE + maxLv * BUMP_STEP;
+    axisY = Math.round((Hl + upExtent - BELOW) / 2);
+    axisY = Math.min(Math.max(axisY, upExtent + 1), Hl - BELOW - 1);
+  } else {
+    axisY = Hl * 0.55;
+  }
+  _axisBaselineY = axisY; _axisBumpStep = BUMP_STEP;  // share with nearestMarker hit-testing
+
+  ctx.strokeStyle = dark ? '#30363d' : '#e5e7eb';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(PAD, axisY); ctx.lineTo(Wl-PAD, axisY); ctx.stroke();
+
+  ctx.font = '10px system-ui, sans-serif'; ctx.textAlign = 'center';
+  ctx.globalAlpha = _textAlpha;
+  for (const z of [0, 0.5, 1, 1.5, 2, 2.5, 3, 4, 5].filter(z => z <= state.zMax)) {
+    const x = axisZToX(z, Wl);
+    ctx.strokeStyle = dark ? '#30363d' : '#e5e7eb'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, axisY-4); ctx.lineTo(x, axisY+4); ctx.stroke();
+    ctx.fillStyle = dark ? '#8b949e' : '#6b7280';
+    ctx.fillText(String(z), x, axisY + 15);
+  }
+  ctx.globalAlpha = 1;
 
   for (const plane of state.planes) {
     const x    = axisZToX(plane.z, Wl);
