@@ -4503,8 +4503,8 @@ function _initGifEncoder(fps, liveCanvas) {
 // ── Tour / tutorial ───────────────────────────────────────────────────────────
 
 // Switch the mobile tab bar (Object / Settings / Recording / Planes). Drives the
-// .sl-body[data-mobile-tab] attribute the mobile CSS reads to show one panel — or
-// the plane-setup timeline — at a time. Inert on desktop: the tab bar is hidden and
+// .sl-body[data-mobile-tab] attribute the mobile CSS reads to show one panel (or
+// the plane-setup timeline) at a time. Inert on desktop: the tab bar is hidden and
 // the attribute-gated rules live inside the mobile media query.
 function setMobileTab(tab) {
   document.querySelector('.sl-body').dataset.mobileTab = tab;
@@ -4527,71 +4527,83 @@ function _tourOpenPlaneSetup()  { if (window.innerWidth <= 640) setMobileTab('pl
 function _tourClosePlaneSetup() { if (window.innerWidth <= 640) setMobileTab('object'); }
 function _tourSetMobileTab(tab) { if (window.innerWidth <= 640) setMobileTab(tab); }
 
+// Set the visualization mode and sync the dropdown, colorbar, and canvas class.
+function _tourSetViz(mode) {
+  state.vizMode = mode;
+  const sel = document.getElementById('sl-viz-mode');
+  if (sel) sel.value = mode;
+  glCanvas?.classList.toggle('sl-viz-active', mode !== 0);
+  _updateColorbar(); renderSidebar(); redraw();
+}
+
 const TOUR_STEPS = [
   {
     target: '.sl-axis-wrap',
     onEnter: _tourOpenPlaneSetup,
     arrow: 'above',
     label: 'Redshift timeline',
-    text: 'The redshift axis represents the line of sight from z = 0 (observer) to distant galaxies. Click or tap the axis to place a new plane at that redshift; drag existing markers to reposition them.',
+    text: 'This axis is your line of sight, from the observer at z = 0 out to high redshift. Click anywhere on it to add a plane at that redshift, and drag a marker to move a plane along the line of sight.',
   },
   {
     target: '.sl-planes',
     onEnter: _tourOpenPlaneSetup,
     arrow: 'above',
     label: 'Plane viewer',
-    text: 'Each plane appears here as a canvas panel showing a projected view of that redshift slice. Click to select an object, drag to move it. The <b>○</b> button (or press <kbd>O</kbd>) clears all objects from the selected plane. The <b>×</b> button (or press <kbd>X</kbd>) deletes the plane entirely.',
+    text: 'Each plane is a slice of the sky at its redshift, shown here as a panel. Click an object to select it, or drag to move it. On each panel, the <b>○</b> button (key <kbd>O</kbd>) clears the plane and the <b>×</b> button (key <kbd>X</kbd>) deletes it.',
   },
   {
     target: '#sl-plane-toolbar',
     onEnter: _tourOpenPlaneSetup,
     arrow: 'right',
-    label: 'Add toolbar',
-    text: 'Select what clicking in a plane creates: <b>Lens</b> (deflects light), <b>Source</b> (emits light), or <b>Hybrid</b> (both at once as a purple dot). Press <kbd>1</kbd>, <kbd>2</kbd>, or <kbd>3</kbd> to switch modes. The trash button deletes the selected object.',
+    label: 'Add tools',
+    text: 'These buttons set what a click in a plane creates: a <b>Lens</b> that bends light, a <b>Source</b> that emits it, or a <b>Hybrid</b> that does both. Keys <kbd>1</kbd>, <kbd>2</kbd>, <kbd>3</kbd> switch between them, and the trash button removes the selected object.',
   },
   {
     target: '#sl-obj-panel',
     mobileTarget: '#sl-obj-panel',
     onEnter: () => { _tourClosePlaneSetup(); _tourSetMobileTab('object'); },
     arrow: 'left',
-    label: 'Object Controls',
-    text: 'When an object is selected, its parameters appear here. Choose a profile from the dropdown — lens types include SIE, EPL, point mass, external shear, external convergence, and constant deflection; source types include Gaussian, exponential, uniform circle, point source, and pasted image. The <b>ⓘ</b> button shows parameter descriptions for the chosen model. Press <kbd>H</kbd> to hide or show the selected object.',
+    label: 'Object controls',
+    text: 'Select any object to edit it here. The dropdown sets the objects mass or light profile shape. The <b>ⓘ</b> button explains each parameter for a given profile, and <kbd>H</kbd> can be used to hide the selected object temporarily.',
   },
   {
     target: '#sl-image-wrap',
     onEnter: _tourClosePlaneSetup,
     arrow: 'right',
     label: 'Lensed image',
-    text: 'This panel shows what an observer at z = 0 would see. Light from source objects is bent by all intervening lenses using full multiplane gravitational lensing. Drag objects directly here or in the plane panels; the image updates in real time.',
+    text: 'This is what the observer at z = 0 sees. Light from every source is bent by all the lenses in front of it, with full multiplane lensing. Drag objects here or in the plane panels and the image updates in real time.',
+  },
+  {
+    target: '#sl-image-wrap',
+    onEnter: () => {
+      _tourClosePlaneSetup();
+      state.showCritCurves = true;
+      state.showCaustics   = true;
+      _tourSetViz(0);
+    },
+    arrow: 'right',
+    label: 'Critical curves',
+    text: 'The <b>Critical curves</b> are where magnification formally diverges, and the <b>caustics</b> are the critical curves mapped onto the source plane. Press <kbd>C</kbd> to toggle them, or use the Critical Curves section in Settings.',
   },
   {
     target: '#sl-viz-mode',
     onEnter: () => {
       _tourClosePlaneSetup();
-      state.vizMode = 6;
-      const sel = document.getElementById('sl-viz-mode');
-      if (sel) sel.value = 6;
-      glCanvas?.classList.toggle('sl-viz-active', true);
-      _updateColorbar(); renderSidebar(); redraw();
+      state.showCritCurves = false;
+      state.showCaustics   = false;
+      _tourSetViz(6);
     },
     arrow: 'below',
     label: 'Lensing quantities',
-    text: 'The <b>quantity dropdown</b> maps lensing quantities across the field of view — convergence κ, shear γ, magnification |μ|, deflection |α|, and the <b>Fermat potential φ</b> shown now. Contour lines trace the arrival-time surface; stationary points are the images of a source at the origin, classified as minimum (○), saddle (◇), or maximum (△) by their Jacobian type. The highlighted contour passes through the saddle image. Press <kbd>I</kbd> to return to the lensed image at any time.',
+    text: 'This dropdown maps a lensing quantity across the field: convergence κ, shear γ, magnification |μ|, deflection |α|, or the <b>Fermat potential φ</b> shown here. Its contours trace light arrival time, and the marked points are the images of the source (a minimum, saddle, or maximum of that surface). Press <kbd>I</kbd> to return to the lensed image.',
   },
   {
     target: '.sl-tab-btn[data-tab="settings"]',
     mobileTarget: '.sl-mobile-tab-btn[data-tab="settings"]',
-    onEnter: () => {
-      _tourClosePlaneSetup(); _tourSetMobileTab('settings');
-      state.vizMode = 0;
-      const sel = document.getElementById('sl-viz-mode');
-      if (sel) sel.value = 0;
-      glCanvas?.classList.toggle('sl-viz-active', false);
-      _updateColorbar(); renderSidebar(); redraw();
-    },
+    onEnter: () => { _tourClosePlaneSetup(); _tourSetMobileTab('settings'); _tourSetViz(0); },
     arrow: 'left',
     label: 'Settings',
-    text: 'The <b>Settings tab</b> controls field of view, maximum redshift, and tone mapping. The Critical Curves section overlays contours where image count changes (press <kbd>C</kbd>). The Resolution dropdown controls curve detail.',
+    text: 'Settings holds the field of view, maximum redshift, and tone mapping, along with preset interesting lensing configurations and the resolution of certain numerically solved elements like critical curves or point source lensed image positions.',
   },
   {
     target: '.sl-tab-btn[data-tab="recording"]',
@@ -4599,19 +4611,47 @@ const TOUR_STEPS = [
     onEnter: () => { _tourClosePlaneSetup(); _tourSetMobileTab('recording'); },
     arrow: 'left',
     label: 'Recording',
-    text: 'The <b>Recording tab</b> has two modes. <b>Live</b> captures whatever you do: press Record, interact, press Stop, then download as WebM or GIF. <b>Programmatic</b> animates a selected object between two positions; set start, set end, then press Record Program.',
+    text: 'Recording has two modes. <b>Live</b> captures whatever you do, then saves it as a WebM or GIF (key <kbd>R</kbd> starts and stops it). <b>Programmatic</b> animates a set of objects moving between set start and end positions.',
   },
   {
-    target: null,
-    onEnter: _tourClosePlaneSetup,
-    arrow: null,
+    target: 'a.sl-demo-btn',
+    onEnter: () => { _tourClosePlaneSetup(); _tourSetViz(0); },
+    arrow: 'below',
     label: 'Ready to explore',
-    text: 'That\'s the full tour! Click the redshift axis to add planes, pick a tool, click in a plane to add objects, and watch the lensed image update live.',
+    text: 'That is the tour. Build a scene by adding planes and objects, then watch the lensed image and quantity maps respond. For the physics and every control in full, open the <b>Docs</b> link here in the top bar.',
     final: true,
   },
 ];
 
 function _tourClamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+
+// Position the highlight box around targetRect. Each edge is padded then clamped to the
+// viewport INDEPENDENTLY, so a side that hugs a screen edge (e.g. the plane strip or the
+// full-width mobile redshift axis) keeps its alignment with the target while the other
+// sides keep their pad. The clamp floor is capped at the target's own edge: a constant
+// inset would pull a viewport-flush edge 7px INSIDE the element, visibly offsetting the
+// box off the target (worst on the bottom timeline elements). Flush edges instead draw
+// the ring at the screen edge, sacrificing the soft outer ring on that side only.
+function _positionSpotlight(targetRect) {
+  if (!targetRect || targetRect.width === 0) {
+    tour.spotlight.classList.add('no-target');
+    Object.assign(tour.spotlight.style, { left: '50%', top: '50%', width: '0', height: '0' });
+    return;
+  }
+  tour.spotlight.classList.remove('no-target');
+  const pad = 6, inset = 7;   // inset exceeds the 5px accent-soft ring so it stays visible
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const left   = Math.max(targetRect.left   - pad, Math.min(inset,      targetRect.left));
+  const top    = Math.max(targetRect.top    - pad, Math.min(inset,      targetRect.top));
+  const right  = Math.min(targetRect.right  + pad, Math.max(vw - inset, targetRect.right));
+  const bottom = Math.min(targetRect.bottom + pad, Math.max(vh - inset, targetRect.bottom));
+  Object.assign(tour.spotlight.style, {
+    left:   `${left}px`,
+    top:    `${top}px`,
+    width:  `${Math.max(0, right - left)}px`,
+    height: `${Math.max(0, bottom - top)}px`,
+  });
+}
 
 const tour = {
   active: false, step: 0,
@@ -4672,19 +4712,7 @@ function _renderTourStep() {
     if (el) targetRect = el.getBoundingClientRect();
   }
 
-  if (targetRect && targetRect.width > 0) {
-    tour.spotlight.classList.remove('no-target');
-    const pad = 6;
-    Object.assign(tour.spotlight.style, {
-      left:   `${targetRect.left - pad}px`,
-      top:    `${targetRect.top  - pad}px`,
-      width:  `${targetRect.width  + 2 * pad}px`,
-      height: `${targetRect.height + 2 * pad}px`,
-    });
-  } else {
-    tour.spotlight.classList.add('no-target');
-    Object.assign(tour.spotlight.style, { left: '50%', top: '50%', width: '0', height: '0' });
-  }
+  _positionSpotlight(targetRect);
 
   const isFinal = !!s.final;
   tour.tooltip.innerHTML = `
@@ -4712,15 +4740,7 @@ function repositionTour() {
     const el = document.querySelector(sel);
     if (el) targetRect = el.getBoundingClientRect();
   }
-  if (targetRect && targetRect.width > 0) {
-    const pad = 6;
-    Object.assign(tour.spotlight.style, {
-      left:   `${targetRect.left - pad}px`,
-      top:    `${targetRect.top  - pad}px`,
-      width:  `${targetRect.width  + 2 * pad}px`,
-      height: `${targetRect.height + 2 * pad}px`,
-    });
-  }
+  _positionSpotlight(targetRect);
   positionTourTooltip(targetRect, s.arrow);
 }
 
