@@ -565,6 +565,17 @@ The computation proceeds in four steps:
 **Note.** Fine features such as cusps are only resolved at higher resolutions.
 </div>
 
+### Caustic metamorphoses: the butterfly
+
+Folds and cusps are the only caustic features that are *stable* — a generic lens shows nothing else.
+A compound lens, however, can be tuned through special configurations where **higher-order catastrophes** appear: as the alignment, strengths, or shapes of the component lenses change, cusps collide and unfold, momentarily forming **swallowtail** and **butterfly** singularities in which the caustic folds back over itself.
+A source placed inside the extra folded region gains additional image pairs, producing exotic image configurations such as broken and angular Einstein rings.
+[Orban de Xivry & Marshall (2009)](https://ui.adsabs.harvard.edu/abs/2009MNRAS.399....2O/abstract) give an atlas of these exotic lenses and predict how often each should turn up in surveys.
+
+The **Butterfly Caustic** preset (Settings tab → *Load a preset scene…*) reproduces such a configuration: two flattened nonsingular isothermal (NIE) lenses at $z = 0.500$ and $z = 0.510$ with nearly perpendicular position angles.
+The source-plane caustic develops butterfly metamorphoses at its cusps, visible as multi-cusped pockets where the caustic folds over itself.
+Toggle the critical curves with `C`, and drag a source through the folded pockets to watch the extra images appear and merge.
+
 ## 8. Recording, capture, and animation
 
 The **Recording tab** in the right sidebar turns the live view into a still image, a video, or a smooth animation. Every capture reflects exactly what is on screen: the active view (lensed image or any quantity map), the overlay (position markers, critical curves and caustics, ruler measurements), and the color bar. UI chrome (the sidebar, the quantity dropdown, the ruler buttons, the performance badge) is excluded, and in the lensed-image view the same light-mode inversion used on screen is baked into the output so the file matches what you see.
@@ -659,5 +670,6 @@ Loaded lazily (only when GIF recording is requested) via a dynamic `<script>` ta
 - Schneider, Ehlers & Falco (1992), *Gravitational Lenses*, Springer. *(Multiplane lensing formalism.)*
 - Kormann, Schneider & Bartelmann (1994), Isothermal ellipsoidal mass distributions in gravitational lensing, A&A 284. *(SIE deflection angles.)*
 - Blandford & Narayan (1986), Fermat surface, caustics, and the time delay between images, ApJ 310. *(Fermat principle formulation of gravitational lensing; image types and time delays.)*
+- [Orban de Xivry & Marshall (2009)](https://ui.adsabs.harvard.edu/abs/2009MNRAS.399....2O/abstract), An atlas of predicted exotic gravitational lenses, MNRAS 399. *(Swallowtail and butterfly caustic metamorphoses in compound lenses; basis for the Butterfly Caustic preset.)*
 - Lupton, Blanton, Fekete et al. (2004), Preparing Red-Green-Blue Images from CCD Data, PASP 116. *(Asinh stretch for astronomical image display.)*
 - Smith & van der Walt (2015), matplotlib viridis/inferno/plasma colormaps; Mikhailov (2019), Turbo colormap. *(Perceptually uniform palettes; implemented here via compact polynomial fits.)*

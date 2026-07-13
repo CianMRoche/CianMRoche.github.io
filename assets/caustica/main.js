@@ -548,6 +548,7 @@ const PRESETS = [
   { file: 'two-plane.yaml',     name: 'Two lens planes (multiplane)' },
   { file: 'fermat-demo.yaml',   name: 'Fermat surface demo' },
   { file: 'zigzag.yaml',        name: 'ZigZag Lens' },
+  { file: 'butterfly_caustic.yaml', name: 'Butterfly Caustic' },
   { file: 'group.yaml',         name: 'Galaxy group (wide field)' },
 ];
 
@@ -555,12 +556,23 @@ const PRESETS = [
 let _selectedPreset = '';
 
 // Fetch a preset YAML by filename and load it through the normal config path.
+// A failure is retried once with the HTTP caches bypassed (cache:'reload' skips the
+// browser cache; the throwaway query param skips the CDN cache): a response cached
+// mid-deploy (e.g. a 404) otherwise keeps a preset broken on that device until the
+// cache entry expires, even though the file on the server is fine.
 function loadPreset(file) {
   if (!PRESETS.some(p => p.file === file)) return; // only load known files
-  fetch(PRESET_BASE + file)
-    .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); })
+  const get = bust => fetch(PRESET_BASE + file + (bust ? `?r=${Date.now()}` : ''),
+                            bust ? { cache: 'reload' } : {})
+    .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); });
+  get(false)
+    .catch(() => get(true))
     .then(yaml => { _selectedPreset = file; loadConfigFromYaml(yaml); }) // loadConfig re-renders the sidebar
-    .catch(err => { alert('Failed to load preset: ' + err.message); console.error(err); renderSidebar(); });
+    .catch(err => {
+      alert(`Failed to load preset ${PRESET_BASE + file}: ${err.message}. ` +
+            'Check your connection and try again.');
+      console.error(err); renderSidebar();
+    });
 }
 
 function loadConfigFromYaml(yaml) {
@@ -1383,6 +1395,49 @@ function attachHandlers() {
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' ||
         e.key === 'ArrowUp'   || e.key === 'ArrowDown') commitAction();
   });
+
+  // Arrow keys on a focused linear slider nudge by one count of the last digit its
+  // readout shows, not by the step attribute (which stays as the drag quantum).
+  // Sliders whose readout has fixed decimals declare them via data-disp-dec; the
+  // rest show fmtP(value). Log-position sliders (data-log-range) keep the native
+  // step — their 1/1000-of-range position unit already scales with magnitude.
+  // Dispatching input+change mirrors the events a native nudge fires, so value
+  // listeners and the focusin/change undo boundaries behave identically.
+  document.addEventListener('keydown', e => {
+    const inp = e.target;
+    if (!(inp instanceof HTMLInputElement) || inp.type !== 'range' || inp.dataset.logRange) return;
+    const dir = (e.key === 'ArrowRight' || e.key === 'ArrowUp')   ?  1
+              : (e.key === 'ArrowLeft'  || e.key === 'ArrowDown') ? -1 : 0;
+    if (!dir) return;
+    e.preventDefault();
+    const v   = parseFloat(inp.value);
+    const dec = inp.dataset.dispDec !== undefined ? +inp.dataset.dispDec : _fmtPDecimals(v);
+    const inc = 10 ** -dec;
+    // Snap onto the readout's grid (an off-grid value from a loaded config moves
+    // to the adjacent grid point), then clear float dust and clamp to the range.
+    let nv = +(Math.round((v + dir * inc) / inc) * inc).toFixed(6);
+    nv = Math.min(parseFloat(inp.max), Math.max(parseFloat(inp.min), nv));
+    inp.value = String(nv);
+    inp.dispatchEvent(new Event('input',  { bubbles: true }));
+    inp.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+
+  // Drag/click quantisation for the same sliders. Their markup uses step="any"
+  // because a numeric step would snap fine keyboard-nudged values back onto its
+  // grid on every assignment and re-render; the coarse drag feel is preserved by
+  // snapping trusted (pointer/native) edits to the declared drag step here, in
+  // the capture phase so the value listeners below only ever see snapped values.
+  // Synthetic events (the arrow-key nudge above) are untrusted and pass through.
+  document.addEventListener('input', e => {
+    const inp = e.target;
+    if (!e.isTrusted || !(inp instanceof HTMLInputElement) || inp.type !== 'range') return;
+    const s = parseFloat(inp.dataset.dragStep || '');
+    if (!isFinite(s) || s <= 0) return;
+    const min = parseFloat(inp.min);
+    const v   = parseFloat(inp.value);
+    const snapped = Math.min(parseFloat(inp.max), +(min + Math.round((v - min) / s) * s).toFixed(6));
+    if (snapped !== v) inp.value = String(snapped);
+  }, true);
   document.getElementById('sl-undo')?.addEventListener('click', undo);
   document.getElementById('sl-redo')?.addEventListener('click', redo);
   updateUndoRedoButtons();
@@ -2435,12 +2490,12 @@ function renderSidebar() {
             const paramRow = vs.scale === 2 ? `
           <div class="sl-global-input">
             <label>Power (γ)</label>
-            <input type="range" id="sl-viz-param" min="0.1" max="2.0" step="0.05" value="${vs.param}">
+            <input type="range" id="sl-viz-param" data-disp-dec="2" min="0.1" max="2.0" step="any" data-drag-step="0.05" value="${vs.param}">
             <span class="sl-tone-param-val">${vs.param.toFixed(2)}</span>
           </div>` : vs.scale === 3 ? `
           <div class="sl-global-input">
             <label>Softening (a)</label>
-            <input type="range" id="sl-viz-param" min="0.5" max="20" step="0.5" value="${vs.param}">
+            <input type="range" id="sl-viz-param" data-disp-dec="1" min="0.5" max="20" step="any" data-drag-step="0.5" value="${vs.param}">
             <span class="sl-tone-param-val">${vs.param.toFixed(1)}</span>
           </div>` : '';
             const paletteRow = state.vizMode === 0 ? '' : `
@@ -2913,6 +2968,16 @@ function fmtP(v) {
   return v.toFixed(2);
 }
 
+// Decimals fmtP shows for v — the arrow-key nudge unit is one count of the
+// readout's last digit. Bare '0' nudges at the coarse band so a zeroed slider
+// doesn't need dozens of presses to show movement.
+function _fmtPDecimals(v) {
+  const a = Math.abs(v);
+  if (a !== 0 && a < 0.005) return 4;
+  if (a !== 0 && a < 0.05)  return 3;
+  return 2;
+}
+
 // Read slider value, handling both linear and logarithmic sliders.
 function readSliderValue(inp) {
   if (inp.dataset.logRange) {
@@ -2925,7 +2990,7 @@ function readSliderValue(inp) {
 function sliderRow(label, key, min, max, step, val) {
   return `<div class="sl-param-row">
     <span class="sl-param-label">${label}</span>
-    <input type="range" data-param="${key}" min="${min}" max="${max}" step="${step}" value="${val}">
+    <input type="range" data-param="${key}" min="${min}" max="${max}" step="any" data-drag-step="${step}" value="${val}">
     <span class="sl-param-val">${fmtP(val)}</span>
   </div>`;
 }

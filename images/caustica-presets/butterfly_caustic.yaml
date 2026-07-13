@@ -1,0 +1,47 @@
+fov: 4
+zMax: 3
+vizMode: 0
+vizScale0: 1 0.5 0 1 0
+vizScale1: 0 0.5 0 2 0
+vizScale2: 0 0.5 0 0.5 0
+vizScale3: 4 0.5 1 30 0
+vizScale5: 0 0.5 0 2 0
+showCritCurves: false
+showCaustics: true
+showMarkers: false
+showLegend: true
+showColorbar: true
+showRuler: true
+critGridN: 512
+psGridN: 300
+critZs: null
+contourSpacing: 1
+contourScale: linear
+fermatUseSourcePos: false
+planes:
+  - z: 0.500
+    objects:
+      - type: lens
+        model: nie
+        cx: 0
+        cy: 0
+        hidden: false
+        showShape: true
+        params:
+          b: 1.458814
+          q: 0.35
+          phi: 0.029
+          rc: 0.026265
+  - z: 0.510
+    objects:
+      - type: lens
+        model: nie
+        cx: 0.00129
+        cy: 0.00213
+        hidden: false
+        showShape: true
+        params:
+          b: 2.910717
+          q: 0.35
+          phi: 1.6
+          rc: 0.017206
