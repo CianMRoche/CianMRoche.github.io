@@ -1202,16 +1202,17 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   background: var(--bg);
   margin-bottom: 10px;
 }
+/* Redshift box: sized/shaped like the Clear / Delete buttons below it. */
 .sl-plane-z-input {
-  width: 58px;
-  font-size: 11.5px;
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
-  padding: 1px 4px;
+  padding: 4px 7px;
   border: 1px solid var(--hairline);
   border-radius: 4px;
   background: var(--bg);
   color: var(--fg);
-  margin-right: auto;
 }
 .sl-plane-empty {
   padding: 12px 0 4px;
@@ -1219,14 +1220,15 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   color: var(--muted);
 }
 
-/* Compact z label in plane header */
+/* "Redshift:" caption stacked above its input, matching the "Plane:" group. */
 .sl-plane-z {
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  font-size: 10.5px;
   font-weight: 600;
-  color: var(--fg-soft);
-  flex: 1;
-  white-space: nowrap;
+  color: var(--muted);
 }
 
 /* Plane-side labeled buttons (Image / Clear / Delete), stacked next to the viewer */
@@ -1259,7 +1261,7 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   width: 100%;
   aspect-ratio: 1;
   height: auto;
-  cursor: crosshair;
+  cursor: default;   /* the pointer handlers set grab/crosshair contextually */
   touch-action: none;
 }
 .sl-plane-canvas.has-selected { cursor: grab; }
@@ -1270,10 +1272,15 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
 /* ── Narrow screens: single column — image, timeline (Scene tab), rail ────── */
 
 @media (max-width: 640px) {
-  /* Topbar wraps: the file cluster takes its own row. */
+  /* Topbar wraps: the file cluster takes its own row. On the first row, the
+     undo group becomes the flex spacer so Docs / Tour / ? / theme sit at the
+     right edge. */
   .sl-topbar { flex-wrap: wrap; height: auto; min-height: 44px; padding: 6px 10px; row-gap: 2px; }
+  .sl-undo-group { margin-right: auto; }
   .sl-file-group { order: 10; flex-basis: 100%; margin-right: 0; }
-  .sl-topbar-preset { flex: 1; max-width: none; }
+  /* The preset keeps its natural width (does not stretch to fill the row);
+     Save / Load are pushed to the right edge instead. */
+  #sl-save-config { margin-left: auto; }
 
   /* Single scrolling column; -webkit-overflow-scrolling:touch enables it inside
      position:fixed ancestors on iOS Safari. */
@@ -1295,6 +1302,10 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
     flex: 0 0 auto;
   }
   .sl-image-wrap { width: 100%; }
+  /* Vertical swipes on the image scroll the page; gestures the app owns (object
+     drags, ruler edits, pinches) opt out via touchstart preventDefault in
+     attachImageHandlers. */
+  .sl-image-wrap, .sl-image-wrap canvas { touch-action: pan-y; }
 
   /* Rail stacks below at natural height — panels expand, the page scrolls. */
   .sl-rail { border-left: none; flex: 0 0 auto; min-height: 0; }
@@ -1328,33 +1339,84 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   /* The card sits directly under the tab bar here; no divider needed. */
   #sl-tab-scene .sl-plane-card { margin-top: 0; border-top: none; }
 
+  /* Plane viewer: same order as desktop (tools ‹ canvas › side), but the tools
+     become two short columns of bigger tap targets (select + trash close
+     together on the left, L/S/H on the right, both vertically centred), the
+     ‹ › arrows widen into strips, the canvas caps at its desktop size, and the
+     side column keeps the z box (top) and Plane buttons (bottom) on the right.
+     (ID selectors: these overrides must beat the desktop rules that appear
+     later in the file.) */
+  /* Flex row: tools | spacer | viewer group | spacer | side. The tools and side
+     blocks size to their content and never grow; the two spacers grow with an
+     identical flex, so the gap between the viewer group and the left tools
+     always equals the gap between it and the right controls (equal spacing to
+     each block, not naive centring in the card). Equal flex-grow behaves the
+     same in every engine, unlike auto margins + gap. */
+  #sl-plane-body {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0;
+  }
+  #sl-plane-tools { flex: 0 0 auto; }
+  /* id+class beats the later desktop `.sl-plane-spacer { display:none }`. */
+  #sl-plane-body .sl-plane-spacer { display: block; flex: 1 1 0; min-width: 12px; align-self: stretch; }
+  #sl-plane-body .sl-plane-viewgroup {
+    display: flex;
+    align-items: center;
+    gap: 5px;              /* tight, equal ‹↔canvas and canvas↔› gaps */
+    min-width: 0;
+    flex: 0 1 auto;
+  }
+  /* Canvas caps at its desktop size and shrinks to fit on narrow phones. */
+  #sl-plane-canvas { flex: 0 1 150px; min-width: 40px; width: auto; }
+  #sl-plane-prev, #sl-plane-next { width: 30px; align-self: stretch; font-size: 20px; flex: 0 0 auto; }
+  #sl-plane-side { flex: 0 1 auto; min-width: 0; }
+  #sl-plane-tools {
+    align-self: center;
+    flex-direction: row;
+    gap: 10px;             /* horizontal gap between the two button columns */
+    align-items: center;   /* centre each short column against the canvas height */
+  }
+  #sl-plane-tools .sl-ptool-col {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  #sl-plane-tools .sl-ctool-btn,
+  #sl-plane-tools .sl-ctool-del {
+    width: 36px;
+    height: 36px;
+    margin-top: 0;         /* clear the desktop trash's bottom-pinning margin */
+    font-size: 13px;
+  }
+
   /* Column order: image, rail (tabs + panel), timeline at the very bottom. */
   .sl-stage    { order: 0; }
   .sl-rail     { order: 1; }
   .sl-timeline { order: 2; }
 }
 
-/* ── Short viewports (landscape phones): two columns, timeline over the stage ── */
-
-@media (min-width: 641px) and (max-height: 480px) {
-  .sl-body {
-    grid-template-columns: minmax(0, 1fr) minmax(250px, 320px);
-    grid-template-rows: minmax(0, 1fr);
-    grid-template-areas: "stage rail";
-  }
-  /* The timeline shares the stage cell, pinned to its bottom edge over the
-     letterbox margin; the stage padding keeps the square image clear of it. */
-  .sl-timeline {
-    grid-area: stage;
-    align-self: end;
-    z-index: 5;
-    background: color-mix(in srgb, var(--bg) 84%, transparent);
-    backdrop-filter: blur(3px);
-  }
-  .sl-stage { padding-bottom: 88px; }
-  .sl-axis-canvas { height: 56px; }
-  /* Narrower rail: a smaller viewer keeps the labeled side buttons on-row. */
-  .sl-plane-card .sl-plane-canvas { width: 120px; }
+/* ── Short viewports (landscape phones, squat windows): the layout cannot fit,
+   so a full-screen prompt asks for a taller window instead. ─────────────────── */
+.sl-rotate-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 400;   /* above the tour (200-203) and the shortcut overlay (300) */
+  background: var(--bg);
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  color: var(--fg-soft);
+  text-align: center;
+  padding: 20px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+@media (max-height: 480px) and (orientation: landscape) {
+  .sl-rotate-overlay { display: flex; }
 }
 
 /* ── Tour overlay (mirrors chi-by-eye tutorial styles) ───────────────────── */
@@ -1588,21 +1650,7 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
 }
 
 
-/* ── Canvas tool rail (left edge of the image): select / L / S / H ────────── */
-.sl-canvas-tools {
-  position: absolute;
-  top: 50%;
-  left: 8px;
-  transform: translateY(-50%);
-  z-index: 11;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  pointer-events: auto;
-  opacity: 0.85;
-  transition: opacity 0.15s;
-}
-.sl-canvas-tools:hover { opacity: 1; }
+/* ── Plane-viewer tool buttons: select / L / S / H ─────────────────────────── */
 .sl-ctool-btn {
   display: flex;
   align-items: center;
@@ -1636,13 +1684,27 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
   padding: 8px 0 2px;
   min-width: 0;
 }
+/* Desktop: one column with select / L / S / H at the top and the trash pinned
+   to the bottom. The two wrapper columns collapse (display: contents) so their
+   buttons flow directly into this flex column, ordered explicitly. */
 .sl-plane-tools {
   display: flex;
   flex-direction: column;
   gap: 4px;
   flex-shrink: 0;
+  align-self: stretch;
 }
-.sl-plane-tools-sep { flex: 1; min-height: 4px; }
+.sl-ptool-col { display: contents; }
+/* Desktop: the viewer-group wrapper collapses so ‹, canvas and › stay direct
+   flex children of the card body (mobile turns it into a real flex group), and
+   the mobile-only equal-gap spacers are removed entirely. */
+.sl-plane-viewgroup { display: contents; }
+.sl-plane-spacer { display: none; }
+.sl-plane-tools .sl-ctool-btn[data-tool="select"] { order: 1; }
+.sl-plane-tools .sl-ctool-btn[data-tool="lens"]   { order: 2; }
+.sl-plane-tools .sl-ctool-btn[data-tool="source"] { order: 3; }
+.sl-plane-tools .sl-ctool-btn[data-tool="hybrid"] { order: 4; }
+.sl-plane-tools .sl-ctool-del { order: 5; margin-top: auto; }
 .sl-ctool-del {
   display: flex;
   align-items: center;
@@ -1691,20 +1753,34 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
 }
 .sl-plane-arrow:hover:not(:disabled) { color: var(--fg); background: var(--bg-soft2); }
 .sl-plane-arrow:disabled { opacity: 0.25; cursor: default; }
+/* Stretch to the viewer's height: z box at the top, the plane buttons at the
+   bottom. align-items:stretch makes the z box and the buttons share one width. */
 .sl-plane-side {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: stretch;
   gap: 6px;
   flex: 1;
   min-width: 0;
+  align-self: stretch;
+  padding: 2px 0;
 }
-.sl-plane-side .sl-plane-z {
+.sl-plane-side .sl-plane-z { flex: 0 0 auto; }
+.sl-plane-side-bottom {
+  margin-top: auto;
   display: flex;
-  align-items: center;
-  gap: 5px;
-  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
 }
+.sl-plane-side-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+/* Match the two glyphs optically: × renders smaller than ○ at equal font size. */
+.sl-pglyph { font-size: 12px; line-height: 1; }
+.sl-pglyph-x { font-size: 15px; }
 
 /* Bottom-justify the plane viewer within the Scene tab (desktop). */
 #sl-tab-scene.active { display: flex; flex-direction: column; }
@@ -1737,12 +1813,8 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
   margin-bottom: 10px;
 }
 
-/* View → Creation tools off: the image is selection-only; hide its tool rail. */
-.sl-body.sl-no-create .sl-canvas-tools { display: none !important; }
-
 /* Hide-all-overlays also hides the on-canvas controls (temporary clean view).
    !important because the ruler cluster's display is managed inline by JS. */
-.sl-body.sl-hide-ov .sl-canvas-tools,
 .sl-body.sl-hide-ov .sl-viz-chip,
 .sl-body.sl-hide-ov .sl-overlay-chips,
 .sl-body.sl-hide-ov .sl-ruler-tools { display: none !important; }

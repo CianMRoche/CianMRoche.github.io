@@ -166,12 +166,11 @@ const CONFIG_DEFAULTS = {
   showMarkers:        true,
   showLegend:         true,
   showColorbar:       true,
-  showRuler:          true,   // ruler tool + its measurement lines visible (on by default)
+  showRuler:          false,  // ruler tool + its measurement lines (off by default; View toggle or the L key enables it)
   critGridN:          512,
   psGridN:            300,    // point-source grid: sample points across the field
   renderScale:        'auto', // GL canvas DPR mode: 'auto' (cap 2×) | '1x' | 'native'
   showScaleBar:       true,   // dynamic angular scale bar at the bottom of the image
-  showCreateTools:    true,   // L/S/H creation tools on the image; off = the image is selection-only
   critZs:             null,   // null = auto (highest-z source plane)
   fermatUseSourcePos: false,  // when true, use lastFermatSource for Fermat β_s and source plane
   contourSpacing:     1.0,    // Fermat contour spacing multiplier (interval = 0.002·fov²·this)
@@ -183,8 +182,7 @@ const state = {
   planes:          [],
   selectedPlaneId: null,
   selectedObjId:   null,
-  addMode:         'lens',   // 'lens' | 'source' | 'hybrid': what the add tools create
-  addArmed:        false,    // true while an add tool is armed: a click on the image places an object (transient)
+  addMode:         'select', // plane-viewer tool: 'select' | 'lens' | 'source' | 'hybrid'
   rulerActive:     false,    // ruler is the active pointer tool on the image panel (transient)
   rulers:          [],       // committed measurements, each { id, x0, y0, x1, y1 } in arcsec (session-only)
   rulerDraft:      null,     // in-progress ruler drag { x0, y0, x1, y1 } or null (transient)
@@ -473,7 +471,6 @@ function configToYaml() {
   y += `showCritCurves: ${state.showCritCurves}\nshowCaustics: ${state.showCaustics}\n`;
   y += `showMarkers: ${state.showMarkers}\nshowLegend: ${state.showLegend}\nshowColorbar: ${state.showColorbar}\n`;
   y += `showScaleBar: ${state.showScaleBar}\n`;
-  y += `showCreateTools: ${state.showCreateTools}\n`;
   y += `showRuler: ${state.showRuler}\n`;
   y += `critGridN: ${state.critGridN}\npsGridN: ${state.psGridN}\n`;
   y += `renderScale: ${state.renderScale}\n`;
@@ -674,8 +671,7 @@ function loadConfigFromYaml(yaml) {
     state.showLegend     = _bool(cfg.showLegend,     CONFIG_DEFAULTS.showLegend);
     state.showColorbar   = _bool(cfg.showColorbar,   CONFIG_DEFAULTS.showColorbar);
     state.showScaleBar    = _bool(cfg.showScaleBar,    CONFIG_DEFAULTS.showScaleBar);
-    state.showCreateTools = _bool(cfg.showCreateTools, CONFIG_DEFAULTS.showCreateTools);
-    state.showRuler      = true;  // the ruler is always available; old configs' showRuler is ignored
+    state.showRuler      = _bool(cfg.showRuler, CONFIG_DEFAULTS.showRuler);
     state.fermatUseSourcePos = _bool(cfg.fermatUseSourcePos, CONFIG_DEFAULTS.fermatUseSourcePos);
     // Numeric settings, validated against their allowed choices where applicable.
     state.critGridN     = [256, 512, 1024, 2048].includes(cfg.critGridN) ? cfg.critGridN : CONFIG_DEFAULTS.critGridN;
@@ -990,7 +986,7 @@ let _draggingPlaneId  = null;       // id of the plane currently being axis-drag
 let _arrowKeyStart    = 0;          // timestamp of the first keydown in the current arrow-key hold
 
 // ── Init ──────────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', init)
 
 function init() {
   buildDOM();
@@ -1007,6 +1003,7 @@ function init() {
   attachHandlers();
   renderPlaneCard();
   renderSidebar();
+  updateCanvasTools();  // highlight the initial (select) viewer tool
   resetHistory();  // the initial demo scene is the baseline, not an undoable edit
   _initTourNudge();
 
@@ -1218,14 +1215,6 @@ function buildDOM() {
                 </svg>
               </button>
             </div>
-            <div class="sl-canvas-tools" id="sl-canvas-tools">
-              <button class="sl-ctool-btn active" data-tool="select" title="Select / move (Esc)" aria-label="Select tool">
-                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.5 L12 8.5 L8.5 9 L10.5 13 L8.8 13.8 L7 10 L4.5 12.5 Z"/></svg>
-              </button>
-              <button class="sl-ctool-btn" data-tool="lens"   title="Add lens — click the image to place (1)"   aria-label="Add lens tool">L</button>
-              <button class="sl-ctool-btn" data-tool="source" title="Add source — click the image to place (2)" aria-label="Add source tool">S</button>
-              <button class="sl-ctool-btn" data-tool="hybrid" title="Add hybrid — click the image to place (3)" aria-label="Add hybrid tool">H</button>
-            </div>
           </div>
         </div>
         <div class="sl-timeline" id="sl-timeline">
@@ -1255,20 +1244,33 @@ function buildDOM() {
             <div class="sl-plane-card" id="sl-plane-card" data-effective-type="empty">
               <div class="sl-plane-body" id="sl-plane-body">
                 <div class="sl-plane-tools" id="sl-plane-tools">
-                  <button class="sl-ctool-btn" data-tool="lens"   title="Add lens — click the image or this panel to place (1)"   aria-label="Add lens tool">L</button>
-                  <button class="sl-ctool-btn" data-tool="source" title="Add source — click the image or this panel to place (2)" aria-label="Add source tool">S</button>
-                  <button class="sl-ctool-btn" data-tool="hybrid" title="Add hybrid — click the image or this panel to place (3)" aria-label="Add hybrid tool">H</button>
-                  <div class="sl-plane-tools-sep"></div>
-                  <button class="sl-ctool-del" id="sl-card-del-obj" title="Delete selected object" aria-label="Delete selected object"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="1.5" y1="4" x2="12.5" y2="4"/><path d="M4 4l.5 7h5l.5-7"/><path d="M5 4V3h4v1"/></svg></button>
+                  <div class="sl-ptool-col sl-ptool-col-sel">
+                    <button class="sl-ctool-btn" data-tool="select" title="Select / move (Esc)" aria-label="Select tool">
+                      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.5 L12 8.5 L8.5 9 L10.5 13 L8.8 13.8 L7 10 L4.5 12.5 Z"/></svg>
+                    </button>
+                    <button class="sl-ctool-del" id="sl-card-del-obj" title="Delete selected object" aria-label="Delete selected object"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="1.5" y1="4" x2="12.5" y2="4"/><path d="M4 4l.5 7h5l.5-7"/><path d="M5 4V3h4v1"/></svg></button>
+                  </div>
+                  <div class="sl-ptool-col sl-ptool-col-add">
+                    <button class="sl-ctool-btn" data-tool="lens"   title="Add lens — click this panel to place (1)"   aria-label="Add lens tool">L</button>
+                    <button class="sl-ctool-btn" data-tool="source" title="Add source — click this panel to place (2)" aria-label="Add source tool">S</button>
+                    <button class="sl-ctool-btn" data-tool="hybrid" title="Add hybrid — click this panel to place (3)" aria-label="Add hybrid tool">H</button>
+                  </div>
                 </div>
-                <button class="sl-plane-arrow" id="sl-plane-prev" title="Select the previous plane (lower z)" aria-label="Select previous plane">‹</button>
-                <canvas class="sl-plane-canvas" id="sl-plane-canvas"></canvas>
-                <button class="sl-plane-arrow" id="sl-plane-next" title="Select the next plane (higher z)" aria-label="Select next plane">›</button>
+                <div class="sl-plane-spacer" aria-hidden="true"></div>
+                <div class="sl-plane-viewgroup">
+                  <button class="sl-plane-arrow" id="sl-plane-prev" title="Select the previous plane (lower z)" aria-label="Select previous plane">‹</button>
+                  <canvas class="sl-plane-canvas" id="sl-plane-canvas"></canvas>
+                  <button class="sl-plane-arrow" id="sl-plane-next" title="Select the next plane (higher z)" aria-label="Select next plane">›</button>
+                </div>
+                <div class="sl-plane-spacer" aria-hidden="true"></div>
                 <div class="sl-plane-side" id="sl-plane-side">
-                  <label class="sl-plane-z">z = <input type="number" class="sl-plane-z-input" id="sl-plane-z-input" min="0.01" step="0.01" aria-label="Plane redshift"></label>
+                  <label class="sl-plane-z">Redshift:<input type="number" class="sl-plane-z-input" id="sl-plane-z-input" min="0.01" step="0.01" aria-label="Plane redshift"></label>
                   <button class="sl-plane-paste" id="sl-plane-paste" title="Load image from file" style="display:none"><svg width="12" height="11" viewBox="0 0 14 12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M1 3.5V10a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V4.5a1 1 0 0 0-1-1H7L5.5 2H2a1 1 0 0 0-1 1.5z"/></svg> Image</button>
-                  <button class="sl-plane-clear" id="sl-plane-clear" title="Clear all objects on this plane (O)">○ Clear</button>
-                  <button class="sl-plane-del" id="sl-plane-del" title="Delete plane (X)">× Delete</button>
+                  <div class="sl-plane-side-bottom">
+                    <div class="sl-plane-side-label">Plane:</div>
+                    <button class="sl-plane-clear" id="sl-plane-clear" title="Clear all objects on this plane (O)"><span class="sl-pglyph">○</span> Clear</button>
+                    <button class="sl-plane-del" id="sl-plane-del" title="Delete plane (X)"><span class="sl-pglyph sl-pglyph-x">×</span> Delete</button>
+                  </div>
                 </div>
               </div>
               <div class="sl-plane-empty" id="sl-plane-empty" style="display:none">Click the redshift timeline to add a plane, or click a marker to select one.</div>
@@ -1278,6 +1280,14 @@ function buildDOM() {
           <div class="sl-tab-content" id="sl-tab-export"></div>
           <div class="sl-tab-content" id="sl-tab-quality"></div>
         </div>
+      </div>
+      <div class="sl-rotate-overlay" id="sl-rotate-overlay" role="alert">
+        <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="7" y="3" width="10" height="18" rx="2" transform="rotate(90 12 12)"/>
+          <path d="M4 6 A 9 9 0 0 1 10 2.4" />
+          <path d="M10 2.4 L 7.6 2.2 M10 2.4 L 8.9 4.6" />
+        </svg>
+        <p>This window is too short for Caustica.<br>Rotate your device upright, or make the window taller.</p>
       </div>
     </div>`;
 
@@ -1326,13 +1336,9 @@ function attachHandlers() {
     else updatePresetSelect(); // placeholder re-chosen: restore the current label
   });
 
-  // Canvas tool rail (left edge of the image): select / add-lens / add-source /
-  // add-hybrid. Arming an add tool makes a click on the image place an object.
-  document.getElementById('sl-canvas-tools').addEventListener('click', e => {
-    const btn = e.target.closest('.sl-ctool-btn');
-    if (btn) setCanvasTool(btn.dataset.tool);
-  });
-  // The plane card's copy of the same tools, plus delete-selected-object.
+  // Plane-viewer tool column (select / add-lens / add-source / add-hybrid),
+  // plus delete-selected-object. The chosen tool decides what a click on the
+  // viewer canvas does: select only picks/drags, L/S/H place that type.
   document.getElementById('sl-plane-tools').addEventListener('click', e => {
     const btn = e.target.closest('.sl-ctool-btn');
     if (btn) { setCanvasTool(btn.dataset.tool); return; }
@@ -1700,8 +1706,8 @@ function attachHandlers() {
     }
     if (e.key === 'Escape') {
       // 1. Deselect a selected ruler. 2. Else disarm the ruler tool if armed
-      // (measurements stay; clear them with the buttons). 3. Else disarm an
-      // armed add tool (back to select). 4. Else deselect object.
+      // (measurements stay; clear them with the buttons). 3. Else return the
+      // plane-viewer tool to select. 4. Else deselect object.
       if (state.selectedRulerId) {
         state.selectedRulerId = null;
         updateRulerUI(); drawOverlay();
@@ -1711,7 +1717,7 @@ function attachHandlers() {
         toggleRulerTool();  // rulerActive is true here, so this turns it off
         return;
       }
-      if (state.addArmed) {
+      if (state.addMode !== 'select') {
         setCanvasTool('select');
         return;
       }
@@ -1727,40 +1733,20 @@ function attachHandlers() {
   });
 }
 
-// ── Canvas tools (select / add-lens / add-source / add-hybrid) ────────────────
-// 'select' disarms creation; the add tools arm click-to-place on the image.
-// The plane card always creates on click regardless of arming (that is its job).
-// With the creation tools hidden (View → Creation tools off, or Hide all
-// overlays on) the image stays in selection mode: L/S/H then only pick which
-// type the plane card places.
-function creationToolsShown() { return state.showCreateTools && !state.hideOverlays; }
-
+// ── Plane-viewer tools (select / add-lens / add-source / add-hybrid) ──────────
+// The chosen tool decides what a click on the VIEWER canvas does: 'select'
+// only picks and drags objects, L/S/H place an object of that type on an
+// empty-space click. The main image is always selection-only; objects there
+// can be dragged but never created.
 function setCanvasTool(tool) {
-  if (tool === 'select') {
-    state.addArmed = false;
-  } else {
-    state.addMode  = tool;
-    state.addArmed = creationToolsShown();
-    // One active pointer tool at a time: arming an add tool disarms the ruler.
-    if (state.addArmed && state.rulerActive) { state.rulerActive = false; state.rulerDraft = null; updateRulerUI(); }
-  }
+  state.addMode = tool;
   updateCanvasTools();
-  const wrap = document.getElementById('sl-image-wrap');
-  if (wrap) wrap.style.cursor = (state.addArmed || state.rulerActive) ? 'crosshair' : '';
 }
 
 function updateCanvasTools() {
-  // Both copies of the tools: the canvas rail and the plane card's column.
-  // When the image is selection-only, the card's buttons highlight the add
-  // MODE instead of the (never-set) armed state.
-  const armedUi = creationToolsShown();
   document.querySelectorAll('.sl-ctool-btn[data-tool]').forEach(b => {
-    const t = b.dataset.tool;
-    b.classList.toggle('active', t === 'select' ? !state.addArmed
-      : armedUi ? (state.addArmed && state.addMode === t)
-                : state.addMode === t);
+    b.classList.toggle('active', state.addMode === b.dataset.tool);
   });
-  document.querySelector('.sl-body')?.classList.toggle('sl-no-create', !state.showCreateTools);
 }
 
 // Select the previous/next plane along the z-sorted list (plane-viewer arrows
@@ -1927,7 +1913,7 @@ const _pinchPtrs = new Map();      // pointerId → last client position on the 
 
 // ── Keyboard-shortcut overlay (the "?" button) ────────────────────────────────
 const SHORTCUTS = [
-  ['1 / 2 / 3', 'Arm the Lens / Source / Hybrid tool (click the image to place)'],
+  ['1 / 2 / 3', 'Pick the Lens / Source / Hybrid tool (click the plane viewer to place)'],
   ['C', 'Toggle critical curves and caustics'],
   ['I', 'Show lensed image (exit any quantity map)'],
   ['K / G / M / A', 'Convergence κ / Shear γ / Magnification |μ| / Deflection |α| map'],
@@ -1943,7 +1929,7 @@ const SHORTCUTS = [
   ['⌘/Ctrl + Z / ⇧Z', 'Undo / redo the last scene edit'],
   ['↑ ↓ ← →', 'Nudge the selected object (hold to accelerate)'],
   ['Delete / Backspace', 'Delete the selected object or ruler measurement'],
-  ['Escape', 'Deselect ruler → disarm ruler → disarm add tool → deselect object'],
+  ['Escape', 'Deselect ruler → disarm ruler → back to the select tool → deselect object'],
 ];
 let _kbdOverlay = null;
 
@@ -2097,8 +2083,6 @@ function toggleRulerTool() {
   if (wasHidden) state.showRuler = true;
   state.rulerActive = !state.rulerActive;
   state.rulerDraft  = null;   // cancel any in-progress draw; measurements persist
-  // One active pointer tool at a time: arming the ruler disarms any add tool.
-  if (state.rulerActive && state.addArmed) { state.addArmed = false; updateCanvasTools(); }
   updateRulerUI();
   if (wasHidden) renderSidebar();  // sync the "Show ruler" checkbox
   const wrap = document.getElementById('sl-image-wrap');
@@ -2146,14 +2130,27 @@ function attachImageHandlers(wrap) {
   let rulerDrag = null; // { x0, y0, x1, y1 } while dragging a NEW ruler measurement
   let rulerEdit = null; // { ruler, mode, end, sx0.. , px, py } while editing an existing one
 
+  // On narrow screens the wrap uses touch-action: pan-y so a vertical swipe on
+  // the image scrolls the page. Gestures the app owns must opt out of that
+  // scrolling here, at touchstart: a second finger (pinch zoom), a touch on an
+  // object (drag), a touch on a ruler (edit), or an armed ruler (draw).
+  wrap.addEventListener('touchstart', e => {
+    if (e.target !== wrap &&
+        !(e.target.id === 'sl-gl-canvas' || e.target.classList?.contains('sl-overlay'))) return;
+    if (e.touches.length >= 2) { e.preventDefault(); return; }
+    const t    = e.touches[0];
+    const fake = { clientX: t.clientX, clientY: t.clientY };
+    if ((state.showRuler && (state.rulerActive || hitTestRuler(wrap, fake))) ||
+        hitTestImage(wrap, fake)) e.preventDefault();
+  }, { passive: false });
+
   wrap.addEventListener('pointerdown', e => {
     // Taps on the ruler toolbar are handled by its own buttons; never let one
     // fall through to start a measurement or object drag on the image beneath.
     // (Replaces the toolbar's old pointerdown stopPropagation, which interfered
     // with reliable tap handling on touch devices.)
-    // Ignore presses that start on ANY on-canvas chrome (tool rail, view chips,
-    // dropdown, badges, ruler buttons): only the canvases themselves interact.
-    // Without this, an armed add tool would place an object under every button.
+    // Ignore presses that start on ANY on-canvas chrome (view chips, dropdown,
+    // badges, ruler buttons): only the canvases themselves interact.
     if (e.target !== wrap &&
         !(e.target.id === 'sl-gl-canvas' || e.target.classList?.contains('sl-overlay'))) return;
     if (e.button !== 0 && e.pointerType === 'mouse') return;
@@ -2196,28 +2193,9 @@ function attachImageHandlers(wrap) {
       return;
     }
 
-    // 3. Armed add tool: a press on empty space places an object of the current
-    //    add mode in the SELECTED plane at that sky position, then drags it
-    //    until release. Pressing an existing object falls through to the normal
-    //    select/drag path so armed mode never blocks editing.
-    if (state.addArmed && !hitTestImage(wrap, e)) {
-      const pl = selectedPlane();
-      if (!pl) return;
-      e.preventDefault();
-      try { wrap.setPointerCapture(e.pointerId); } catch {}
-      if (state.selectedRulerId) { state.selectedRulerId = null; updateRulerUI(); }
-      const pos = imageWrapToArcsec(wrap, e);
-      const obj = _makeAddObjects(pl, pos.x, pos.y);
-      state.selectedObjId = obj.id;
-      imgDrag = { obj, plane: pl,
-                  startCx: obj.cx, startCy: obj.cy,
-                  startMx: pos.x,  startMy: pos.y };
-      wrap.style.cursor = 'grabbing';
-      renderPlaneCard(); renderSidebar(); redraw();
-      return;
-    }
-
-    // 4. Otherwise: deselect any ruler, then hit-test / drag objects.
+    // 3. Otherwise: deselect any ruler, then hit-test / drag objects. The main
+    //    image never creates objects (creation lives in the plane viewer), so
+    //    empty-space presses and pinches are always safe here.
     if (state.selectedRulerId) { state.selectedRulerId = null; updateRulerUI(); drawOverlay(); }
     const hit = hitTestImage(wrap, e);
     if (!hit) return;
@@ -2264,8 +2242,6 @@ function attachImageHandlers(wrap) {
       }
       // While the ruler tool is armed, keep the crosshair and never show the object grab cursor.
       if (state.rulerActive && state.showRuler) { wrap.style.cursor = 'crosshair'; return; }
-      // While an add tool is armed: crosshair over empty space, grab over objects.
-      if (state.addArmed) { wrap.style.cursor = hitTestImage(wrap, e) ? 'grab' : 'crosshair'; return; }
       wrap.style.cursor = hitTestImage(wrap, e) ? 'grab' : '';
       return;
     }
@@ -2304,7 +2280,7 @@ function attachImageHandlers(wrap) {
     if (!imgDrag) return;
     invalidateDistances();
     redraw();
-    wrap.style.cursor = state.addArmed ? 'crosshair' : '';
+    wrap.style.cursor = '';
     imgDrag = null;
   });
 
@@ -2460,6 +2436,8 @@ function attachPlaneCardHandlers(canvas) {
   let hitObj  = null;
   let plane   = null;
   let pStart  = null; // drag/tap start info
+  // Empty-space cursor: crosshair while a creation tool is chosen, plain otherwise.
+  const addCursor = () => state.addMode === 'select' ? 'default' : 'crosshair';
   const DRAG_THRESH = 3;  // px — object-drag / create-drag threshold (mouse)
   const SWIPE_SLOP  = 10; // px — touch: moving beyond this becomes a plane swipe
   const SWIPE_MIN   = 36; // px — horizontal travel needed to switch planes
@@ -2467,7 +2445,7 @@ function attachPlaneCardHandlers(canvas) {
   canvas.addEventListener('pointermove', e => {
     if (istate === 'idle') {
       const selPl = selectedPlane();
-      canvas.style.cursor = selPl && hitTestPlane(selPl, canvas, e) ? 'grab' : 'crosshair';
+      canvas.style.cursor = selPl && hitTestPlane(selPl, canvas, e) ? 'grab' : addCursor();
       return;
     }
     e.preventDefault();
@@ -2489,8 +2467,9 @@ function attachPlaneCardHandlers(canvas) {
       istate = 'dragging'; canvas.style.cursor = 'grabbing';
     }
     // Mouse: dragging on empty space creates the object and places it under the
-    // pointer. (Touch empty-space drags are plane swipes, handled above.)
-    if (istate === 'add-pending' && !pStart.touch &&
+    // pointer, when a creation tool is chosen. (Touch empty-space drags are
+    // plane swipes, handled above.)
+    if (istate === 'add-pending' && !pStart.touch && state.addMode !== 'select' &&
         Math.hypot(dpx, dy / state.fov * canvas.offsetHeight) > DRAG_THRESH) {
       hitObj = _makeAddObjects(plane, pStart.mx, pStart.my);
       state.selectedObjId   = hitObj.id;
@@ -2514,10 +2493,13 @@ function attachPlaneCardHandlers(canvas) {
     }
   });
 
-  canvas.addEventListener('pointerleave', () => { if (istate === 'idle') canvas.style.cursor = 'crosshair'; });
+  canvas.addEventListener('pointerleave', () => { if (istate === 'idle') canvas.style.cursor = addCursor(); });
 
   canvas.addEventListener('pointerdown', e => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;  // only left-click creates/drags
+    // A second finger (a pinch attempt) must never place an object: cancel
+    // whatever gesture the first finger started.
+    if (!e.isPrimary) { istate = 'idle'; hitObj = null; plane = null; return; }
     plane = selectedPlane();
     if (!plane) return;
     e.preventDefault();
@@ -2533,14 +2515,15 @@ function attachPlaneCardHandlers(canvas) {
       clearRulerSelectionForObject();  // one selection at a time
       renderSidebar(); redraw();
     } else {
-      // Started on empty space → a tap (down + up in ~same spot) creates an
-      // object; a horizontal touch swipe switches planes instead.
+      // Started on empty space → with an L/S/H tool, a tap (down + up in ~same
+      // spot) creates an object; with the select tool a tap only deselects. A
+      // horizontal touch swipe switches planes either way.
       istate = 'add-pending';
       pStart = { mx: pos.x, my: pos.y, clientX: e.clientX, touch };
     }
   });
 
-  canvas.addEventListener('pointercancel', () => { istate = 'idle'; hitObj = null; plane = null; canvas.style.cursor = 'crosshair'; });
+  canvas.addEventListener('pointercancel', () => { istate = 'idle'; hitObj = null; plane = null; canvas.style.cursor = addCursor(); });
 
   canvas.addEventListener('pointerup', e => {
     if (istate === 'swiping') {
@@ -2548,18 +2531,24 @@ function attachPlaneCardHandlers(canvas) {
       const dx = e.clientX - pStart.clientX;
       if (Math.abs(dx) >= SWIPE_MIN) selectPlaneOffset(dx < 0 ? 1 : -1);
     } else if (istate === 'add-pending' && plane) {
-      // Down + up with little/no movement → a tap → create an object here.
-      const pos = canvasToArcsec(canvas, e);
-      const obj = _makeAddObjects(plane, pos.x, pos.y);
-      state.selectedObjId   = obj.id;
-      clearRulerSelectionForObject();  // one selection at a time
-      renderPlaneCard(); renderSidebar(); redraw();
+      if (state.addMode !== 'select') {
+        // Down + up with little/no movement → a tap → create an object here.
+        const pos = canvasToArcsec(canvas, e);
+        const obj = _makeAddObjects(plane, pos.x, pos.y);
+        state.selectedObjId   = obj.id;
+        clearRulerSelectionForObject();  // one selection at a time
+        renderPlaneCard(); renderSidebar(); redraw();
+      } else if (state.selectedObjId) {
+        // Select tool: a tap on empty space deselects.
+        state.selectedObjId = null;
+        renderPlaneCard(); renderSidebar(); redraw();
+      }
     } else if (istate === 'dragging' || istate === 'add-dragging') {
       invalidateDistances(); redraw();
     }
     istate = 'idle'; hitObj = null; plane = null;
     const selPl = selectedPlane();
-    canvas.style.cursor = selPl && hitTestPlane(selPl, canvas, e) ? 'grab' : 'crosshair';
+    canvas.style.cursor = selPl && hitTestPlane(selPl, canvas, e) ? 'grab' : addCursor();
   });
 }
 
@@ -3029,7 +3018,7 @@ function renderViewPanel() {
             <label><input type="checkbox" id="sl-show-caus" ${state.showCaustics   ?'checked':''}> Caustics</label>
           </div>
           <div class="sl-checkbox-row">
-            <label title="Show the L/S/H creation tools on the image. Off: clicking the image only selects or drags; objects are created in the plane viewer"><input type="checkbox" id="sl-show-createtools" ${state.showCreateTools?'checked':''}> Creation tools</label>
+            <label title="Measure distances and angles on the image (key L also enables the ruler)"><input type="checkbox" id="sl-show-ruler" ${state.showRuler?'checked':''}> Ruler</label>
           </div>
         </div>
       </div>
@@ -3045,8 +3034,8 @@ function renderViewPanel() {
             const vs = vizScaleFor(state.vizMode);
             const heading = { 0:'Brightness stretch', 1:'κ color scale', 2:'γ color scale',
                               3:'|μ| color scale', 5:'|α| color scale' }[state.vizMode];
-            const minLbl = state.vizMode === 0 ? 'Black' : 'Min';
-            const maxLbl = state.vizMode === 0 ? 'White' : 'Max';
+            const minLbl = 'Min';
+            const maxLbl = 'Max';
             const paramRow = vs.scale === 2 ? `
           <div class="sl-global-input">
             <label>Power (γ)</label>
@@ -3138,14 +3127,12 @@ function renderViewPanel() {
   document.getElementById('sl-hide-overlays')?.addEventListener('change', e => {
     state.hideOverlays = e.target.checked;
     document.querySelector('.sl-body')?.classList.toggle('sl-hide-ov', state.hideOverlays);
-    if (state.hideOverlays) setCanvasTool('select'); else updateCanvasTools();
     _updateColorbar(); updateZsChip(); redraw();
   });
-  document.getElementById('sl-show-createtools')?.addEventListener('change', e => {
-    state.showCreateTools = e.target.checked;
-    // Either direction lands in selection mode (no auto-arm on re-enable);
-    // setCanvasTool also syncs the .sl-no-create class via updateCanvasTools.
-    setCanvasTool('select');
+  document.getElementById('sl-show-ruler')?.addEventListener('change', e => {
+    state.showRuler = e.target.checked;
+    if (!state.showRuler && state.rulerActive) { state.rulerActive = false; state.rulerDraft = null; }
+    updateRulerUI(); redraw();
   });
   document.getElementById('sl-show-markers')?.addEventListener('change',e => { state.showMarkers = e.target.checked; redraw(); });
   document.getElementById('sl-show-legend')?.addEventListener('change', e => { state.showLegend  = e.target.checked; redraw(); });
@@ -4251,7 +4238,7 @@ function drawOverlay() {
       const boxW   = padH * 2 + rowW;
       const boxH   = legendTypes.length * lineH + padV * 2;
       const bx     = Wl - boxW - 8;
-      const by     = Hl - boxH - 44;   // 44px clears the zoom cluster (bottom-right chrome)
+      const by     = Hl - boxH - 44;   // 44px clears the scale bar in the bottom-right corner
 
       overlayCtx.textBaseline = 'middle';
       overlayCtx.textAlign    = 'left';
@@ -4418,7 +4405,7 @@ function drawOverlay() {
     const s    = state.fov <= 6 ? 1 : state.fov <= 10 ? 2 : state.fov <= 30 ? 5 : 10;
     const wpx  = s / state.fov * Wl;
     const y    = Hl - 14;
-    const x0   = (Wl - wpx) / 2, x1 = x0 + wpx;
+    const x1   = Wl - 12, x0 = x1 - wpx;  // bottom-right corner
     const col  = dark ? '#ffffff' : '#000000';
     overlayCtx.strokeStyle = col;
     overlayCtx.lineWidth   = 1.5;
@@ -5071,14 +5058,7 @@ const TOUR_STEPS = [
     onEnter: _tourOpenPlaneSetup,
     arrow: 'left',
     label: 'Plane viewer',
-    text: 'The selected plane is a slice of the sky at its redshift, shown here. Click to place an object, or drag one to move it. The <b>‹ ›</b> arrows (or a horizontal swipe on touch) step through the planes; the <b>z</b> field retunes the redshift, <b>○</b> (key <kbd>O</kbd>) clears the plane, and <b>×</b> (key <kbd>X</kbd>) deletes it.',
-  },
-  {
-    target: '#sl-canvas-tools',
-    onEnter: _tourClosePlaneSetup,
-    arrow: 'right',
-    label: 'Add tools',
-    text: 'Pick what to create: a <b>Lens</b> that bends light, a <b>Source</b> that emits it, or a <b>Hybrid</b> that does both. With a tool armed, click anywhere on the image to place the object in the selected plane, then drag to position it. Keys <kbd>1</kbd>, <kbd>2</kbd>, <kbd>3</kbd> arm the tools; the arrow (or <kbd>Esc</kbd>) returns to selecting.',
+    text: 'The selected plane is a slice of the sky at its redshift, shown here. The tool column picks what a click on this canvas does: a <b>Lens</b> that bends light, a <b>Source</b> that emits it, a <b>Hybrid</b> that does both (keys <kbd>1</kbd>, <kbd>2</kbd>, <kbd>3</kbd>), or the arrow to only select and drag (<kbd>Esc</kbd>). The <b>‹ ›</b> arrows (or a horizontal swipe on touch) step through the planes; the <b>z</b> field retunes the redshift, <b>Clear</b> (key <kbd>O</kbd>) empties the plane, and <b>Delete</b> (key <kbd>X</kbd>) removes it.',
   },
   {
     target: '#sl-obj-panel',
@@ -5092,7 +5072,7 @@ const TOUR_STEPS = [
     onEnter: () => { _tourClosePlaneSetup(); _tourShowImage(); },
     arrow: 'right',
     label: 'Lensed image',
-    text: 'This is what the observer at z = 0 sees. Light from every source is bent by all the lenses in front of it, with full multiplane lensing. Drag objects here or in the plane viewer and the image updates in real time. Zoom with the mouse wheel or a two-finger pinch; the scale bar at the bottom keeps track of the angular scale.',
+    text: 'This is what the observer at z = 0 sees. Light from every source is bent by all the lenses in front of it, with full multiplane lensing. Drag objects here or in the plane viewer and the image updates in real time. Zoom with the mouse wheel or a two-finger pinch; the scale bar at the bottom right keeps track of the angular scale.',
   },
   {
     target: '#sl-image-wrap',
@@ -5125,7 +5105,7 @@ const TOUR_STEPS = [
     onEnter: () => { _tourSetTab('view'); _tourSetViz(0); },
     arrow: 'left',
     label: 'View tab',
-    text: 'View holds everything about how the scene is displayed: the field of view, the reference source redshift z<sub>s</sub> used by the quantity maps and critical curves, overlay toggles, and the color mapping / brightness stretch. The <b>Quality</b> tab beside it holds resolution and performance settings.',
+    text: 'View holds everything about how the scene is displayed: the field of view, the reference source redshift z<sub>s</sub> used by the quantity maps and critical curves, overlay toggles, and the color mapping / brightness stretch.',
   },
   {
     target: '.sl-rail-tab-btn[data-tab="export"]',
@@ -5142,11 +5122,11 @@ const TOUR_STEPS = [
     text: 'Quality trades accuracy or sharpness against redraw speed: the critical-curve resolution, the point-source image-finding grid, and the render scale of the image itself. If a scene feels slow, this is the place to come.',
   },
   {
-    target: 'a.sl-demo-btn',
+    target: '.sl-topbar',
     onEnter: () => { _tourSetTab('scene'); _tourSetViz(0); },
     arrow: 'below',
     label: 'Ready to explore',
-    text: 'That is the tour. Build a scene by adding planes and objects, then watch the lensed image and quantity maps respond. Presets and YAML save/load live in the top bar, <kbd>?</kbd> shows every shortcut, and the <b>Docs</b> link here explains all the physics.',
+    text: 'That is the tour. Everything else lives in this top bar: <b>undo / redo</b> for scene edits, the <b>preset</b> dropdown for ready-made scenes, <b>Save / Load</b> for YAML configurations, <b>Docs</b> for all the physics, <b>Tour</b> to replay this walkthrough, <kbd>?</kbd> for every keyboard shortcut, and the <b>theme</b> toggle. Now build a scene: add planes and objects, and watch the lensed image respond.',
     final: true,
   },
 ];
@@ -5239,8 +5219,6 @@ function startTour() {
     document.querySelector('.sl-body')?.classList.remove('sl-hide-ov');
     _updateColorbar(); updateZsChip(); redraw();
   }
-  if (!state.showCreateTools) { state.showCreateTools = true; renderSidebar(); }
-  updateCanvasTools();
   tour.active = true;
   tour.step   = 0;
 
