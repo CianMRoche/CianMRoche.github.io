@@ -1,6 +1,6 @@
 // Caustica: main.js
 
-import { Renderer, MAX_OBJECTS }               from './renderer.js';
+import { Renderer, MAX_OBJECTS, MAX_PLANES }   from './renderer.js';
 import { precomputeDistances,
          computeCriticalCurves,
          angDiamDist,
@@ -46,7 +46,6 @@ let _lastHybridId     = null;
 // Internal object clipboard for copy/paste (Cmd/Ctrl+C then Cmd/Ctrl+V). Separate
 // from the system clipboard so it never clashes with the pasted-image workflow.
 let _objClipboard     = null;
-let _settingsExpanded = { general: false, cmap: false, contours: false, crit: false, ps: false };
 let _progExpanded     = false;
 
 // Invert a 6-digit hex colour (#rrggbb → complement).
@@ -115,24 +114,41 @@ function reportObjectCap() {
     }
   const overL = Math.max(0, nLens - cap);
   const overS = Math.max(0, nSrc - cap);
-  const over  = overL + overS;
+  const overP = Math.max(0, state.planes.length - MAX_PLANES);
+  const over  = overL + overS + overP;
   if (over === 0) {
     badge.style.display = 'none';
     if (pop) pop.style.display = 'none';
     return;
   }
   const label = document.getElementById('sl-cap-warn-label');
-  if (label) label.textContent = `${over} object${over > 1 ? 's' : ''} not shown`;
+  if (label) {
+    const bits = [];
+    if (overL + overS) bits.push(`${overL + overS} object${overL + overS > 1 ? 's' : ''}`);
+    if (overP)         bits.push(`${overP} plane${overP > 1 ? 's' : ''}`);
+    label.textContent = `${bits.join(' + ')} not shown`;
+  }
   const detail = document.getElementById('sl-cap-pop-detail');
   if (detail) {
     const parts = [];
     if (overL) parts.push(`<b>${overL}</b> lens${overL > 1 ? 'es' : ''}`);
     if (overS) parts.push(`<b>${overS}</b> source${overS > 1 ? 's' : ''}`);
-    detail.innerHTML =
-      `The image can display at most <b>${cap}</b> lenses and <b>${cap}</b> sources. ` +
-      `${parts.join(' and ')} beyond that limit ${over > 1 ? 'are' : 'is'} not rendered — ` +
-      `they still appear in the object list and as markers, but add no light or lensing. ` +
-      `Hide or delete objects to bring the count under the limit.`;
+    let html = '';
+    if (overL + overS) {
+      html +=
+        `The image can display at most <b>${cap}</b> lenses and <b>${cap}</b> sources. ` +
+        `${parts.join(' and ')} beyond that limit ${overL + overS > 1 ? 'are' : 'is'} not rendered — ` +
+        `they still appear in the object list and as markers, but add no light or lensing. ` +
+        `Hide or delete objects to bring the count under the limit.`;
+    }
+    if (overP) {
+      html += `${html ? '<br><br>' : ''}` +
+        `The image can include at most <b>${MAX_PLANES}</b> planes (sorted by redshift). ` +
+        `The <b>${overP}</b> most distant plane${overP > 1 ? 's are' : ' is'} not rendered — ` +
+        `${overP > 1 ? 'their' : 'its'} objects add no light or lensing. ` +
+        `Delete planes to bring the count under the limit.`;
+    }
+    detail.innerHTML = html;
   }
   badge.style.display = '';
 }
@@ -153,6 +169,9 @@ const CONFIG_DEFAULTS = {
   showRuler:          true,   // ruler tool + its measurement lines visible (on by default)
   critGridN:          512,
   psGridN:            300,    // point-source grid: sample points across the field
+  renderScale:        'auto', // GL canvas DPR mode: 'auto' (cap 2×) | '1x' | 'native'
+  showScaleBar:       true,   // dynamic angular scale bar at the bottom of the image
+  showCreateTools:    true,   // L/S/H creation tools on the image; off = the image is selection-only
   critZs:             null,   // null = auto (highest-z source plane)
   fermatUseSourcePos: false,  // when true, use lastFermatSource for Fermat β_s and source plane
   contourSpacing:     1.0,    // Fermat contour spacing multiplier (interval = 0.002·fov²·this)
@@ -164,10 +183,12 @@ const state = {
   planes:          [],
   selectedPlaneId: null,
   selectedObjId:   null,
-  addMode:         'lens',   // 'lens' | 'source' | 'hybrid': global tool state
+  addMode:         'lens',   // 'lens' | 'source' | 'hybrid': what the add tools create
+  addArmed:        false,    // true while an add tool is armed: a click on the image places an object (transient)
   rulerActive:     false,    // ruler is the active pointer tool on the image panel (transient)
   rulers:          [],       // committed measurements, each { id, x0, y0, x1, y1 } in arcsec (session-only)
   rulerDraft:      null,     // in-progress ruler drag { x0, y0, x1, y1 } or null (transient)
+  hideOverlays:    false,    // View-tab master switch: hide every overlay for a clean plot (transient)
   selectedRulerId: null,     // id of the ruler currently selected for edit/delete (transient)
   // Per-viz-mode colour mapping: { scale, param, min, max }. scale: 0=linear 1=sqrt
   // 2=power 3=asinh 4=log. Modes: 0=surface brightness, 1=κ, 2=γ, 3=|μ|, 5=|α|.
@@ -451,8 +472,11 @@ function configToYaml() {
   }
   y += `showCritCurves: ${state.showCritCurves}\nshowCaustics: ${state.showCaustics}\n`;
   y += `showMarkers: ${state.showMarkers}\nshowLegend: ${state.showLegend}\nshowColorbar: ${state.showColorbar}\n`;
+  y += `showScaleBar: ${state.showScaleBar}\n`;
+  y += `showCreateTools: ${state.showCreateTools}\n`;
   y += `showRuler: ${state.showRuler}\n`;
   y += `critGridN: ${state.critGridN}\npsGridN: ${state.psGridN}\n`;
+  y += `renderScale: ${state.renderScale}\n`;
   y += `critZs: ${state.critZs === null ? 'null' : state.critZs}\n`;
   y += `contourSpacing: ${state.contourSpacing}\n`;
   y += `contourScale: ${state.contourScale === 1 ? 'asinh' : 'linear'}\n`;
@@ -567,7 +591,7 @@ function loadPreset(file) {
     .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); });
   get(false)
     .catch(() => get(true))
-    .then(yaml => { _selectedPreset = file; loadConfigFromYaml(yaml); }) // loadConfig re-renders the sidebar
+    .then(yaml => { _selectedPreset = file; loadConfigFromYaml(yaml); updatePresetSelect(); })
     .catch(err => {
       alert(`Failed to load preset ${PRESET_BASE + file}: ${err.message}. ` +
             'Check your connection and try again.');
@@ -649,10 +673,13 @@ function loadConfigFromYaml(yaml) {
     state.showMarkers    = _bool(cfg.showMarkers,    CONFIG_DEFAULTS.showMarkers);
     state.showLegend     = _bool(cfg.showLegend,     CONFIG_DEFAULTS.showLegend);
     state.showColorbar   = _bool(cfg.showColorbar,   CONFIG_DEFAULTS.showColorbar);
-    state.showRuler      = _bool(cfg.showRuler,      CONFIG_DEFAULTS.showRuler);
+    state.showScaleBar    = _bool(cfg.showScaleBar,    CONFIG_DEFAULTS.showScaleBar);
+    state.showCreateTools = _bool(cfg.showCreateTools, CONFIG_DEFAULTS.showCreateTools);
+    state.showRuler      = true;  // the ruler is always available; old configs' showRuler is ignored
     state.fermatUseSourcePos = _bool(cfg.fermatUseSourcePos, CONFIG_DEFAULTS.fermatUseSourcePos);
     // Numeric settings, validated against their allowed choices where applicable.
     state.critGridN     = [256, 512, 1024, 2048].includes(cfg.critGridN) ? cfg.critGridN : CONFIG_DEFAULTS.critGridN;
+    state.renderScale   = ['auto', '1x', 'native'].includes(cfg.renderScale) ? cfg.renderScale : CONFIG_DEFAULTS.renderScale;
     if (PS_GRID_OPTIONS.includes(cfg.psGridN)) {
       state.psGridN = cfg.psGridN;
     } else if (isFinite(cfg.psGridStep) && cfg.psGridStep > 0) {
@@ -677,7 +704,11 @@ function loadConfigFromYaml(yaml) {
     invalidateDistances();
     state.rulerActive = false; state.rulers = []; state.rulerDraft = null;  // measurements are not part of a config
     resetHistory();  // a freshly loaded scene is a new document; don't undo into the previous one
-    rebuildPlaneBoxes(); renderSidebar(); _updateColorbar(); updateRulerUI(); redraw();
+    renderPlaneCard(); renderSidebar(); _updateColorbar(); updateRulerUI(); updateCanvasTools();
+    setFov(state.fov);                      // sync the zoom readout + View input
+    applyRenderScale(state.renderScale);    // push DPR mode into the renderer
+    updatePresetSelect();
+    redraw();
   } catch (err) {
     alert('Failed to load config: ' + err.message);
     console.error(err);
@@ -841,7 +872,7 @@ function _applyHistorySnapshot(snap) {
     for (const o of p.objects)
       if (o.model === 'pastedimage' && o.pasteCanvas) renderer?.setPastedTexture(o.id, o.pasteCanvas);
   invalidateDistances();
-  rebuildPlaneBoxes(); renderSidebar(); redraw();
+  renderPlaneCard(); renderSidebar(); redraw();
   updateUndoRedoButtons();
 }
 function undo() {
@@ -874,7 +905,7 @@ function deleteSelectedObject() {
             .forEach(o => renderer?.clearPastedTexture(o.id));
   pl.objects = pl.objects.filter(o => !removeIds.has(o.id));
   state.selectedObjId = pl.objects[0]?.id ?? null;
-  renderSidebar(); rebuildPlaneBoxes(); redraw();
+  renderSidebar(); renderPlaneCard(); redraw();
 }
 
 // Delete one half of a hybrid object, leaving its partner as a standalone
@@ -888,7 +919,7 @@ function deleteHybridPart(plane, partId) {
   plane.objects = plane.objects.filter(o => o.id !== partId);
   if (partner) { delete partner.hybridId; state.selectedObjId = partner.id; }
   else         { state.selectedObjId = plane.objects[0]?.id ?? null; }
-  renderSidebar(); rebuildPlaneBoxes(); redraw();
+  renderSidebar(); renderPlaneCard(); redraw();
 }
 
 // Copy the selected object (and its hybrid partner, if any) into the internal
@@ -936,7 +967,7 @@ function pasteCopiedObject() {
   state.selectedPlaneId = pl.id;
   state.selectedObjId   = firstId;
   clearRulerSelectionForObject();  // one selection at a time
-  rebuildPlaneBoxes(); renderSidebar(); redraw();
+  renderPlaneCard(); renderSidebar(); redraw();
   return true;
 }
 
@@ -947,20 +978,11 @@ function selectedObj() {
 }
 
 // Pasted images are stored per-object on obj.pasteCanvas (HTMLCanvasElement|null).
-let activeTab = 'settings'; // 'settings' | 'recording'
+let activeTab = 'scene'; // 'scene' | 'view' | 'data' | 'export'
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 let renderer = null, glCanvas = null, overlayCtx = null;
-let axisCanvas = null, planesEl = null, sidebarEl = null;
-
-function updatePlaneArrows() {
-  const el = document.getElementById('sl-planes');
-  const l  = document.getElementById('sl-planes-arrow-l');
-  const r  = document.getElementById('sl-planes-arrow-r');
-  if (!el || !l || !r) return;
-  l.style.display = el.scrollLeft > 1 ? '' : 'none';
-  r.style.display = el.scrollLeft < el.scrollWidth - el.clientWidth - 1 ? '' : 'none';
-}
+let axisCanvas = null;
 let _planeLevels      = new Map();  // plane.id → bump level, kept in sync with drawAxisCanvas
 let _axisBaselineY    = 0;          // axis line y (CSS px); set by drawAxisCanvas, read by nearestMarker
 let _axisBumpStep     = 28;         // per-level marker bump (CSS px); adaptive on mobile
@@ -983,7 +1005,7 @@ function init() {
   loadDemoState();
   invalidateDistances();
   attachHandlers();
-  rebuildPlaneBoxes();
+  renderPlaneCard();
   renderSidebar();
   resetHistory();  // the initial demo scene is the baseline, not an undoable edit
   _initTourNudge();
@@ -1014,7 +1036,7 @@ function toggleTheme() {
   try { localStorage.setItem('theme', next); } catch {}
   applyThemeIcons(next);
   _updateColorbar();
-  rebuildPlaneBoxes(); renderSidebar(); redraw();
+  renderPlaneCard(); renderSidebar(); redraw();
 }
 
 function showRendererError(msg) {
@@ -1068,8 +1090,18 @@ function buildDOM() {
             </svg>
           </button>
         </div>
+        <div class="sl-file-group" id="sl-file-group">
+          <select class="sl-select sl-topbar-preset" id="sl-preset-select" aria-label="Load a preset scene">
+            <option value="" selected>Presets…</option>
+            ${PRESETS.map(p => `<option value="${p.file}">${p.name}</option>`).join('')}
+          </select>
+          <button class="sl-demo-btn" id="sl-save-config" title="Download the current scene as a YAML file">↓ Save</button>
+          <button class="sl-demo-btn" id="sl-load-config" title="Load a scene from a YAML file">↑ Load</button>
+          <input type="file" id="sl-config-file" accept=".yaml,.yml" style="display:none">
+        </div>
 <a class="sl-demo-btn" href="/caustica-documentation/" target="_blank" rel="noopener">Docs</a>
         <button class="sl-demo-btn" id="sl-demo" title="Walk through a tour of the controls">Tour</button>
+        <button class="sl-demo-btn" id="sl-kbd-btn" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
         <button class="sl-theme-btn" id="sl-theme" title="Toggle dark mode (D)" aria-label="Toggle dark mode">
           <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
@@ -1079,8 +1111,8 @@ function buildDOM() {
           </svg>
         </button>
       </div>
-      <div class="sl-body" data-mobile-tab="object">
-        <div class="sl-upper">
+      <div class="sl-body" data-tab="scene">
+        <div class="sl-stage" id="sl-stage">
           <div class="sl-image-wrap" id="sl-image-wrap">
             <canvas id="sl-gl-canvas"></canvas>
             <canvas class="sl-overlay" id="sl-overlay"></canvas>
@@ -1102,8 +1134,9 @@ function buildDOM() {
               </button>
               <b style="color:#e8912e">⚠ Slow redraw</b><br>
               If you would like to reduce the time to draw new frames, try the following:<br><br>
-              • Turn off critical curves or lower the <b>Critical-curve resolution</b> (Settings ▸ Critical Curves)<br>
-              • If a point source is present, lower the <b>Point-source grid density</b> (Settings ▸ Point Source)<br>
+              • Turn off critical curves or lower the <b>Critical curves</b> resolution (Quality tab)<br>
+              • If a point source is present, lower the <b>Point source</b> grid density (Quality tab)<br>
+              • Lower the <b>Render scale</b> (Quality tab)<br>
               • Reduce the number of objects<br>
               • Reduce the field of view
             </div>
@@ -1136,6 +1169,21 @@ function buildDOM() {
                 <option value="6">Fermat potential φ</option>
               </select>
             </div>
+            <div class="sl-overlay-chips" id="sl-overlay-chips">
+              <button data-flag="showCritCurves" title="Critical curves (C)" aria-label="Toggle critical curves" aria-pressed="false">
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/></svg>
+              </button>
+              <button data-flag="showCaustics" title="Caustics (C)" aria-label="Toggle caustics" aria-pressed="false">
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.5 C 9 6.5, 9.5 7, 13.5 8 C 9.5 9, 9 9.5, 8 13.5 C 7 9.5, 6.5 9, 2.5 8 C 6.5 7, 7 6.5, 8 2.5 Z"/></svg>
+              </button>
+              <button data-flag="showMarkers" title="Position markers" aria-label="Toggle position markers" aria-pressed="false">
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M8 3.5 L13 12.5 H3 Z"/></svg>
+              </button>
+              <button data-flag="showColorbar" title="Colorbar" aria-label="Toggle colorbar" aria-pressed="false">
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="6" width="12" height="4.5" rx="1"/><line x1="6" y1="6" x2="6" y2="10.5"/><line x1="10" y1="6" x2="10" y2="10.5"/></svg>
+              </button>
+            </div>
+            <div class="sl-zs-chip" id="sl-zs-chip" style="display:none"></div>
             <div class="sl-colorbar" id="sl-colorbar" style="display:none">
               <div class="sl-colorbar-bar" id="sl-colorbar-bar"></div>
               <div class="sl-colorbar-labels">
@@ -1170,105 +1218,187 @@ function buildDOM() {
                 </svg>
               </button>
             </div>
+            <div class="sl-canvas-tools" id="sl-canvas-tools">
+              <button class="sl-ctool-btn active" data-tool="select" title="Select / move (Esc)" aria-label="Select tool">
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.5 L12 8.5 L8.5 9 L10.5 13 L8.8 13.8 L7 10 L4.5 12.5 Z"/></svg>
+              </button>
+              <button class="sl-ctool-btn" data-tool="lens"   title="Add lens — click the image to place (1)"   aria-label="Add lens tool">L</button>
+              <button class="sl-ctool-btn" data-tool="source" title="Add source — click the image to place (2)" aria-label="Add source tool">S</button>
+              <button class="sl-ctool-btn" data-tool="hybrid" title="Add hybrid — click the image to place (3)" aria-label="Add hybrid tool">H</button>
+            </div>
           </div>
-          <!-- Controls group: right-justified, right-grows -->
-          <div class="sl-controls-col" id="sl-controls-col">
-            <div class="sl-mobile-tabs" id="sl-mobile-tabs">
-              <button class="sl-mobile-tab-btn active" data-tab="object">Object</button>
-              <button class="sl-mobile-tab-btn" data-tab="settings">Settings</button>
-              <button class="sl-mobile-tab-btn" data-tab="recording">Recording</button>
-              <button class="sl-mobile-tab-btn" data-tab="planes">Planes</button>
-            </div>
-            <div class="sl-param-col">
-              <div class="sl-tabs">
-                <div class="sl-param-col-title">Object Controls</div>
-              </div>
-              <div id="sl-obj-panel"></div>
-            </div>
-            <div class="sl-sidebar">
-              <div class="sl-tabs" id="sl-tabs">
-                <button class="sl-tab-btn active" data-tab="settings">Settings</button>
-                <button class="sl-tab-btn" data-tab="recording">Recording</button>
-              </div>
-              <div class="sl-tab-content" id="sl-tab-settings"></div>
-              <div class="sl-tab-content" id="sl-tab-recording" style="display:none"></div>
-            </div>
-          </div><!-- end sl-controls-col -->
         </div>
         <div class="sl-timeline" id="sl-timeline">
           <div class="sl-axis-wrap">
             <div class="sl-axis-label">redshift z →</div>
             <canvas class="sl-axis-canvas" id="sl-axis-canvas"></canvas>
+            <div class="sl-zmax-ctl">
+              <label for="sl-zmax">z<sub>max</sub></label>
+              <input type="number" id="sl-zmax" min="0.1" max="10" step="0.1">
+            </div>
           </div>
-          <div class="sl-plane-toolbar" id="sl-plane-toolbar">
-            <button class="sl-tool-btn active" data-mode="lens"   title="Add lens (1)"><span class="sl-tool-s">L</span><span class="sl-tool-l">Lens</span></button>
-            <button class="sl-tool-btn"         data-mode="source" title="Add source (2)"><span class="sl-tool-s">S</span><span class="sl-tool-l">Source</span></button>
-            <button class="sl-tool-btn"         data-mode="hybrid" title="Add hybrid (3)"><span class="sl-tool-s">H</span><span class="sl-tool-l">Hybrid</span></button>
-            <div class="sl-tool-sep"></div>
-            <button class="sl-tool-btn sl-tool-del" id="sl-tool-del-obj" title="Delete selected object"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="1.5" y1="4" x2="12.5" y2="4"/><path d="M4 4l.5 7h5l.5-7"/><path d="M5 4V3h4v1"/></svg></button>
-          </div>
-          <div class="sl-planes-wrap">
-            <button class="sl-planes-arrow sl-planes-arrow-l" id="sl-planes-arrow-l" aria-label="Scroll planes left">‹</button>
-            <div class="sl-planes" id="sl-planes"></div>
-            <button class="sl-planes-arrow sl-planes-arrow-r" id="sl-planes-arrow-r" aria-label="Scroll planes right">›</button>
+          <div class="sl-timeline-caption" id="sl-timeline-caption">
+            <span>redshift z →</span>
+            <span>Tap to add a plane</span>
           </div>
         </div>
-        <div class="sl-timeline-caption" id="sl-timeline-caption">
-          <span>redshift z →</span>
-          <span>Tap to add a plane</span>
+        <div class="sl-rail" id="sl-rail">
+          <div class="sl-rail-tabs" id="sl-rail-tabs">
+            <button class="sl-rail-tab-btn sl-mobile-only-tab" data-tab="object">Object</button>
+            <button class="sl-rail-tab-btn active" data-tab="scene">Scene</button>
+            <button class="sl-rail-tab-btn" data-tab="view">View</button>
+            <button class="sl-rail-tab-btn" data-tab="export">Export</button>
+            <button class="sl-rail-tab-btn" data-tab="quality">Quality</button>
+          </div>
+          <div class="sl-tab-content active" id="sl-tab-scene">
+            <div id="sl-obj-panel"></div>
+            <div class="sl-plane-card" id="sl-plane-card" data-effective-type="empty">
+              <div class="sl-plane-body" id="sl-plane-body">
+                <div class="sl-plane-tools" id="sl-plane-tools">
+                  <button class="sl-ctool-btn" data-tool="lens"   title="Add lens — click the image or this panel to place (1)"   aria-label="Add lens tool">L</button>
+                  <button class="sl-ctool-btn" data-tool="source" title="Add source — click the image or this panel to place (2)" aria-label="Add source tool">S</button>
+                  <button class="sl-ctool-btn" data-tool="hybrid" title="Add hybrid — click the image or this panel to place (3)" aria-label="Add hybrid tool">H</button>
+                  <div class="sl-plane-tools-sep"></div>
+                  <button class="sl-ctool-del" id="sl-card-del-obj" title="Delete selected object" aria-label="Delete selected object"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="1.5" y1="4" x2="12.5" y2="4"/><path d="M4 4l.5 7h5l.5-7"/><path d="M5 4V3h4v1"/></svg></button>
+                </div>
+                <button class="sl-plane-arrow" id="sl-plane-prev" title="Select the previous plane (lower z)" aria-label="Select previous plane">‹</button>
+                <canvas class="sl-plane-canvas" id="sl-plane-canvas"></canvas>
+                <button class="sl-plane-arrow" id="sl-plane-next" title="Select the next plane (higher z)" aria-label="Select next plane">›</button>
+                <div class="sl-plane-side" id="sl-plane-side">
+                  <label class="sl-plane-z">z = <input type="number" class="sl-plane-z-input" id="sl-plane-z-input" min="0.01" step="0.01" aria-label="Plane redshift"></label>
+                  <button class="sl-plane-paste" id="sl-plane-paste" title="Load image from file" style="display:none"><svg width="12" height="11" viewBox="0 0 14 12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M1 3.5V10a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V4.5a1 1 0 0 0-1-1H7L5.5 2H2a1 1 0 0 0-1 1.5z"/></svg> Image</button>
+                  <button class="sl-plane-clear" id="sl-plane-clear" title="Clear all objects on this plane (O)">○ Clear</button>
+                  <button class="sl-plane-del" id="sl-plane-del" title="Delete plane (X)">× Delete</button>
+                </div>
+              </div>
+              <div class="sl-plane-empty" id="sl-plane-empty" style="display:none">Click the redshift timeline to add a plane, or click a marker to select one.</div>
+            </div>
+          </div>
+          <div class="sl-tab-content" id="sl-tab-view"></div>
+          <div class="sl-tab-content" id="sl-tab-export"></div>
+          <div class="sl-tab-content" id="sl-tab-quality"></div>
         </div>
       </div>
     </div>`;
 
   glCanvas   = document.getElementById('sl-gl-canvas');
   axisCanvas = document.getElementById('sl-axis-canvas');
-  planesEl   = document.getElementById('sl-planes');
-  // sidebarEl no longer used: renderSidebar targets sl-params-col / sl-settings-col directly.
   overlayCtx = document.getElementById('sl-overlay').getContext('2d');
+
+  // Hidden file input for the plane card's "load image" button (pasted-image objects).
+  const planeFile = document.createElement('input');
+  planeFile.type = 'file'; planeFile.accept = 'image/*'; planeFile.style.display = 'none';
+  planeFile.id = 'sl-plane-file';
+  document.getElementById('sl-plane-card').appendChild(planeFile);
 }
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 function attachHandlers() {
   document.getElementById('sl-demo').addEventListener('click', startTour);
   document.getElementById('sl-theme').addEventListener('click', toggleTheme);
+  document.getElementById('sl-kbd-btn').addEventListener('click', toggleKbdOverlay);
   applyThemeIcons(document.documentElement.getAttribute('data-theme') || 'dark');
 
-  // Tab switching: static buttons, wired once.
-  document.getElementById('sl-tabs').addEventListener('click', e => {
-    const btn = e.target.closest('.sl-tab-btn');
+  // Rail tab bar (Scene / View / Export / Quality) — one tab system for desktop and mobile.
+  document.getElementById('sl-rail-tabs').addEventListener('click', e => {
+    const btn = e.target.closest('.sl-rail-tab-btn');
+    if (btn) setRailTab(btn.dataset.tab);
+  });
+
+  // Topbar file cluster: presets + YAML save/load (static DOM, wired once).
+  document.getElementById('sl-save-config').addEventListener('click', saveConfig);
+  document.getElementById('sl-load-config').addEventListener('click', () => {
+    document.getElementById('sl-config-file')?.click();
+  });
+  document.getElementById('sl-config-file').addEventListener('change', e => {
+    const file = e.target.files?.[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => { _selectedPreset = ''; loadConfigFromYaml(ev.target.result); updatePresetSelect(); };
+    reader.readAsText(file);
+    e.target.value = ''; // reset so same file can be loaded again
+  });
+  document.getElementById('sl-preset-select').addEventListener('change', e => {
+    // Drop focus so subsequent keystrokes hit the app shortcuts, not the
+    // select's native type-ahead (which would silently load another preset).
+    e.target.blur();
+    const file = e.target.value;
+    if (file) loadPreset(file);
+    else updatePresetSelect(); // placeholder re-chosen: restore the current label
+  });
+
+  // Canvas tool rail (left edge of the image): select / add-lens / add-source /
+  // add-hybrid. Arming an add tool makes a click on the image place an object.
+  document.getElementById('sl-canvas-tools').addEventListener('click', e => {
+    const btn = e.target.closest('.sl-ctool-btn');
+    if (btn) setCanvasTool(btn.dataset.tool);
+  });
+  // The plane card's copy of the same tools, plus delete-selected-object.
+  document.getElementById('sl-plane-tools').addEventListener('click', e => {
+    const btn = e.target.closest('.sl-ctool-btn');
+    if (btn) { setCanvasTool(btn.dataset.tool); return; }
+    if (e.target.closest('#sl-card-del-obj')) deleteSelectedObject();
+  });
+
+  // Plane card: static header controls + the (single, persistent) plane canvas.
+  const _zIn = document.getElementById('sl-plane-z-input');
+  const _applyPlaneZ = v => {
+    const pl = selectedPlane();
+    if (!pl || !isFinite(v)) return;
+    pl.z = Math.max(0.01, Math.min(state.zMax, Math.round(v * 100) / 100));
+    state.planes.sort((a, b) => a.z - b.z);
+    invalidateDistances();
+    drawAxisCanvas(); renderPlaneCard(); redraw();
+    const zEl = document.querySelector('#sl-obj-panel .sl-params-z');
+    if (zEl && selectedPlane()) zEl.textContent = `z: ${selectedPlane().z.toFixed(2)}`;
+  };
+  _zIn.addEventListener('change', e => _applyPlaneZ(parseFloat(e.target.value)));
+  _attachScrub(_zIn, { lo: 0.01, hi: 15, onChange: _applyPlaneZ });
+  document.getElementById('sl-plane-clear').addEventListener('click', () => {
+    const pl = selectedPlane(); if (!pl) return;
+    record();
+    pl.objects.filter(o => o.model === 'pastedimage').forEach(o => renderer?.clearPastedTexture(o.id));
+    pl.objects = [];
+    state.selectedObjId = null;
+    renderPlaneCard(); renderSidebar(); redraw();
+  });
+  document.getElementById('sl-plane-del').addEventListener('click', () => {
+    const pl = selectedPlane(); if (!pl) return;
+    removePlane(pl.id); renderPlaneCard(); renderSidebar(); redraw();
+  });
+  document.getElementById('sl-plane-paste').addEventListener('click', () => {
+    document.getElementById('sl-plane-file')?.click();
+  });
+  document.getElementById('sl-plane-prev').addEventListener('click', () => selectPlaneOffset(-1));
+  document.getElementById('sl-plane-next').addEventListener('click', () => selectPlaneOffset(1));
+  document.getElementById('sl-plane-file').addEventListener('change', e => {
+    const pl = selectedPlane();
+    const target = pl?.objects.find(o => o.model === 'pastedimage');
+    const file = e.target.files?.[0];
+    if (file && target) { state.selectedObjId = target.id; _applyImageFile(file, target); }
+    e.target.value = '';
+  });
+  attachPlaneCardHandlers(document.getElementById('sl-plane-canvas'));
+
+  // Timeline z_max control (static DOM, wired once).
+  const _zmaxEl = document.getElementById('sl-zmax');
+  _zmaxEl.value = state.zMax;
+  _zmaxEl.addEventListener('change', e => { const v = parseFloat(e.target.value); if (v > 0) { state.zMax = v; drawAxisCanvas(); } });
+  _attachScrub(_zmaxEl, { lo: 0.1, hi: 10, onChange: v => { state.zMax = v; drawAxisCanvas(); } });
+
+  // Overlay chips: quick canvas-side toggles for the same state as the View tab.
+  document.getElementById('sl-overlay-chips').addEventListener('click', e => {
+    const btn = e.target.closest('button[data-flag]');
     if (!btn) return;
-    activeTab = btn.dataset.tab;
-    document.querySelectorAll('.sl-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === activeTab));
-    document.getElementById('sl-tab-settings').style.display  = activeTab === 'settings'  ? '' : 'none';
-    document.getElementById('sl-tab-recording').style.display = activeTab === 'recording' ? '' : 'none';
+    const flag = btn.dataset.flag;
+    state[flag] = !state[flag];
+    if (flag === 'showColorbar') _updateColorbar();
+    updateOverlayChips();
+    if (activeTab === 'view') renderSidebar();
+    redraw();
   });
 
-  // Mobile tab bar (Object / Settings / Recording / Planes).
-  document.getElementById('sl-mobile-tabs').addEventListener('click', e => {
-    const btn = e.target.closest('.sl-mobile-tab-btn');
-    if (btn) setMobileTab(btn.dataset.tab);
-  });
-
-  // Global plane toolbar: L / S / H mode + delete selected object.
-  document.getElementById('sl-plane-toolbar').addEventListener('click', e => {
-    const modeBtn = e.target.closest('.sl-tool-btn[data-mode]');
-    if (modeBtn) {
-      state.addMode = modeBtn.dataset.mode;
-      document.querySelectorAll('.sl-tool-btn[data-mode]').forEach(b =>
-        b.classList.toggle('active', b.dataset.mode === state.addMode));
-      return;
-    }
-    if (e.target.closest('#sl-tool-del-obj')) deleteSelectedObject();
-  });
-
-  // Mobile plane scroll arrows.
-  document.getElementById('sl-planes')?.addEventListener('scroll', updatePlaneArrows);
-  document.getElementById('sl-planes-arrow-l')?.addEventListener('click', () => {
-    document.getElementById('sl-planes')?.scrollBy({ left: -162, behavior: 'smooth' });
-  });
-  document.getElementById('sl-planes-arrow-r')?.addEventListener('click', () => {
-    document.getElementById('sl-planes')?.scrollBy({ left:  162, behavior: 'smooth' });
-  });
+  // Zoom cluster + wheel + pinch.
+  attachZoomHandlers(document.getElementById('sl-image-wrap'));
 
   const _VIZ_LABELS ={ '0':'Lensed image','1':'Convergence κ','2':'Shear γ','3':'Magnification |μ|','5':'Deflection |α|','6':'Fermat potential φ' };
   const _VIZ_LABELS_SHORT = { '0':'[I] Lensed image','1':'[K] Convergence κ','2':'[G] Shear γ','3':'[M] Magnification |μ|','5':'[A] Deflection |α|','6':'[T] Fermat potential φ' };
@@ -1281,6 +1411,7 @@ function attachHandlers() {
   document.getElementById('sl-viz-mode')?.addEventListener('mousedown', () => _setVizOptionLabels(true));
   document.getElementById('sl-viz-mode')?.addEventListener('change', e => {
     _setVizOptionLabels(false);
+    e.target.blur();  // keep letter shortcuts (K/G/M/A/I/T) from hitting the select's type-ahead
     state.vizMode = parseInt(e.target.value, 10);
     glCanvas?.classList.toggle('sl-viz-active', state.vizMode !== 0);
     _updateColorbar(); renderSidebar(); redraw();
@@ -1513,9 +1644,7 @@ function attachHandlers() {
       return;
     }
     if (e.key === '1' || e.key === '2' || e.key === '3') {
-      state.addMode = e.key === '1' ? 'lens' : e.key === '2' ? 'source' : 'hybrid';
-      document.querySelectorAll('.sl-tool-btn[data-mode]').forEach(b =>
-        b.classList.toggle('active', b.dataset.mode === state.addMode));
+      setCanvasTool(e.key === '1' ? 'lens' : e.key === '2' ? 'source' : 'hybrid');
       return;
     }
     if (e.key === 'o' || e.key === 'O') {
@@ -1525,14 +1654,14 @@ function attachHandlers() {
       pl.objects.filter(o => o.model === 'pastedimage').forEach(o => renderer?.clearPastedTexture(o.id));
       pl.objects = [];
       state.selectedObjId = null;
-      rebuildPlaneBoxes(); renderSidebar(); redraw();
+      renderPlaneCard(); renderSidebar(); redraw();
       return;
     }
     if (e.key === 'x' || e.key === 'X') {
       const pl = selectedPlane();
       if (!pl) return;
       record();
-      removePlane(pl.id); rebuildPlaneBoxes(); renderSidebar(); redraw();
+      removePlane(pl.id); renderPlaneCard(); renderSidebar(); redraw();
       return;
     }
     if (e.key === 'r' || e.key === 'R') {
@@ -1554,6 +1683,10 @@ function attachHandlers() {
       toggleTheme();
       return;
     }
+    if (e.key === '?' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      toggleKbdOverlay();
+      return;
+    }
     // Visualization mode shortcuts: toggle on/off; pressing the same key again returns to image.
     const VIZ_KEYS = { k: 1, K: 1, g: 2, G: 2, m: 3, M: 3, a: 5, A: 5, i: 0, I: 0, t: 6, T: 6 };
     if (e.key in VIZ_KEYS) {
@@ -1567,7 +1700,8 @@ function attachHandlers() {
     }
     if (e.key === 'Escape') {
       // 1. Deselect a selected ruler. 2. Else disarm the ruler tool if armed
-      // (measurements stay; clear them with the buttons). 3. Else deselect object.
+      // (measurements stay; clear them with the buttons). 3. Else disarm an
+      // armed add tool (back to select). 4. Else deselect object.
       if (state.selectedRulerId) {
         state.selectedRulerId = null;
         updateRulerUI(); drawOverlay();
@@ -1577,8 +1711,12 @@ function attachHandlers() {
         toggleRulerTool();  // rulerActive is true here, so this turns it off
         return;
       }
+      if (state.addArmed) {
+        setCanvasTool('select');
+        return;
+      }
       state.selectedObjId = null;
-      renderSidebar(); rebuildPlaneBoxes(); redraw();
+      renderSidebar(); renderPlaneCard(); redraw();
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
       // A selected ruler takes priority over the selected object.
       if (state.selectedRulerId) { deleteSelectedRuler(); return; }
@@ -1587,6 +1725,275 @@ function attachHandlers() {
       deleteSelectedObject();
     }
   });
+}
+
+// ── Canvas tools (select / add-lens / add-source / add-hybrid) ────────────────
+// 'select' disarms creation; the add tools arm click-to-place on the image.
+// The plane card always creates on click regardless of arming (that is its job).
+// With the creation tools hidden (View → Creation tools off, or Hide all
+// overlays on) the image stays in selection mode: L/S/H then only pick which
+// type the plane card places.
+function creationToolsShown() { return state.showCreateTools && !state.hideOverlays; }
+
+function setCanvasTool(tool) {
+  if (tool === 'select') {
+    state.addArmed = false;
+  } else {
+    state.addMode  = tool;
+    state.addArmed = creationToolsShown();
+    // One active pointer tool at a time: arming an add tool disarms the ruler.
+    if (state.addArmed && state.rulerActive) { state.rulerActive = false; state.rulerDraft = null; updateRulerUI(); }
+  }
+  updateCanvasTools();
+  const wrap = document.getElementById('sl-image-wrap');
+  if (wrap) wrap.style.cursor = (state.addArmed || state.rulerActive) ? 'crosshair' : '';
+}
+
+function updateCanvasTools() {
+  // Both copies of the tools: the canvas rail and the plane card's column.
+  // When the image is selection-only, the card's buttons highlight the add
+  // MODE instead of the (never-set) armed state.
+  const armedUi = creationToolsShown();
+  document.querySelectorAll('.sl-ctool-btn[data-tool]').forEach(b => {
+    const t = b.dataset.tool;
+    b.classList.toggle('active', t === 'select' ? !state.addArmed
+      : armedUi ? (state.addArmed && state.addMode === t)
+                : state.addMode === t);
+  });
+  document.querySelector('.sl-body')?.classList.toggle('sl-no-create', !state.showCreateTools);
+}
+
+// Select the previous/next plane along the z-sorted list (plane-viewer arrows
+// and the mobile swipe gesture).
+function selectPlaneOffset(dir) {
+  if (!state.planes.length) return;
+  const idx = state.planes.findIndex(p => p.id === state.selectedPlaneId);
+  const ni  = idx < 0 ? (dir > 0 ? 0 : state.planes.length - 1)
+                      : Math.min(state.planes.length - 1, Math.max(0, idx + dir));
+  const pl  = state.planes[ni];
+  if (!pl || pl.id === state.selectedPlaneId) return;
+  state.selectedPlaneId = pl.id;
+  state.selectedObjId   = pl.objects[0]?.id ?? null;
+  clearRulerSelectionForObject();
+  renderPlaneCard(); renderSidebar(); drawAxisCanvas(); redraw();
+}
+
+// ── Rail tabs ─────────────────────────────────────────────────────────────────
+// One tab system for desktop and mobile. Sets the active rail tab, shows its
+// content container, and stamps .sl-body[data-tab] (the mobile/short-height CSS
+// gates the timeline on that attribute).
+function setRailTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.sl-rail-tab-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.tab === tab));
+  // The mobile-only Object tab shares the Scene container; the mobile CSS gates
+  // which of its children (object panel vs plane viewer) is visible via data-tab.
+  const container = tab === 'object' ? 'scene' : tab;
+  for (const t of ['scene', 'view', 'export', 'quality'])
+    document.getElementById(`sl-tab-${t}`)?.classList.toggle('active', t === container);
+  const body = document.querySelector('.sl-body');
+  if (body) body.dataset.tab = tab;
+  renderSidebar();
+  // Hidden canvases can't measure themselves; redraw once the tab reveals them.
+  if (container === 'scene') requestAnimationFrame(() => { drawAxisCanvas(); renderPlaneCard(); });
+}
+
+// ── Quality tab ───────────────────────────────────────────────────────────────
+function renderQualityPanel() {
+  const pop = document.getElementById('sl-tab-quality');
+  if (!pop) return;
+  pop.innerHTML = `
+    <div class="sl-panel">
+    <div class="sl-panel-title" style="margin-bottom:6px">Quality &amp; performance</div>
+    <p class="sl-perf-note" style="margin-bottom:8px">These trade accuracy or sharpness against redraw speed.</p>
+    <div class="sl-global-input">
+      <label>Critical curves</label>
+      <select id="sl-crit-res">
+        <option value="256"  ${state.critGridN===256  ?'selected':''}>Low (256)</option>
+        <option value="512"  ${state.critGridN===512  ?'selected':''}>Medium (512)</option>
+        <option value="1024" ${state.critGridN===1024 ?'selected':''}>High (1024)</option>
+        <option value="2048" ${state.critGridN===2048 ?'selected':''}>Very high (2048)</option>
+      </select>
+    </div>
+    <div class="sl-global-input">
+      <label>Point source</label>
+      <select id="sl-ps-grid">
+        <option value="150"  ${state.psGridN===150  ?'selected':''}>Coarse (150, fastest)</option>
+        <option value="300"  ${state.psGridN===300  ?'selected':''}>Medium (300)</option>
+        <option value="600"  ${state.psGridN===600  ?'selected':''}>Fine (600)</option>
+        <option value="1200" ${state.psGridN===1200 ?'selected':''}>Very fine (1200, slowest)</option>
+      </select>
+    </div>
+    <div class="sl-global-input">
+      <label>Render scale</label>
+      <select id="sl-render-scale">
+        <option value="auto"   ${state.renderScale==='auto'  ?'selected':''}>Auto (max 2×)</option>
+        <option value="1x"     ${state.renderScale==='1x'    ?'selected':''}>1× (fastest)</option>
+        <option value="native" ${state.renderScale==='native'?'selected':''}>Native (sharpest)</option>
+      </select>
+    </div>
+    </div>`;
+  document.getElementById('sl-crit-res')?.addEventListener('change', e => { state.critGridN = parseInt(e.target.value, 10); redraw(); });
+  document.getElementById('sl-ps-grid')?.addEventListener('change',  e => { state.psGridN = parseInt(e.target.value, 10); redraw(); });
+  document.getElementById('sl-render-scale')?.addEventListener('change', e => { applyRenderScale(e.target.value); });
+}
+
+// Push the render-scale mode into the renderer and re-derive the canvas size.
+function applyRenderScale(mode) {
+  if (!['auto', '1x', 'native'].includes(mode)) mode = 'auto';
+  state.renderScale = mode;
+  if (renderer) { renderer.dprMode = mode; renderer.resize(); }
+  redraw();
+}
+
+// Sync the topbar preset dropdown with _selectedPreset (static DOM, options fixed).
+function updatePresetSelect() {
+  const sel = document.getElementById('sl-preset-select');
+  if (sel) sel.value = _selectedPreset || '';
+}
+
+// Sync the canvas overlay chips (pressed state) with the state flags they mirror.
+function updateOverlayChips() {
+  document.querySelectorAll('#sl-overlay-chips button[data-flag]').forEach(btn => {
+    const on = !!state[btn.dataset.flag];
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+}
+
+// Reference-plane chip under the viz dropdown: shows which source redshift the
+// quantity maps and critical curves refer to. Hidden in plain lensed-image view
+// with no curves shown.
+function updateZsChip() {
+  const chip = document.getElementById('sl-zs-chip');
+  if (!chip) return;
+  const relevant = state.vizMode !== 0 || state.showCritCurves || state.showCaustics;
+  const hasPlane = state.planes.length > 0;
+  if (!relevant || !hasPlane || state.hideOverlays) { chip.style.display = 'none'; return; }
+  const auto = state.critZs === null;
+  chip.style.display = '';
+  chip.textContent = `zₛ = ${effectiveCritZs().toFixed(2)}${auto ? ' (auto)' : ''}`;
+}
+
+// ── Zoom: cluster buttons, wheel, and two-finger pinch ───────────────────────
+const FOV_MIN = 0.5, FOV_MAX = 300;
+
+// Single entry point for every FOV change; keeps the View-tab input in sync
+// (the on-canvas scale bar redraws with the overlay). redraw() coalesces
+// to one frame internally.
+function setFov(v) {
+  if (!isFinite(v)) return;
+  state.fov = Math.max(FOV_MIN, Math.min(FOV_MAX, v));
+  const inp = document.getElementById('sl-fov');
+  if (inp && document.activeElement !== inp) inp.value = +state.fov.toFixed(2);
+  redraw();
+}
+
+function attachZoomHandlers(wrap) {
+  // Wheel: scroll up zooms in (narrower FOV). Center-anchored — the view is
+  // always centred on the optical axis (the shader has no pan).
+  wrap.addEventListener('wheel', e => {
+    e.preventDefault();
+    setFov(state.fov * Math.pow(1.0015, e.deltaY));
+  }, { passive: false });
+
+  // Pinch: while two pointers are down on the image, spreading them zooms in.
+  // attachImageHandlers checks _pinch to abort object/ruler drags mid-gesture.
+  wrap.addEventListener('pointerdown', e => {
+    _pinchPtrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (_pinchPtrs.size === 2) {
+      const [a, b] = [..._pinchPtrs.values()];
+      _pinch = { d0: Math.hypot(a.x - b.x, a.y - b.y), fov0: state.fov };
+    }
+  });
+  wrap.addEventListener('pointermove', e => {
+    if (!_pinchPtrs.has(e.pointerId)) return;
+    _pinchPtrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (_pinch && _pinchPtrs.size === 2) {
+      const [a, b] = [..._pinchPtrs.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (d > 8) setFov(_pinch.fov0 * _pinch.d0 / d);
+    }
+  });
+  const endPinch = e => {
+    _pinchPtrs.delete(e.pointerId);
+    if (_pinchPtrs.size < 2) _pinch = null;
+  };
+  wrap.addEventListener('pointerup', endPinch);
+  wrap.addEventListener('pointercancel', endPinch);
+}
+let _pinch = null;                 // { d0, fov0 } while a two-finger pinch is active
+const _pinchPtrs = new Map();      // pointerId → last client position on the image wrap
+
+// ── Keyboard-shortcut overlay (the "?" button) ────────────────────────────────
+const SHORTCUTS = [
+  ['1 / 2 / 3', 'Arm the Lens / Source / Hybrid tool (click the image to place)'],
+  ['C', 'Toggle critical curves and caustics'],
+  ['I', 'Show lensed image (exit any quantity map)'],
+  ['K / G / M / A', 'Convergence κ / Shear γ / Magnification |μ| / Deflection |α| map'],
+  ['T', 'Fermat potential φ contour map'],
+  ['H', 'Hide / show the selected object'],
+  ['O', 'Clear all objects from the selected plane'],
+  ['X', 'Delete the selected plane'],
+  ['R', 'Start / stop live recording'],
+  ['L', 'Toggle ruler mode'],
+  ['D', 'Toggle dark / light theme'],
+  ['?', 'Show this shortcut reference'],
+  ['⌘/Ctrl + C / V', 'Copy the selected object / paste a duplicate'],
+  ['⌘/Ctrl + Z / ⇧Z', 'Undo / redo the last scene edit'],
+  ['↑ ↓ ← →', 'Nudge the selected object (hold to accelerate)'],
+  ['Delete / Backspace', 'Delete the selected object or ruler measurement'],
+  ['Escape', 'Deselect ruler → disarm ruler → disarm add tool → deselect object'],
+];
+let _kbdOverlay = null;
+
+function toggleKbdOverlay() {
+  if (_kbdOverlay) { _kbdOverlay.remove(); _kbdOverlay = null; return; }
+  const ov = document.createElement('div');
+  ov.className = 'sl-kbd-overlay';
+  ov.innerHTML = `
+    <div class="sl-kbd-panel" role="dialog" aria-label="Keyboard shortcuts">
+      <div class="sl-kbd-hdr">
+        <span>Keyboard shortcuts</span>
+        <button class="sl-kbd-close" aria-label="Close">×</button>
+      </div>
+      <table class="sl-kbd-table">
+        ${SHORTCUTS.map(([k, d]) => `<tr><td><kbd>${k}</kbd></td><td>${d}</td></tr>`).join('')}
+      </table>
+    </div>`;
+  ov.addEventListener('click', e => {
+    if (e.target === ov || e.target.closest('.sl-kbd-close')) toggleKbdOverlay();
+  });
+  document.body.appendChild(ov);
+  _kbdOverlay = ov;
+  const onEsc = e => {
+    if (e.key === 'Escape' && _kbdOverlay) {
+      e.stopPropagation(); toggleKbdOverlay();
+      document.removeEventListener('keydown', onEsc, true);
+    }
+  };
+  document.addEventListener('keydown', onEsc, true);
+}
+
+// ── Einstein-radius helper ────────────────────────────────────────────────────
+// θE for a lens object against the reference source redshift. Point mass:
+// θE = b·√(D_ls/D_s). Isothermal family (SIE/NIE/EPL): θE = b·(D_ls/D_s) — the
+// circular (q = 1) value; a modest overestimate of the effective radius for
+// flattened lenses. External shear/convergence/deflection have no Einstein radius.
+// Not currently surfaced in the UI: retained for the upcoming physics-readout
+// pass (per-object θE display, magnifications, time delays).
+// eslint-disable-next-line no-unused-vars
+function computeThetaE(obj, plane, zs) {
+  if (obj.type !== 'lens') return null;
+  const model = obj.model;
+  if (!['pointmass', 'sie', 'nie', 'epl'].includes(model)) return null;
+  if (!(zs > plane.z)) return 0;
+  const Ds  = angDiamDist(zs);
+  const Dls = angDiamDistBetween(plane.z, zs);
+  if (!(Ds > 0) || !(Dls > 0)) return 0;
+  const ratio = Dls / Ds;
+  if (model === 'pointmass') return (obj.params.thetaE ?? 1) * Math.sqrt(ratio);
+  return (obj.params.b ?? 1) * ratio;
 }
 
 // ── Axis interaction ───────────────────────────────────────────────────────────
@@ -1612,13 +2019,17 @@ function imageWrapToArcsec(wrap, e) {
 }
 
 // Hit-test all objects in all planes against an image-space pointer event.
+// The SELECTED plane is tested first, so where objects from different planes
+// overlap on the image, a click always picks the selected plane's object.
 function hitTestImage(wrap, e) {
   const pos = imageWrapToArcsec(wrap, e);
   const r   = wrap.getBoundingClientRect();
   // Convert pixel hit radius to arcsec, scaled up on mobile.
   const thresh = (hitRadius() * 1.5) / r.width * state.fov;
   const seenHybrids = new Set();
-  for (const plane of state.planes) {
+  const selPl   = selectedPlane();
+  const ordered = selPl ? [selPl, ...state.planes.filter(p => p !== selPl)] : state.planes;
+  for (const plane of ordered) {
     for (const obj of plane.objects) {
       if (obj.hidden) continue;
       if (obj.hybridId) {
@@ -1686,6 +2097,8 @@ function toggleRulerTool() {
   if (wasHidden) state.showRuler = true;
   state.rulerActive = !state.rulerActive;
   state.rulerDraft  = null;   // cancel any in-progress draw; measurements persist
+  // One active pointer tool at a time: arming the ruler disarms any add tool.
+  if (state.rulerActive && state.addArmed) { state.addArmed = false; updateCanvasTools(); }
   updateRulerUI();
   if (wasHidden) renderSidebar();  // sync the "Show ruler" checkbox
   const wrap = document.getElementById('sl-image-wrap');
@@ -1738,8 +2151,20 @@ function attachImageHandlers(wrap) {
     // fall through to start a measurement or object drag on the image beneath.
     // (Replaces the toolbar's old pointerdown stopPropagation, which interfered
     // with reliable tap handling on touch devices.)
-    if (e.target?.closest?.('.sl-ruler-tools')) return;
+    // Ignore presses that start on ANY on-canvas chrome (tool rail, view chips,
+    // dropdown, badges, ruler buttons): only the canvases themselves interact.
+    // Without this, an armed add tool would place an object under every button.
+    if (e.target !== wrap &&
+        !(e.target.id === 'sl-gl-canvas' || e.target.classList?.contains('sl-overlay'))) return;
     if (e.button !== 0 && e.pointerType === 'mouse') return;
+
+    // A second finger starts a pinch zoom: cancel any one-finger gesture in flight.
+    if (_pinchPtrs.size >= 2) {
+      imgDrag = null;
+      rulerDrag = state.rulerDraft = null;
+      rulerEdit = null;
+      return;
+    }
 
     // 1. Edit an existing ruler (drag an endpoint or the whole line). Available
     //    whenever measurements are shown, and takes priority over drawing / objects.
@@ -1771,7 +2196,28 @@ function attachImageHandlers(wrap) {
       return;
     }
 
-    // 3. Otherwise: deselect any ruler, then hit-test / drag objects.
+    // 3. Armed add tool: a press on empty space places an object of the current
+    //    add mode in the SELECTED plane at that sky position, then drags it
+    //    until release. Pressing an existing object falls through to the normal
+    //    select/drag path so armed mode never blocks editing.
+    if (state.addArmed && !hitTestImage(wrap, e)) {
+      const pl = selectedPlane();
+      if (!pl) return;
+      e.preventDefault();
+      try { wrap.setPointerCapture(e.pointerId); } catch {}
+      if (state.selectedRulerId) { state.selectedRulerId = null; updateRulerUI(); }
+      const pos = imageWrapToArcsec(wrap, e);
+      const obj = _makeAddObjects(pl, pos.x, pos.y);
+      state.selectedObjId = obj.id;
+      imgDrag = { obj, plane: pl,
+                  startCx: obj.cx, startCy: obj.cy,
+                  startMx: pos.x,  startMy: pos.y };
+      wrap.style.cursor = 'grabbing';
+      renderPlaneCard(); renderSidebar(); redraw();
+      return;
+    }
+
+    // 4. Otherwise: deselect any ruler, then hit-test / drag objects.
     if (state.selectedRulerId) { state.selectedRulerId = null; updateRulerUI(); drawOverlay(); }
     const hit = hitTestImage(wrap, e);
     if (!hit) return;
@@ -1788,6 +2234,7 @@ function attachImageHandlers(wrap) {
   });
 
   wrap.addEventListener('pointermove', e => {
+    if (_pinch) return;  // two-finger zoom in progress — suppress drags
     if (rulerEdit) {
       e.preventDefault();
       const p = imageWrapToArcsec(wrap, e), r = rulerEdit.ruler;
@@ -1817,6 +2264,8 @@ function attachImageHandlers(wrap) {
       }
       // While the ruler tool is armed, keep the crosshair and never show the object grab cursor.
       if (state.rulerActive && state.showRuler) { wrap.style.cursor = 'crosshair'; return; }
+      // While an add tool is armed: crosshair over empty space, grab over objects.
+      if (state.addArmed) { wrap.style.cursor = hitTestImage(wrap, e) ? 'grab' : 'crosshair'; return; }
       wrap.style.cursor = hitTestImage(wrap, e) ? 'grab' : '';
       return;
     }
@@ -1855,7 +2304,7 @@ function attachImageHandlers(wrap) {
     if (!imgDrag) return;
     invalidateDistances();
     redraw();
-    wrap.style.cursor = '';
+    wrap.style.cursor = state.addArmed ? 'crosshair' : '';
     imgDrag = null;
   });
 
@@ -1884,7 +2333,7 @@ function attachAxisHandlers() {
     for (const p of state.planes) {
       const px  = axisZToX(p.z, Wl);
       const lv  = _planeLevels.get(p.id) || 0;
-      const py  = axisY - 12 - lv * BUMP_STEP;  // diamond centre-ish
+      const py  = axisY - lv * BUMP_STEP;  // diamond centre (on the axis at level 0)
       const d   = Math.hypot(mx - px, my - py);
       if (d < HIT && d < bestDist) { bestDist = d; best = p; }
     }
@@ -1908,7 +2357,7 @@ function attachAxisHandlers() {
       dragPlane.z = z;
       state.planes.sort((a, b) => a.z - b.z);
       invalidateDistances();
-      rebuildPlaneBoxes(); drawAxisCanvas(); redraw();
+      renderPlaneCard(); drawAxisCanvas(); redraw();
       // Update z in the params panel without a full sidebar rebuild.
       if (dragPlane.id === state.selectedPlaneId) {
         const zEl = document.querySelector('#sl-obj-panel .sl-params-z');
@@ -1950,7 +2399,7 @@ function attachAxisHandlers() {
       const pl = addPlane(z);
       state.selectedPlaneId = pl.id;
       state.selectedObjId   = pl.objects[0]?.id ?? null;
-      rebuildPlaneBoxes(); renderSidebar(); redraw();
+      renderPlaneCard(); renderSidebar(); redraw();
     }
     dragPlane = null; tapStart = null;
     _draggingPlaneId = null;
@@ -1966,98 +2415,71 @@ function attachAxisHandlers() {
   });
 }
 
-// ── Plane boxes ───────────────────────────────────────────────────────────────
-function rebuildPlaneBoxes() {
-  planesEl.innerHTML = '';
-  if (state.planes.length === 0) {
-    planesEl.innerHTML = '<span class="sl-timeline-hint">Click the axis to add a lens or source plane</span>';
+// ── Selected-plane card (Scene tab) ───────────────────────────────────────────
+// The old strip of per-plane boxes is now a single card showing the selected
+// plane; the redshift axis is the surface for selecting, adding, and moving
+// planes. The card skeleton is static DOM (buildDOM); this just refreshes it.
+function renderPlaneCard() {
+  const card  = document.getElementById('sl-plane-card');
+  if (!card) return;
+  const pl    = selectedPlane();
+  const body  = document.getElementById('sl-plane-body');
+  const empty = document.getElementById('sl-plane-empty');
+  const cvs   = document.getElementById('sl-plane-canvas');
+  if (!pl) {
+    card.dataset.effectiveType = 'empty';
+    if (body)  body.style.display = 'none';
+    if (empty) empty.style.display = '';
     return;
   }
-
-  for (const plane of state.planes) {
-    const effType = planeEffectiveType(plane);
-    const box     = document.createElement('div');
-    box.className   = 'sl-plane-box';
-    box.dataset.id            = plane.id;
-    box.dataset.effectiveType = effType;
-
-    const hasPasted = plane.objects.some(o => o.model === 'pastedimage');
-    box.innerHTML = `
-      <div class="sl-plane-header">
-        <span class="sl-plane-z">z = ${plane.z.toFixed(2)}</span>
-        ${hasPasted ? `<button class="sl-plane-paste" title="Load image from file"><svg width="12" height="11" viewBox="0 0 14 12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M1 3.5V10a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V4.5a1 1 0 0 0-1-1H7L5.5 2H2a1 1 0 0 0-1 1.5z"/></svg></button>` : ''}
-        <button class="sl-plane-clear" title="Clear all objects">○</button>
-        <button class="sl-plane-del" title="Delete plane">×</button>
-      </div>
-      <canvas class="sl-plane-canvas" width="148" height="148"></canvas>`;
-
-    planesEl.appendChild(box);
-
-    // Clear button removes all objects from this plane.
-    // Image button: opens file picker for pasted-image objects.
-    const pasteBtn = box.querySelector('.sl-plane-paste');
-    if (pasteBtn) {
-      const fi = document.createElement('input');
-      fi.type = 'file'; fi.accept = 'image/*'; fi.style.display = 'none';
-      box.appendChild(fi);
-      fi.addEventListener('change', e => {
-        const target = plane.objects.find(o => o.model === 'pastedimage');
-        const file = e.target.files?.[0];
-        if (file && target) { state.selectedPlaneId = plane.id; state.selectedObjId = target.id; _applyImageFile(file, target); }
-        e.target.value = '';
-      });
-      pasteBtn.addEventListener('click', () => fi.click());
-    }
-
-    box.querySelector('.sl-plane-clear').addEventListener('click', () => {
-      plane.objects.filter(o => o.model === 'pastedimage').forEach(o => renderer?.clearPastedTexture(o.id));
-      plane.objects = [];
-      if (state.selectedPlaneId === plane.id) state.selectedObjId = null;
-      rebuildPlaneBoxes(); renderSidebar(); redraw();
-    });
-
-    // Delete.
-    box.querySelector('.sl-plane-del').addEventListener('click', () => {
-      removePlane(plane.id); rebuildPlaneBoxes(); renderSidebar(); redraw();
-    });
-
-    const cvs = box.querySelector('.sl-plane-canvas');
-    attachPlaneCanvasHandlers(cvs, plane);
-    drawPlaneCanvas(cvs, plane);
-  }
-  updatePlaneArrows();
+  if (body)  body.style.display = '';
+  if (empty) empty.style.display = 'none';
+  // Prev/next plane arrows: grayed out at the ends of the z-sorted plane list.
+  const idx  = state.planes.findIndex(p => p.id === pl.id);
+  const prev = document.getElementById('sl-plane-prev');
+  const next = document.getElementById('sl-plane-next');
+  if (prev) prev.disabled = idx <= 0;
+  if (next) next.disabled = idx < 0 || idx >= state.planes.length - 1;
+  card.dataset.effectiveType = planeEffectiveType(pl);
+  const zIn = document.getElementById('sl-plane-z-input');
+  if (zIn && document.activeElement !== zIn) zIn.value = pl.z.toFixed(2);
+  const paste = document.getElementById('sl-plane-paste');
+  if (paste) paste.style.display = pl.objects.some(o => o.model === 'pastedimage') ? '' : 'none';
+  if (cvs) drawPlaneCanvas(cvs, pl);
 }
 
 // ── Plane canvas interaction ───────────────────────────────────────────────────
 const HIT_R = 10; // px desktop
 function hitRadius() { return window.innerWidth <= 640 ? 18 : HIT_R; }
 
-function attachPlaneCanvasHandlers(canvas, plane) {
-  // 'idle' | 'hit-pending' | 'dragging' | 'add-pending' | 'add-dragging' | 'panning'
+function attachPlaneCardHandlers(canvas) {
+  // 'idle' | 'hit-pending' | 'dragging' | 'add-pending' | 'add-dragging' | 'swiping'
+  // The card always shows the selected plane; resolve it at pointerdown so one
+  // persistent set of listeners serves every plane.
   let istate  = 'idle';
   let hitObj  = null;
+  let plane   = null;
   let pStart  = null; // drag/tap start info
-  const DRAG_THRESH = 3; // px — mouse object-drag / create-drag threshold
-  const TAP_SLOP    = 8; // px — touch: moving beyond this turns a would-be tap into a scroll
-  const scroller = planesEl;  // #sl-planes: the horizontally-scrolling strip of plane boxes
+  const DRAG_THRESH = 3;  // px — object-drag / create-drag threshold (mouse)
+  const SWIPE_SLOP  = 10; // px — touch: moving beyond this becomes a plane swipe
+  const SWIPE_MIN   = 36; // px — horizontal travel needed to switch planes
 
   canvas.addEventListener('pointermove', e => {
     if (istate === 'idle') {
-      canvas.style.cursor = hitTestPlane(plane, canvas, e) ? 'grab' : 'crosshair';
+      const selPl = selectedPlane();
+      canvas.style.cursor = selPl && hitTestPlane(selPl, canvas, e) ? 'grab' : 'crosshair';
       return;
     }
     e.preventDefault();
+    if (!plane) return;
 
-    // Touch swipe that began on empty space → scroll the strip instead of creating
-    // an object. Once we commit to panning we stay in it until the finger lifts.
+    // Touch swipe that began on empty space switches the selected plane
+    // (committed on release); starting on an object still drags the object.
     if (istate === 'add-pending' && pStart.touch &&
-        Math.hypot(e.clientX - pStart.clientX, e.clientY - pStart.clientY) > TAP_SLOP) {
-      istate = 'panning';
+        Math.abs(e.clientX - pStart.clientX) > SWIPE_SLOP) {
+      istate = 'swiping';
     }
-    if (istate === 'panning') {
-      if (scroller) scroller.scrollLeft = pStart.scrollLeft - (e.clientX - pStart.clientX);
-      return;
-    }
+    if (istate === 'swiping') return;
 
     const pos = canvasToArcsec(canvas, e);
     const dx  = pos.x - pStart.mx, dy = pos.y - pStart.my;
@@ -2066,17 +2488,16 @@ function attachPlaneCanvasHandlers(canvas, plane) {
     if (istate === 'hit-pending' && Math.hypot(dpx, dy / state.fov * canvas.offsetHeight) > DRAG_THRESH) {
       istate = 'dragging'; canvas.style.cursor = 'grabbing';
     }
-    // Mouse only: dragging on empty space creates the object and places it under the
-    // cursor. On touch, empty-space drags scroll (handled above), so this never fires.
+    // Mouse: dragging on empty space creates the object and places it under the
+    // pointer. (Touch empty-space drags are plane swipes, handled above.)
     if (istate === 'add-pending' && !pStart.touch &&
         Math.hypot(dpx, dy / state.fov * canvas.offsetHeight) > DRAG_THRESH) {
       hitObj = _makeAddObjects(plane, pStart.mx, pStart.my);
-      state.selectedPlaneId = plane.id;
       state.selectedObjId   = hitObj.id;
       clearRulerSelectionForObject();  // one selection at a time
       pStart.cx = pStart.mx; pStart.cy = pStart.my;
       istate = 'add-dragging'; canvas.style.cursor = 'grabbing';
-      updatePlaneBoxColor(plane); renderSidebar();
+      renderPlaneCard(); renderSidebar();
     }
     if (istate === 'dragging' || istate === 'add-dragging') {
       hitObj.cx = pStart.cx + dx;
@@ -2097,45 +2518,48 @@ function attachPlaneCanvasHandlers(canvas, plane) {
 
   canvas.addEventListener('pointerdown', e => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;  // only left-click creates/drags
+    plane = selectedPlane();
+    if (!plane) return;
     e.preventDefault();
     canvas.setPointerCapture(e.pointerId);
     const touch = e.pointerType === 'touch' || e.pointerType === 'pen';
     const pos   = canvasToArcsec(canvas, e);
     hitObj      = hitTestPlane(plane, canvas, e);
     if (hitObj) {
-      // Started on an existing object → drag it; never scroll.
+      // Started on an existing object → drag it.
       istate = 'hit-pending'; canvas.style.cursor = 'grab';
       pStart = { cx: hitObj.cx, cy: hitObj.cy, mx: pos.x, my: pos.y, touch };
-      state.selectedPlaneId = plane.id;
       state.selectedObjId   = hitObj.id;
       clearRulerSelectionForObject();  // one selection at a time
       renderSidebar(); redraw();
     } else {
-      // Started on empty space → a tap (down + up in ~same spot) creates an object;
-      // a touch swipe scrolls the strip. Record the start point + current scroll.
+      // Started on empty space → a tap (down + up in ~same spot) creates an
+      // object; a horizontal touch swipe switches planes instead.
       istate = 'add-pending';
-      pStart = { mx: pos.x, my: pos.y, clientX: e.clientX, clientY: e.clientY,
-                 scrollLeft: scroller ? scroller.scrollLeft : 0, touch };
+      pStart = { mx: pos.x, my: pos.y, clientX: e.clientX, touch };
     }
   });
 
-  canvas.addEventListener('pointercancel', () => { istate = 'idle'; hitObj = null; canvas.style.cursor = 'crosshair'; });
+  canvas.addEventListener('pointercancel', () => { istate = 'idle'; hitObj = null; plane = null; canvas.style.cursor = 'crosshair'; });
 
   canvas.addEventListener('pointerup', e => {
-    if (istate === 'add-pending') {
+    if (istate === 'swiping') {
+      // Commit the plane switch: swipe left → next (higher z), right → previous.
+      const dx = e.clientX - pStart.clientX;
+      if (Math.abs(dx) >= SWIPE_MIN) selectPlaneOffset(dx < 0 ? 1 : -1);
+    } else if (istate === 'add-pending' && plane) {
       // Down + up with little/no movement → a tap → create an object here.
       const pos = canvasToArcsec(canvas, e);
       const obj = _makeAddObjects(plane, pos.x, pos.y);
-      state.selectedPlaneId = plane.id;
       state.selectedObjId   = obj.id;
       clearRulerSelectionForObject();  // one selection at a time
-      updatePlaneBoxColor(plane); redrawPlaneCanvas(plane); renderSidebar(); redraw();
+      renderPlaneCard(); renderSidebar(); redraw();
     } else if (istate === 'dragging' || istate === 'add-dragging') {
       invalidateDistances(); redraw();
     }
-    // 'panning' → nothing to commit; the strip just scrolled.
-    istate = 'idle'; hitObj = null;
-    canvas.style.cursor = hitTestPlane(plane, canvas, e) ? 'grab' : 'crosshair';
+    istate = 'idle'; hitObj = null; plane = null;
+    const selPl = selectedPlane();
+    canvas.style.cursor = selPl && hitTestPlane(selPl, canvas, e) ? 'grab' : 'crosshair';
   });
 }
 
@@ -2152,15 +2576,11 @@ function _applyImageFile(file, obj) {
     record();  // async load lands outside any pointer gesture, so snapshot here
     obj.pasteCanvas = cvs;
     renderer?.setPastedTexture(obj.id, cvs);
-    rebuildPlaneBoxes(); renderSidebar(); redraw();
+    renderPlaneCard(); renderSidebar(); redraw();
   };
   img.src = url;
 }
 
-function updatePlaneBoxColor(plane) {
-  const box = planesEl.querySelector(`.sl-plane-box[data-id="${plane.id}"]`);
-  if (box) box.dataset.effectiveType = planeEffectiveType(plane);
-}
 
 function canvasToArcsec(canvas, e) {
   const r = canvas.getBoundingClientRect();
@@ -2208,7 +2628,9 @@ function hitTestPlane(plane, canvas, e) {
 }
 
 function redrawPlaneCanvas(plane) {
-  const cvs = planesEl.querySelector(`.sl-plane-canvas[data-id="${plane.id}"], .sl-plane-box[data-id="${plane.id}"] .sl-plane-canvas`);
+  // Only the selected plane is on screen (the plane card); others have no canvas.
+  if (!plane || plane.id !== state.selectedPlaneId) return;
+  const cvs = document.getElementById('sl-plane-canvas');
   if (cvs) drawPlaneCanvas(cvs, plane);
 }
 
@@ -2330,10 +2752,20 @@ function infoSection(id, html) {
 const SEL = s => `style="font-size:12px;padding:2px 6px;border:1px solid var(--hairline);border-radius:4px;background:var(--bg);color:var(--fg);cursor:pointer;${s||''}"`;
 
 function renderSidebar() {
-  const obj = selectedObj(), pl = selectedPlane();
-  const ezs = effectiveCritZs();
+  renderScenePanel();
+  if (activeTab === 'view')    renderViewPanel();
+  if (activeTab === 'export')  renderExportPanel();
+  if (activeTab === 'quality') renderQualityPanel();
+  updateOverlayChips();
+  updateZsChip();
+}
 
-  // ── Params panel (built first: used in settingsContent below) ──────────────
+// ── Scene tab: plane card + selected-object controls ──────────────────────────
+function renderScenePanel() {
+  renderPlaneCard();
+  const obj = selectedObj(), pl = selectedPlane();
+
+  // ── Params panel (selected object) ──────────────────────────────────────────
   let paramsPanel = '';
   if (obj && pl) {
     const partner = hybridPartner(pl, obj);
@@ -2373,7 +2805,7 @@ function renderSidebar() {
             <span class="sl-params-z">z: ${pl.z.toFixed(2)}</span>
             <span class="sl-params-pos" id="sl-obj-pos">Pos: (${lensObj.cx.toFixed(2)}, ${lensObj.cy.toFixed(2)})</span>
             <button class="sl-obj-vis-btn${bothHidden ? ' sl-obj-hidden' : ''}" id="sl-toggle-vis" title="${bothHidden ? 'Show in image' : 'Hide from image'}">${eyeIcon(bothHidden)}</button>
-            <button class="sl-delete-obj-btn" id="sl-delete-obj">Delete</button>
+            <button class="sl-delete-obj-btn" id="sl-delete-obj" title="Delete object" aria-label="Delete object"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="1.5" y1="4" x2="12.5" y2="4"/><path d="M4 4l.5 7h5l.5-7"/><path d="M5 4V3h4v1"/></svg></button>
           </div>
           <div class="sl-hybrid-section">
             <div class="sl-hybrid-hdr" id="sl-hybrid-lens-hdr">
@@ -2429,59 +2861,186 @@ function renderSidebar() {
             <span class="sl-params-z">z: ${pl.z.toFixed(2)}</span>
             <span class="sl-params-pos" id="sl-obj-pos">Pos: (${obj.cx.toFixed(2)}, ${obj.cy.toFixed(2)})</span>
             <button class="sl-obj-vis-btn${obj.hidden ? ' sl-obj-hidden' : ''}" id="sl-toggle-vis" title="${obj.hidden ? 'Show in image' : 'Hide from image'}">${eyeIcon(obj.hidden)}</button>
-            <button class="sl-delete-obj-btn" id="sl-delete-obj">Delete</button>
+            <button class="sl-delete-obj-btn" id="sl-delete-obj" title="Delete object" aria-label="Delete object"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="1.5" y1="4" x2="12.5" y2="4"/><path d="M4 4l.5 7h5l.5-7"/><path d="M5 4V3h4v1"/></svg></button>
           </div>
           <select class="sl-select" id="sl-model-select">${modelOptions}</select>
           ${isLens ? lensParamRows(obj, true) : sourceParamRows(obj, true)}
         </div>`;
     }
   } else {
-    paramsPanel = `<div class="sl-panel"><div class="sl-empty-msg">Click an object in a plane box to edit its parameters.</div></div>`;
+    paramsPanel = `<div class="sl-panel"><div class="sl-empty-msg">Click an object in the plane card or the image to edit its parameters.</div></div>`;
   }
 
-  // ── Settings tab ─────────────────────────────────────────────────────────────
-  const _sg = _settingsExpanded;
-  const settingsContent = `
+  document.getElementById('sl-obj-panel').innerHTML = paramsPanel;
+
+  if (obj && pl) {
+    const partner = hybridPartner(pl, obj);
+    const isHybrid = !!partner;
+    const lensObj = isHybrid ? (obj.type === 'lens' ? obj : partner) : null;
+    const srcObj  = isHybrid ? (obj.type === 'source' ? obj : partner) : null;
+
+    document.getElementById('sl-toggle-vis')?.addEventListener('click', () => {
+      if (isHybrid) {
+        const newHidden = !(lensObj.hidden && srcObj.hidden);
+        lensObj.hidden = newHidden; srcObj.hidden = newHidden;
+      } else {
+        obj.hidden = !obj.hidden;
+      }
+      renderSidebar(); redraw();
+    });
+    document.getElementById('sl-delete-obj')?.addEventListener('click', deleteSelectedObject);
+
+    if (isHybrid) {
+      // Hybrid: collapsible section toggles
+      document.getElementById('sl-hybrid-lens-hdr')?.addEventListener('click', () => {
+        _hybridExpanded.lens = !_hybridExpanded.lens; renderSidebar();
+      });
+      document.getElementById('sl-hybrid-src-hdr')?.addEventListener('click', () => {
+        _hybridExpanded.src = !_hybridExpanded.src; renderSidebar();
+      });
+      // Keep the ⓘ popovers from toggling the section header they live in.
+      document.getElementById('sl-param-info-lens')?.addEventListener('click', e => e.stopPropagation());
+      document.getElementById('sl-param-info-src')?.addEventListener('click', e => e.stopPropagation());
+      // Per-part show/hide + delete. stopPropagation so the click doesn't also
+      // expand/collapse the section header these buttons sit inside.
+      document.getElementById('sl-part-vis-lens')?.addEventListener('click', e => {
+        e.stopPropagation(); record(); lensObj.hidden = !lensObj.hidden; renderSidebar(); redraw();
+      });
+      document.getElementById('sl-part-vis-src')?.addEventListener('click', e => {
+        e.stopPropagation(); record(); srcObj.hidden = !srcObj.hidden; renderSidebar(); redraw();
+      });
+      document.getElementById('sl-part-del-lens')?.addEventListener('click', e => {
+        e.stopPropagation(); deleteHybridPart(pl, lensObj.id);
+      });
+      document.getElementById('sl-part-del-src')?.addEventListener('click', e => {
+        e.stopPropagation(); deleteHybridPart(pl, srcObj.id);
+      });
+      // Lens section model + params
+      document.getElementById('sl-model-select-lens')?.addEventListener('change', e => {
+        lensObj.model = e.target.value; lensObj.params = defaultParams(lensObj.model);
+        renderPlaneCard(); renderSidebar(); redraw();
+      });
+      document.getElementById('sl-model-select-src')?.addEventListener('change', e => {
+        srcObj.model = e.target.value; srcObj.params = defaultParams(srcObj.model);
+        renderPlaneCard(); renderSidebar(); redraw();
+      });
+      document.getElementById('sl-obj-panel').querySelectorAll('[data-hybrid-section="lens"] input[type="range"][data-param]').forEach(inp => {
+        const valEl = inp.parentElement.querySelector('.sl-param-val');
+        inp.addEventListener('input', () => {
+          const _v = readSliderValue(inp);
+          lensObj.params[inp.dataset.param] = _v;
+          if (valEl) valEl.textContent = fmtP(_v);
+          redraw();
+        });
+      });
+      document.getElementById('sl-obj-panel').querySelectorAll('[data-hybrid-section="src"] input[type="range"][data-param]').forEach(inp => {
+        const valEl = inp.parentElement.querySelector('.sl-param-val');
+        inp.addEventListener('input', () => {
+          const _v = readSliderValue(inp);
+          srcObj.params[inp.dataset.param] = _v;
+          if (valEl) valEl.textContent = fmtP(_v);
+          redraw();
+        });
+      });
+      document.getElementById('sl-obj-panel').querySelectorAll('[data-hybrid-section="src"] input[type="color"][data-param-color]').forEach(inp => {
+        inp.addEventListener('input', () => {
+          const light = document.documentElement.getAttribute('data-theme') !== 'dark';
+          srcObj.params.color = light ? invertHexColor(inp.value) : inp.value;
+          redraw();
+        });
+      });
+      document.getElementById('sl-obj-panel').querySelectorAll('[data-hybrid-section="lens"] input[type="checkbox"]').forEach(inp => {
+        inp.addEventListener('change', () => { lensObj.showShape = inp.checked; redraw(); });
+      });
+      document.getElementById('sl-obj-panel').querySelectorAll('[data-hybrid-section="src"] input[type="checkbox"]').forEach(inp => {
+        inp.addEventListener('change', () => { srcObj.showShape = inp.checked; redraw(); });
+      });
+    } else {
+      document.getElementById('sl-show-shape')?.addEventListener('change', e => { obj.showShape = e.target.checked; redraw(); });
+      document.getElementById('sl-attach-partner')?.addEventListener('click', () => attachPartner(obj, pl));
+      document.getElementById('sl-model-select')?.addEventListener('change', e => {
+        obj.model = e.target.value; obj.params = defaultParams(obj.model);
+        renderPlaneCard(); renderSidebar(); redraw();
+      });
+      document.getElementById('sl-obj-panel').querySelectorAll('input[type="color"][data-param-color]').forEach(inp => {
+        inp.addEventListener('input', () => {
+          const light = document.documentElement.getAttribute('data-theme') !== 'dark';
+          obj.params.color = light ? invertHexColor(inp.value) : inp.value;
+          redraw();
+        });
+      });
+      document.getElementById('sl-obj-panel').querySelectorAll('input[type="range"][data-param]').forEach(inp => {
+        const valEl = inp.parentElement.querySelector('.sl-param-val');
+        inp.addEventListener('input', () => {
+          const _v = readSliderValue(inp);
+          obj.params[inp.dataset.param] = _v;
+          if (valEl) valEl.textContent = fmtP(_v);
+          redraw();
+        });
+      });
+    }
+  }
+}
+
+// ── View tab: display, reference plane, color mapping, Fermat contours ────────
+function renderViewPanel() {
+  const el = document.getElementById('sl-tab-view');
+  if (!el) return;
+  const ezs  = effectiveCritZs();
+  const auto = state.critZs === null;
+
+  el.innerHTML = `
     <div class="sl-panel">
 
+      <label class="sl-hide-all-row" title="Hide every overlay and on-canvas control (markers, curves, legend, ruler, scale bar, colorbar, tool buttons) for a clean plot until switched back off">
+        <input type="checkbox" id="sl-hide-overlays" ${state.hideOverlays?'checked':''}>
+        Hide all overlays
+      </label>
+
       <div class="sl-hybrid-section">
-        <button class="sl-hybrid-hdr" id="sl-settings-hdr-general">
-          <span class="sl-hybrid-arrow">${_sg.general?'▼':'▶'}</span>
-          <span class="sl-panel-title" style="flex:1">General</span>
-        </button>
-        ${_sg.general ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
+        <div class="sl-view-hdr">
+          <span class="sl-panel-title" style="flex:1">Display</span>
+        </div>
+        <div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
           <div class="sl-global-input">
             <label>FOV (″)</label>
             <input type="number" id="sl-fov" min="0.5" max="300" step="0.5" value="${state.fov}">
             <span class="sl-unit">"</span>
           </div>
           <div class="sl-global-input">
-            <label>z<sub>s</sub></label>
-            <input type="number" id="sl-crit-zs-gen" min="0.1" max="15" step="0.1" value="${ezs.toFixed(2)}">
+            <label>z<sub>s</sub> ref</label>
+            <select id="sl-zs-mode" style="flex:0 1 auto;min-width:0">
+              <option value="auto"   ${auto?'selected':''}>Auto</option>
+              <option value="custom" ${auto?'':'selected'}>Custom</option>
+            </select>
+            <input type="number" id="sl-crit-zs-gen" min="0.1" max="15" step="0.1" value="${ezs.toFixed(2)}" ${auto?'disabled':''}>
           </div>
-          <div class="sl-global-input">
-            <label>z<sub>max</sub></label>
-            <input type="number" id="sl-zmax" min="0.1" max="10" step="0.1" value="${state.zMax}">
+          <p class="sl-perf-note" style="margin:2px 0 8px">The source redshift the quantity maps and critical curves refer to. Auto tracks the highest source plane.</p>
+          <div class="sl-checkbox-row">
+            <label><input type="checkbox" id="sl-show-markers" ${state.showMarkers?'checked':''}> Positions</label>
+            <label><input type="checkbox" id="sl-show-legend"  ${state.showLegend ?'checked':''}> Legend</label>
           </div>
           <div class="sl-checkbox-row">
-            <label><input type="checkbox" id="sl-show-markers" ${state.showMarkers?'checked':''}> Show positions</label>
-            <label><input type="checkbox" id="sl-show-legend"  ${state.showLegend ?'checked':''}> Show legend</label>
-            <label><input type="checkbox" id="sl-show-ruler"   ${state.showRuler ?'checked':''}> Show ruler</label>
+            <label><input type="checkbox" id="sl-show-scalebar" ${state.showScaleBar?'checked':''}> Scale bar</label>
+            <label title="${state.vizMode===0?'The lensed image has no colorbar; pick a quantity map to use one':''}"><input type="checkbox" id="sl-show-colorbar" ${state.showColorbar?'checked':''} ${state.vizMode===0?'disabled':''}> Colorbar</label>
           </div>
-        </div>` : ''}
+          <div class="sl-checkbox-row">
+            <label><input type="checkbox" id="sl-show-crit" ${state.showCritCurves?'checked':''}> Critical curves</label>
+            <label><input type="checkbox" id="sl-show-caus" ${state.showCaustics   ?'checked':''}> Caustics</label>
+          </div>
+          <div class="sl-checkbox-row">
+            <label title="Show the L/S/H creation tools on the image. Off: clicking the image only selects or drags; objects are created in the plane viewer"><input type="checkbox" id="sl-show-createtools" ${state.showCreateTools?'checked':''}> Creation tools</label>
+          </div>
+        </div>
       </div>
 
       ${vizModeHasScale(state.vizMode) ? `
       <div class="sl-hybrid-section">
-        <div class="sl-hybrid-hdr" id="sl-settings-hdr-cmap">
-          <span class="sl-hybrid-arrow">${_sg.cmap?'▼':'▶'}</span>
+        <div class="sl-view-hdr">
           <span class="sl-panel-title" style="flex:1">Color Map</span>
-          ${_sg.cmap ? infoSection('sl-cmap-info', cmapInfoHtml(state.vizMode)) : ''}
+          ${infoSection('sl-cmap-info', cmapInfoHtml(state.vizMode))}
         </div>
-        ${_sg.cmap ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
-          ${state.vizMode !== 0 ? `<div class="sl-checkbox-row">
-            <label><input type="checkbox" id="sl-show-colorbar" ${state.showColorbar?'checked':''}> Show colorbar</label>
-          </div>` : ''}
+        <div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
           ${(() => {
             const vs = vizScaleFor(state.vizMode);
             const heading = { 0:'Brightness stretch', 1:'κ color scale', 2:'γ color scale',
@@ -2530,17 +3089,16 @@ function renderSidebar() {
             <button id="sl-viz-reset" type="button" style="font-size:11px;background:none;border:none;color:var(--muted);text-decoration:underline;cursor:pointer;padding:0">Reset to defaults</button>
           </div>`;
           })()}
-        </div>` : ''}
+        </div>
       </div>` : ''}
 
       ${state.vizMode === 6 ? `
       <div class="sl-hybrid-section">
-        <div class="sl-hybrid-hdr" id="sl-settings-hdr-contours">
-          <span class="sl-hybrid-arrow">${_sg.contours?'▼':'▶'}</span>
+        <div class="sl-view-hdr">
           <span class="sl-panel-title" style="flex:1">Fermat Potential</span>
-          ${_sg.contours ? infoSection('sl-contours-info', contourInfoHtml()) : ''}
+          ${infoSection('sl-contours-info', contourInfoHtml())}
         </div>
-        ${_sg.contours ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
+        <div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
           <div class="sl-checkbox-row">
             <label><input type="checkbox" id="sl-fermat-use-src" ${state.fermatUseSourcePos?'checked':''}> Use last selected source for the source position and redshift</label>
           </div>
@@ -2563,65 +3121,121 @@ function renderSidebar() {
           <div style="margin-top:4px">
             <button id="sl-contour-reset" type="button" style="font-size:11px;background:none;border:none;color:var(--muted);text-decoration:underline;cursor:pointer;padding:0">Reset to default</button>
           </div>
-        </div>` : ''}
-      </div>` : ''}
-
-      <div class="sl-hybrid-section">
-        <button class="sl-hybrid-hdr" id="sl-settings-hdr-crit">
-          <span class="sl-hybrid-arrow">${_sg.crit?'▼':'▶'}</span>
-          <span class="sl-panel-title" style="flex:1">Critical Curves</span>
-        </button>
-        ${_sg.crit ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
-          <p class="sl-perf-note" style="margin-bottom:6px">(Can be slow at high resolutions.)</p>
-          <div class="sl-checkbox-row">
-            <label><input type="checkbox" id="sl-show-crit" ${state.showCritCurves?'checked':''}> Critical curves</label>
-            <label><input type="checkbox" id="sl-show-caus" ${state.showCaustics   ?'checked':''}> Caustics</label>
-          </div>
-          <div class="sl-global-input">
-            <label>Resolution</label>
-            <select id="sl-crit-res">
-              <option value="256"  ${state.critGridN===256  ?'selected':''}>Low (256)</option>
-              <option value="512"  ${state.critGridN===512  ?'selected':''}>Medium (512)</option>
-              <option value="1024" ${state.critGridN===1024 ?'selected':''}>High (1024)</option>
-              <option value="2048" ${state.critGridN===2048 ?'selected':''}>Very high (2048)</option>
-            </select>
-          </div>
-        </div>` : ''}
-      </div>
-
-      <div class="sl-hybrid-section">
-        <button class="sl-hybrid-hdr" id="sl-settings-hdr-ps">
-          <span class="sl-hybrid-arrow">${_sg.ps?'▼':'▶'}</span>
-          <span class="sl-panel-title" style="flex:1">Point Source</span>
-        </button>
-        ${_sg.ps ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
-          <p class="sl-perf-note" style="margin-bottom:6px">(Denser grids find fainter images but are slower.)</p>
-          <div class="sl-global-input">
-            <label>Grid density</label>
-            <select id="sl-ps-grid">
-              <option value="150"  ${state.psGridN===150  ?'selected':''}>Coarse (150, fastest)</option>
-              <option value="300"  ${state.psGridN===300  ?'selected':''}>Medium (300)</option>
-              <option value="600"  ${state.psGridN===600  ?'selected':''}>Fine (600)</option>
-              <option value="1200" ${state.psGridN===1200 ?'selected':''}>Very fine (1200, slowest)</option>
-            </select>
-          </div>
-        </div>` : ''}
-      </div>
-
-      <div class="sl-hybrid-section" style="padding-top:8px">
-        <select class="sl-select" id="sl-preset-select" style="margin-bottom:6px" aria-label="Load a preset scene">
-          <option value="" ${_selectedPreset ? '' : 'selected'}>Load a preset scene…</option>
-          ${PRESETS.map(p => `<option value="${p.file}" ${_selectedPreset === p.file ? 'selected' : ''}>${p.name}</option>`).join('')}
-        </select>
-        <div class="sl-capture-row" style="margin-top:0">
-          <button class="sl-capture-btn" id="sl-save-config">↓ Save YAML</button>
-          <button class="sl-capture-btn" id="sl-load-config">↑ Load YAML</button>
-          <input type="file" id="sl-config-file" accept=".yaml,.yml" style="display:none">
         </div>
-      </div>
-    </div>
-    `;
+      </div>` : ''}
+    </div>`;
 
+  const _fovEl = document.getElementById('sl-fov');
+  _fovEl?.addEventListener('change', e => { setFov(parseFloat(e.target.value)); });
+  _attachScrub(_fovEl, { lo: 0.5, hi: 300, onChange: v => setFov(v) });
+  document.getElementById('sl-zs-mode')?.addEventListener('change', e => {
+    state.critZs = e.target.value === 'auto' ? null : effectiveCritZs();
+    renderSidebar(); redraw();
+  });
+  const _zsEl = document.getElementById('sl-crit-zs-gen');
+  _zsEl?.addEventListener('change', e => { const v = parseFloat(e.target.value); if (v > 0) { state.critZs = v; redraw(); } });
+  _attachScrub(_zsEl, { lo: 0.1, hi: 15, onChange: v => { state.critZs = v; redraw(); } });
+  document.getElementById('sl-hide-overlays')?.addEventListener('change', e => {
+    state.hideOverlays = e.target.checked;
+    document.querySelector('.sl-body')?.classList.toggle('sl-hide-ov', state.hideOverlays);
+    if (state.hideOverlays) setCanvasTool('select'); else updateCanvasTools();
+    _updateColorbar(); updateZsChip(); redraw();
+  });
+  document.getElementById('sl-show-createtools')?.addEventListener('change', e => {
+    state.showCreateTools = e.target.checked;
+    // Either direction lands in selection mode (no auto-arm on re-enable);
+    // setCanvasTool also syncs the .sl-no-create class via updateCanvasTools.
+    setCanvasTool('select');
+  });
+  document.getElementById('sl-show-markers')?.addEventListener('change',e => { state.showMarkers = e.target.checked; redraw(); });
+  document.getElementById('sl-show-legend')?.addEventListener('change', e => { state.showLegend  = e.target.checked; redraw(); });
+  document.getElementById('sl-show-scalebar')?.addEventListener('change', e => { state.showScaleBar = e.target.checked; redraw(); });
+  document.getElementById('sl-show-colorbar')?.addEventListener('change', e => { state.showColorbar = e.target.checked; _updateColorbar(); redraw(); });
+  document.getElementById('sl-show-crit')?.addEventListener('change', e => { state.showCritCurves = e.target.checked; redraw(); });
+  document.getElementById('sl-show-caus')?.addEventListener('change', e => { state.showCaustics   = e.target.checked; redraw(); });
+  document.getElementById('sl-viz-scale')?.addEventListener('change', e => {
+    const vs = vizScaleFor(state.vizMode);
+    vs.scale = parseInt(e.target.value, 10);
+    // Give power/asinh a useful starting param when first selected.
+    if (vs.scale === 2 && (vs.param < 0.1 || vs.param > 2.0)) vs.param = 0.5;
+    if (vs.scale === 3 && vs.param < 0.5)                     vs.param = 5.0;
+    renderSidebar(); _updateColorbar(); redraw();
+  });
+  document.getElementById('sl-viz-param')?.addEventListener('input', e => {
+    const vs = vizScaleFor(state.vizMode);
+    vs.param = parseFloat(e.target.value);
+    const v = e.target.parentElement.querySelector('.sl-tone-param-val');
+    if (v) v.textContent = vs.scale === 3 ? vs.param.toFixed(1) : vs.param.toFixed(2);
+    redraw();
+  });
+  document.getElementById('sl-viz-palette')?.addEventListener('change', e => {
+    vizScaleFor(state.vizMode).palette = parseInt(e.target.value, 10);
+    _updateColorbar(); redraw();
+  });
+  // Min/Max limit inputs: type a value, use the (magnitude-aware) spinner, or drag
+  // left/right across the field to scrub it smoothly.
+  const _attachVizLimit = (id, key) => {
+    const inp = document.getElementById(id);
+    if (!inp) return;
+    const apply = (v) => {
+      if (!isFinite(v)) return;
+      v = Math.max(0, v);
+      inp.value = v;
+      vizScaleFor(state.vizMode)[key] = v;
+      _updateColorbar(); redraw();
+    };
+    inp.addEventListener('change', e => apply(parseFloat(e.target.value)));
+    _attachScrub(inp, { lo: 0, onChange: apply });
+  };
+  _attachVizLimit('sl-viz-min', 'min');
+  _attachVizLimit('sl-viz-max', 'max');
+  // Keep the ⓘ popover from toggling the section it lives in.
+  document.getElementById('sl-cmap-info')?.addEventListener('click', e => e.stopPropagation());
+  document.getElementById('sl-viz-reset')?.addEventListener('click', () => {
+    const d = DEFAULT_VIZ_SCALE[state.vizMode];
+    if (d) state.vizScale[state.vizMode] = { ...d };
+    renderSidebar(); _updateColorbar(); redraw();
+  });
+  // Contours section (Fermat mode): spacing scrub input, reset, info popover.
+  document.getElementById('sl-contours-info')?.addEventListener('click', e => e.stopPropagation());
+  const _csEl = document.getElementById('sl-contour-spacing');
+  if (_csEl) {
+    const applyCS = (v) => {
+      if (!isFinite(v)) return;
+      v = Math.max(0.05, v);
+      _csEl.value = v;
+      state.contourSpacing = v;
+      redraw();
+    };
+    _csEl.addEventListener('change', e => applyCS(parseFloat(e.target.value)));
+    _attachScrub(_csEl, { lo: 0.05, hi: 50, onChange: applyCS });
+  }
+  document.getElementById('sl-contour-scale')?.addEventListener('change', e => {
+    state.contourScale = e.target.value === '1' ? 1 : 0;
+    redraw();
+  });
+  document.getElementById('sl-contour-reset')?.addEventListener('click', () => {
+    state.contourSpacing = 1.0; state.contourScale = 0; renderSidebar(); redraw();
+  });
+  document.getElementById('sl-fermat-use-src')?.addEventListener('change', e => {
+    state.fermatUseSourcePos = e.target.checked;
+    renderSidebar(); redraw();
+  });
+}
+
+function _downloadCSV(name, rows) {
+  const blob = new Blob([rows.join('\n') + '\n'], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ── Export tab: capture and recording ─────────────────────────────────────────
+function renderExportPanel() {
+  const el = document.getElementById('sl-tab-export');
+  if (!el) return;
   // Programmatic recording display values.
   const selObj = selectedObj(), selPl = selectedPlane();
   const zLine = (selObj && selPl)
@@ -2717,103 +3331,40 @@ function renderSidebar() {
         </div>` : ''}
       </div>
     </div>`;
+  el.innerHTML = recordingPanel;
 
+  // ── Data (CSV) section: export the most recently computed overlays. ────────
+  const _curves = state._lastCurves;
+  const _psImgs = state._lastPsImages ?? [];
+  el.insertAdjacentHTML('beforeend', `
+    <div class="sl-panel" style="margin-top:10px">
+      <div class="sl-panel-title-row">
+        <span class="sl-panel-title">DATA (CSV)</span>
+        ${infoSection('sl-csv-info', `
+          Exports the most recently computed overlays, with positions in arcseconds.<br><br>
+          <b>Curves</b>: critical-curve and caustic segments, one row per segment, labelled <code>critical</code> or <code>caustic</code>, at the source redshift they were computed for.<br><br>
+          <b>Image positions</b>: the numerically solved point-source image positions.<br><br>
+          Buttons enable once the corresponding overlay has been computed at least once (show critical curves, or add a point source).`)}
+      </div>
+      <div class="sl-capture-row" style="margin-top:6px">
+        <button class="sl-capture-btn" id="sl-csv-curves" ${_curves && (_curves.crit.length || _curves.caus.length) ? '' : 'disabled'}>Curves</button>
+        <button class="sl-capture-btn" id="sl-csv-images" ${_psImgs.length ? '' : 'disabled'}>Image positions</button>
+      </div>
+    </div>`);
+  document.getElementById('sl-csv-curves')?.addEventListener('click', () => {
+    const c = state._lastCurves; if (!c) return;
+    const rows = ['curve,x0_arcsec,y0_arcsec,x1_arcsec,y1_arcsec'];
+    for (const [[x0, y0], [x1, y1]] of c.crit) rows.push(`critical,${x0},${y0},${x1},${y1}`);
+    for (const [[x0, y0], [x1, y1]] of c.caus) rows.push(`caustic,${x0},${y0},${x1},${y1}`);
+    _downloadCSV(`caustica-curves-zs${c.zs.toFixed(2)}.csv`, rows);
+  });
+  document.getElementById('sl-csv-images')?.addEventListener('click', () => {
+    const rows = ['source,x_arcsec,y_arcsec'];
+    for (const im of (state._lastPsImages ?? [])) rows.push(`${im.src},${im.x},${im.y}`);
+    _downloadCSV('caustica-image-positions.csv', rows);
+  });
 
-  document.getElementById('sl-obj-panel').innerHTML     = paramsPanel;
-  document.getElementById('sl-tab-settings').innerHTML  = settingsContent;
-  document.getElementById('sl-tab-recording').innerHTML = recordingPanel;
-
-  const _fovEl = document.getElementById('sl-fov');
-  _fovEl?.addEventListener('change', e => { const v = parseFloat(e.target.value); if (v > 0) { state.fov = v; redraw(); } });
-  _attachScrub(_fovEl, { lo: 0.5, hi: 300, onChange: v => { state.fov = v; redraw(); } });
-  const _zmaxEl = document.getElementById('sl-zmax');
-  _zmaxEl?.addEventListener('change', e => { const v = parseFloat(e.target.value); if (v > 0) { state.zMax = v; drawAxisCanvas(); } });
-  _attachScrub(_zmaxEl, { lo: 0.1, hi: 10, onChange: v => { state.zMax = v; drawAxisCanvas(); } });
-  document.getElementById('sl-prog-section-hdr')?.addEventListener('click',      () => { _progExpanded             = !_progExpanded;             renderSidebar(); });
-  document.getElementById('sl-settings-hdr-general')?.addEventListener('click', () => { _settingsExpanded.general = !_settingsExpanded.general; renderSidebar(); });
-  document.getElementById('sl-settings-hdr-cmap')?.addEventListener('click',    () => { _settingsExpanded.cmap    = !_settingsExpanded.cmap;    renderSidebar(); });
-  document.getElementById('sl-settings-hdr-contours')?.addEventListener('click',() => { _settingsExpanded.contours= !_settingsExpanded.contours;renderSidebar(); });
-  document.getElementById('sl-settings-hdr-crit')?.addEventListener('click',    () => { _settingsExpanded.crit    = !_settingsExpanded.crit;    renderSidebar(); });
-  document.getElementById('sl-settings-hdr-ps')?.addEventListener('click',      () => { _settingsExpanded.ps      = !_settingsExpanded.ps;      renderSidebar(); });
-  document.getElementById('sl-show-markers')?.addEventListener('change',e => { state.showMarkers = e.target.checked; redraw(); });
-  document.getElementById('sl-show-legend')?.addEventListener('change', e => { state.showLegend  = e.target.checked; redraw(); });
-  document.getElementById('sl-show-ruler')?.addEventListener('change', e => {
-    state.showRuler = e.target.checked;
-    if (!state.showRuler) state.rulerActive = false;  // hidden tool can't stay armed
-    updateRulerUI();
-    const wrap = document.getElementById('sl-image-wrap');
-    if (wrap && !state.rulerActive) wrap.style.cursor = '';
-    drawOverlay();
-  });
-  document.getElementById('sl-show-colorbar')?.addEventListener('change', e => { state.showColorbar = e.target.checked; _updateColorbar(); });
-  document.getElementById('sl-viz-scale')?.addEventListener('change', e => {
-    const vs = vizScaleFor(state.vizMode);
-    vs.scale = parseInt(e.target.value, 10);
-    // Give power/asinh a useful starting param when first selected.
-    if (vs.scale === 2 && (vs.param < 0.1 || vs.param > 2.0)) vs.param = 0.5;
-    if (vs.scale === 3 && vs.param < 0.5)                     vs.param = 5.0;
-    renderSidebar(); _updateColorbar(); redraw();
-  });
-  document.getElementById('sl-viz-param')?.addEventListener('input', e => {
-    const vs = vizScaleFor(state.vizMode);
-    vs.param = parseFloat(e.target.value);
-    const v = e.target.parentElement.querySelector('.sl-tone-param-val');
-    if (v) v.textContent = vs.scale === 3 ? vs.param.toFixed(1) : vs.param.toFixed(2);
-    redraw();
-  });
-  document.getElementById('sl-viz-palette')?.addEventListener('change', e => {
-    vizScaleFor(state.vizMode).palette = parseInt(e.target.value, 10);
-    _updateColorbar(); redraw();
-  });
-  // Min/Max limit inputs: type a value, use the (magnitude-aware) spinner, or drag
-  // left/right across the field to scrub it smoothly.
-  const _attachVizLimit = (id, key) => {
-    const inp = document.getElementById(id);
-    if (!inp) return;
-    const apply = (v) => {
-      if (!isFinite(v)) return;
-      v = Math.max(0, v);
-      inp.value = v;
-      vizScaleFor(state.vizMode)[key] = v;
-      _updateColorbar(); redraw();
-    };
-    inp.addEventListener('change', e => apply(parseFloat(e.target.value)));
-    _attachScrub(inp, { lo: 0, onChange: apply });
-  };
-  _attachVizLimit('sl-viz-min', 'min');
-  _attachVizLimit('sl-viz-max', 'max');
-  // Keep the ⓘ popover from toggling the section it lives in.
-  document.getElementById('sl-cmap-info')?.addEventListener('click', e => e.stopPropagation());
-  document.getElementById('sl-viz-reset')?.addEventListener('click', () => {
-    const d = DEFAULT_VIZ_SCALE[state.vizMode];
-    if (d) state.vizScale[state.vizMode] = { ...d };
-    renderSidebar(); _updateColorbar(); redraw();
-  });
-  // Contours section (Fermat mode): spacing scrub input, reset, info popover.
-  document.getElementById('sl-contours-info')?.addEventListener('click', e => e.stopPropagation());
-  const _csEl = document.getElementById('sl-contour-spacing');
-  if (_csEl) {
-    const applyCS = (v) => {
-      if (!isFinite(v)) return;
-      v = Math.max(0.05, v);
-      _csEl.value = v;
-      state.contourSpacing = v;
-      redraw();
-    };
-    _csEl.addEventListener('change', e => applyCS(parseFloat(e.target.value)));
-    _attachScrub(_csEl, { lo: 0.05, hi: 50, onChange: applyCS });
-  }
-  document.getElementById('sl-contour-scale')?.addEventListener('change', e => {
-    state.contourScale = e.target.value === '1' ? 1 : 0;
-    redraw();
-  });
-  document.getElementById('sl-contour-reset')?.addEventListener('click', () => {
-    state.contourSpacing = 1.0; state.contourScale = 0; renderSidebar(); redraw();
-  });
-  document.getElementById('sl-fermat-use-src')?.addEventListener('change', e => {
-    state.fermatUseSourcePos = e.target.checked;
-    renderSidebar(); redraw();
-  });
+  document.getElementById('sl-prog-section-hdr')?.addEventListener('click', () => { _progExpanded = !_progExpanded; renderSidebar(); });
   document.getElementById('sl-snapshot-btn')?.addEventListener('click', captureSnapshot);
   document.getElementById('sl-rec-btn')?.addEventListener('click', () => { recState.active ? stopRecording() : startRecording(); });
   document.getElementById('sl-rec-fps')?.addEventListener('change', e => { recState.fps = parseInt(e.target.value, 10); });
@@ -2827,138 +3378,6 @@ function renderSidebar() {
   document.getElementById('sl-prog-list')?.querySelectorAll('.sl-prog-remove').forEach(btn => {
     btn.addEventListener('click', () => removeFromProgram(btn.dataset.id));
   });
-  document.getElementById('sl-crit-res')?.addEventListener('change', e => { state.critGridN = parseInt(e.target.value, 10); redraw(); });
-  document.getElementById('sl-ps-grid')?.addEventListener('change',  e => { state.psGridN = parseInt(e.target.value, 10); redraw(); });
-  document.getElementById('sl-crit-zs')?.addEventListener('change',     e => { const v = parseFloat(e.target.value); if (v > 0) { state.critZs = v; redraw(); } });
-  const _zsEl = document.getElementById('sl-crit-zs-gen');
-  _zsEl?.addEventListener('change', e => { const v = parseFloat(e.target.value); if (v > 0) { state.critZs = v; redraw(); } });
-  _attachScrub(_zsEl, { lo: 0.1, hi: 15, onChange: v => { state.critZs = v; redraw(); } });
-  document.getElementById('sl-show-crit')?.addEventListener('change', e => { state.showCritCurves = e.target.checked; redraw(); });
-  document.getElementById('sl-show-caus')?.addEventListener('change', e => { state.showCaustics   = e.target.checked; redraw(); });
-  document.getElementById('sl-save-config')?.addEventListener('click', saveConfig);
-  document.getElementById('sl-load-config')?.addEventListener('click', () => {
-    document.getElementById('sl-config-file')?.click();
-  });
-  document.getElementById('sl-config-file')?.addEventListener('change', e => {
-    const file = e.target.files?.[0]; if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => { _selectedPreset = ''; loadConfigFromYaml(ev.target.result); }; // custom file: clear preset label
-    reader.readAsText(file);
-    e.target.value = ''; // reset so same file can be loaded again
-  });
-  document.getElementById('sl-preset-select')?.addEventListener('change', e => {
-    const file = e.target.value;
-    if (file) loadPreset(file);
-    else renderSidebar(); // placeholder re-chosen: restore the current label
-  });
-
-  if (obj && pl) {
-    const partner = hybridPartner(pl, obj);
-    const isHybrid = !!partner;
-    const lensObj = isHybrid ? (obj.type === 'lens' ? obj : partner) : null;
-    const srcObj  = isHybrid ? (obj.type === 'source' ? obj : partner) : null;
-
-    document.getElementById('sl-toggle-vis')?.addEventListener('click', () => {
-      if (isHybrid) {
-        const newHidden = !(lensObj.hidden && srcObj.hidden);
-        lensObj.hidden = newHidden; srcObj.hidden = newHidden;
-      } else {
-        obj.hidden = !obj.hidden;
-      }
-      renderSidebar(); redraw();
-    });
-    document.getElementById('sl-delete-obj')?.addEventListener('click', deleteSelectedObject);
-
-    if (isHybrid) {
-      // Hybrid: collapsible section toggles
-      document.getElementById('sl-hybrid-lens-hdr')?.addEventListener('click', () => {
-        _hybridExpanded.lens = !_hybridExpanded.lens; renderSidebar();
-      });
-      document.getElementById('sl-hybrid-src-hdr')?.addEventListener('click', () => {
-        _hybridExpanded.src = !_hybridExpanded.src; renderSidebar();
-      });
-      // Keep the ⓘ popovers from toggling the section header they live in.
-      document.getElementById('sl-param-info-lens')?.addEventListener('click', e => e.stopPropagation());
-      document.getElementById('sl-param-info-src')?.addEventListener('click', e => e.stopPropagation());
-      // Per-part show/hide + delete. stopPropagation so the click doesn't also
-      // expand/collapse the section header these buttons sit inside.
-      document.getElementById('sl-part-vis-lens')?.addEventListener('click', e => {
-        e.stopPropagation(); record(); lensObj.hidden = !lensObj.hidden; renderSidebar(); redraw();
-      });
-      document.getElementById('sl-part-vis-src')?.addEventListener('click', e => {
-        e.stopPropagation(); record(); srcObj.hidden = !srcObj.hidden; renderSidebar(); redraw();
-      });
-      document.getElementById('sl-part-del-lens')?.addEventListener('click', e => {
-        e.stopPropagation(); deleteHybridPart(pl, lensObj.id);
-      });
-      document.getElementById('sl-part-del-src')?.addEventListener('click', e => {
-        e.stopPropagation(); deleteHybridPart(pl, srcObj.id);
-      });
-      // Lens section model + params
-      document.getElementById('sl-model-select-lens')?.addEventListener('change', e => {
-        lensObj.model = e.target.value; lensObj.params = defaultParams(lensObj.model);
-        rebuildPlaneBoxes(); renderSidebar(); redraw();
-      });
-      document.getElementById('sl-model-select-src')?.addEventListener('change', e => {
-        srcObj.model = e.target.value; srcObj.params = defaultParams(srcObj.model);
-        rebuildPlaneBoxes(); renderSidebar(); redraw();
-      });
-      document.getElementById('sl-obj-panel').querySelectorAll('[data-hybrid-section="lens"] input[type="range"][data-param]').forEach(inp => {
-        const valEl = inp.parentElement.querySelector('.sl-param-val');
-        inp.addEventListener('input', () => {
-          const _v = readSliderValue(inp);
-          lensObj.params[inp.dataset.param] = _v;
-          if (valEl) valEl.textContent = fmtP(_v);
-          redraw();
-        });
-      });
-      document.getElementById('sl-obj-panel').querySelectorAll('[data-hybrid-section="src"] input[type="range"][data-param]').forEach(inp => {
-        const valEl = inp.parentElement.querySelector('.sl-param-val');
-        inp.addEventListener('input', () => {
-          const _v = readSliderValue(inp);
-          srcObj.params[inp.dataset.param] = _v;
-          if (valEl) valEl.textContent = fmtP(_v);
-          redraw();
-        });
-      });
-      document.getElementById('sl-obj-panel').querySelectorAll('[data-hybrid-section="src"] input[type="color"][data-param-color]').forEach(inp => {
-        inp.addEventListener('input', () => {
-          const light = document.documentElement.getAttribute('data-theme') !== 'dark';
-          srcObj.params.color = light ? invertHexColor(inp.value) : inp.value;
-          redraw();
-        });
-      });
-      document.getElementById('sl-obj-panel').querySelectorAll('[data-hybrid-section="lens"] input[type="checkbox"]').forEach(inp => {
-        inp.addEventListener('change', () => { lensObj.showShape = inp.checked; redraw(); });
-      });
-      document.getElementById('sl-obj-panel').querySelectorAll('[data-hybrid-section="src"] input[type="checkbox"]').forEach(inp => {
-        inp.addEventListener('change', () => { srcObj.showShape = inp.checked; redraw(); });
-      });
-    } else {
-      document.getElementById('sl-show-shape')?.addEventListener('change', e => { obj.showShape = e.target.checked; redraw(); });
-      document.getElementById('sl-attach-partner')?.addEventListener('click', () => attachPartner(obj, pl));
-      document.getElementById('sl-model-select')?.addEventListener('change', e => {
-        obj.model = e.target.value; obj.params = defaultParams(obj.model);
-        rebuildPlaneBoxes(); renderSidebar(); redraw();
-      });
-      document.getElementById('sl-obj-panel').querySelectorAll('input[type="color"][data-param-color]').forEach(inp => {
-        inp.addEventListener('input', () => {
-          const light = document.documentElement.getAttribute('data-theme') !== 'dark';
-          obj.params.color = light ? invertHexColor(inp.value) : inp.value;
-          redraw();
-        });
-      });
-      document.getElementById('sl-obj-panel').querySelectorAll('input[type="range"][data-param]').forEach(inp => {
-        const valEl = inp.parentElement.querySelector('.sl-param-val');
-        inp.addEventListener('input', () => {
-          const _v = readSliderValue(inp);
-          obj.params[inp.dataset.param] = _v;
-          if (valEl) valEl.textContent = fmtP(_v);
-          redraw();
-        });
-      });
-    }
-  }
 }
 
 function fmtP(v) {
@@ -3045,7 +3464,7 @@ function attachPartner(obj, plane) {
   // Open the newly-added partner's section so its controls are immediately visible.
   _lastHybridId   = hybridId;
   _hybridExpanded = { lens: partnerType === 'lens', src: partnerType === 'source' };
-  updatePlaneBoxColor(plane); redrawPlaneCanvas(plane); renderSidebar(); redraw();
+  renderPlaneCard(); renderSidebar(); redraw();
 }
 
 function lensParamRows(obj, showAttach) {
@@ -3195,7 +3614,7 @@ function drawAxisCanvas() {
   // is what keeps the timeline looking identical across mobile widths.
   const BELOW = 30;   // px below the axis for tick + L/S labels (tight, so the caption sits close)
   const ABOVE = 20;   // just the diamond above the axis (z-numbers sit beside it on mobile)
-  let BUMP_STEP = 28;
+  let BUMP_STEP = 36;
   let axisY;
   if (_mobAxis) {
     if (maxLv > 0) BUMP_STEP = Math.min(28, Math.max(6, (Hl - BELOW - ABOVE - 2) / maxLv));
@@ -3203,7 +3622,10 @@ function drawAxisCanvas() {
     axisY = Math.round((Hl + upExtent - BELOW) / 2);
     axisY = Math.min(Math.max(axisY, upExtent + 1), Hl - BELOW - 1);
   } else {
-    axisY = Hl * 0.55;
+    // Markers sit on the line, so put the baseline low and give bumped markers
+    // real clearance; the step shrinks adaptively if the stack gets deep.
+    axisY = Hl - 33;
+    if (maxLv > 0) BUMP_STEP = Math.min(36, Math.max(8, (axisY - 16) / maxLv));
   }
   _axisBaselineY = axisY; _axisBumpStep = BUMP_STEP;  // share with nearestMarker hit-testing
 
@@ -3229,14 +3651,16 @@ function drawAxisCanvas() {
     const lv   = planeLevel.get(plane.id) || 0;
     const dy   = lv * BUMP_STEP;   // extra upward shift
 
-    // Connecting line from axis up to diamond base when bumped
+    // Markers sit ON the axis line by default (lv 0) and bump upward only to
+    // dodge overlapping neighbours. Bumped markers keep a dashed leader line
+    // down to their true position on the axis.
     ctx.strokeStyle = col;
     ctx.lineWidth   = sel ? 2 : 1.5;
     if (lv > 0) {
       ctx.save();
       ctx.globalAlpha = 0.45;
       ctx.setLineDash([2, 3]);
-      ctx.beginPath(); ctx.moveTo(x, axisY - 4); ctx.lineTo(x, axisY - 6 - dy); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x, axisY - 4); ctx.lineTo(x, axisY + 6 - dy); ctx.stroke();
       ctx.setLineDash([]);
       ctx.restore();
     }
@@ -3245,21 +3669,31 @@ function drawAxisCanvas() {
     ctx.strokeStyle = col; ctx.lineWidth = sel ? 2 : 1.5;
     ctx.beginPath(); ctx.moveTo(x, axisY - 4); ctx.lineTo(x, axisY + 4); ctx.stroke();
 
-    // Diamond
+    // Diamond (centred on the axis when not bumped)
     ctx.fillStyle = col;
-    const dTop = axisY - 18 - dy, dMid = axisY - 12 - dy, dBot = axisY - 6 - dy;
+    const dTop = axisY - 6 - dy, dMid = axisY - dy, dBot = axisY + 6 - dy;
     ctx.beginPath();
     ctx.moveTo(x, dTop); ctx.lineTo(x+5, dMid); ctx.lineTo(x, dBot); ctx.lineTo(x-5, dMid);
     ctx.closePath(); ctx.fill();
 
+    // Selection: a ring around the diamond, matching the plane card's marker ring.
+    if (sel) {
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(x, dMid - 9.5); ctx.lineTo(x + 8, dMid); ctx.lineTo(x, dMid + 9.5); ctx.lineTo(x - 8, dMid);
+      ctx.closePath(); ctx.stroke();
+    }
+
     // z label: beside the diamond on mobile (saves vertical space), above on desktop.
-    ctx.font = '9.5px system-ui, sans-serif';
+    ctx.font = sel ? 'bold 9.5px system-ui, sans-serif' : '9.5px system-ui, sans-serif';
     if (_mobAxis) {
       ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-      ctx.fillText(plane.z.toFixed(2), x + 7, dMid);
+      ctx.fillText(plane.z.toFixed(2), x + (sel ? 10 : 7), dMid);
     } else {
+      // dMid - 13 clears the selection ring (which reaches dMid - 9.5).
       ctx.textAlign = 'center';
-      ctx.fillText(plane.z.toFixed(2), x, dTop - 3);
+      ctx.fillText(plane.z.toFixed(2), x, dMid - 13);
     }
     ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';  // reset for the L/S tag
 
@@ -3506,12 +3940,17 @@ function drawOverlay() {
   overlayCtx.clearRect(0, 0, W, H);
 
   const hasLens     = state.planes.some(p => p.objects.some(o => o.type === 'lens'));
-  const needCurve   = (state.showCritCurves || state.showCaustics) && state.dist && hasLens;
-  const needEllipse      = state.planes.some(pl => pl.objects.some(o => o.showShape));
+  // The hide-overlays master switch (View tab) suppresses every annotation for
+  // a clean plot; point-source image circles stay, since they ARE the lensed light.
+  const hideOv = state.hideOverlays;
+  const showMk = state.showMarkers && !hideOv;
+  const needCurve   = (state.showCritCurves || state.showCaustics) && state.dist && hasLens && !hideOv;
+  const needEllipse      = !hideOv && state.planes.some(pl => pl.objects.some(o => o.showShape));
   const needPointSources = state.planes.some(pl => pl.objects.some(o => o.type === 'source' && o.model === 'pointsource' && !o.hidden));
-  const needFermatPts = state.fermatPoints && state.fermatPoints.length > 0;
-  const needRuler = state.showRuler && ((state.rulers && state.rulers.length) || state.rulerDraft);
-  if (!needCurve && !state.showMarkers && !needEllipse && !needPointSources && !needFermatPts && !needRuler) return;
+  const needFermatPts = !hideOv && state.fermatPoints && state.fermatPoints.length > 0;
+  const needRuler = !hideOv && state.showRuler && ((state.rulers && state.rulers.length) || state.rulerDraft);
+  const needScale = state.showScaleBar && !hideOv;
+  if (!needCurve && !showMk && !needEllipse && !needPointSources && !needFermatPts && !needRuler && !needScale) return;
 
   const Wl = W/dpr, Hl = H/dpr;
   overlayCtx.save();
@@ -3522,10 +3961,12 @@ function drawOverlay() {
   }
 
   // ── Point source image circles ─────────────────────────────────────────────────────
+  const _psAll = [];  // collected for the Data tab's CSV export
   for (const plane of state.planes) {
     for (const obj of plane.objects) {
       if (obj.type !== 'source' || obj.model !== 'pointsource' || obj.hidden) continue;
       const imagePositions = findPointSourceImages(obj, plane);
+      for (const [tx, ty] of imagePositions) _psAll.push({ src: obj.id, x: tx, y: ty });
       const r_px = Math.max((obj.params.sigma ?? 0.05) / state.fov * Wl, 2.5);
       const dark = document.documentElement.getAttribute('data-theme') === 'dark';
       const storedColor = obj.params.color ?? '#ffffff';
@@ -3541,6 +3982,7 @@ function drawOverlay() {
       overlayCtx.globalAlpha = 1;
     }
   }
+  state._lastPsImages = _psAll;
 
   // ── 0. Shape ellipses / shear arrow (drawn first, behind markers) ────────────
   if (needEllipse) {
@@ -3662,7 +4104,7 @@ function drawOverlay() {
   }
 
   // ── 1. Position markers: same style as the plane-view canvases ─────────────
-  if (state.showMarkers) {
+  if (showMk) {
     const RAD = window.innerWidth <= 640 ? 10 : 6;
     const drawnHybrids = new Set();
     for (const plane of state.planes) {
@@ -3704,6 +4146,7 @@ function drawOverlay() {
     );
     critSegs = res.critSegments;
     causSegs = res.causticSegments;
+    state._lastCurves = { zs: effectiveCritZs(), crit: critSegs, caus: causSegs };
 
     overlayCtx.lineWidth = 1.3;
     function drawSegs(segs, color) {
@@ -3742,7 +4185,7 @@ function drawOverlay() {
   const legendItems = [];
   if (state.showCritCurves && hasLens) legendItems.push({ color: CRIT_COLOR, label: 'Critical curves', isLine: true });
   if (state.showCaustics   && hasLens) legendItems.push({ color: CAUS_COLOR, label: 'Caustics',        isLine: true });
-  if (state.showMarkers) {
+  if (showMk) {
     const hasLensObj   = state.planes.some(p => p.objects.some(o => o.type === 'lens'   && !o.hybridId));
     const hasSrcObj    = state.planes.some(p => p.objects.some(o => o.type === 'source' && !o.hybridId));
     const hasHybridObj = state.planes.some(p => p.objects.some(o => o.hybridId));
@@ -3751,7 +4194,7 @@ function drawOverlay() {
     if (hasHybridObj) legendItems.push({ color: typeColorHex('hybrid'), label: 'Hybrid', isDot: true, markerType: 'hybrid' });
   }
 
-  if (state.showLegend && legendItems.length > 0) {
+  if (state.showLegend && !hideOv && legendItems.length > 0) {
     const _mob  = window.innerWidth <= 640;
     const lx = 8, ly = 8;
     const lineH = _mob ? 20 : 28, padV = _mob ? 7 : 11, padH = _mob ? 10 : 14;
@@ -3781,7 +4224,7 @@ function drawOverlay() {
 
   // ── 4. Fermat potential stationary point markers + legend ─────────────────────
   // Type 1 = minimum (circle), Type 2 = saddle (diamond), Type 3 = maximum (triangle)
-  if (state.vizMode === 6) {
+  if (state.vizMode === 6 && !hideOv) {
     const dark = document.documentElement.getAttribute('data-theme') === 'dark';
     const typeColor = t => t === 2 ? '#FF6B35' : (t === 3 ? '#CC44FF' : (dark ? '#FFE600' : '#1144DD'));
     const typeLabel = t => t === 2 ? 'II' : (t === 3 ? 'III' : 'I');
@@ -3808,7 +4251,7 @@ function drawOverlay() {
       const boxW   = padH * 2 + rowW;
       const boxH   = legendTypes.length * lineH + padV * 2;
       const bx     = Wl - boxW - 8;
-      const by     = Hl - boxH - 8;
+      const by     = Hl - boxH - 44;   // 44px clears the zoom cluster (bottom-right chrome)
 
       overlayCtx.textBaseline = 'middle';
       overlayCtx.textAlign    = 'left';
@@ -3967,6 +4410,30 @@ function drawOverlay() {
     }
   }
 
+  // ── 6. Angular scale bar (bottom, centred) ───────────────────────────────────
+  // Length snaps to a round value as the FOV changes: 1″ (fov ≤ 6), 2″ (≤ 10),
+  // 5″ (≤ 30), 10″ above. Drawn on the overlay, so it appears in captures.
+  if (needScale) {
+    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const s    = state.fov <= 6 ? 1 : state.fov <= 10 ? 2 : state.fov <= 30 ? 5 : 10;
+    const wpx  = s / state.fov * Wl;
+    const y    = Hl - 14;
+    const x0   = (Wl - wpx) / 2, x1 = x0 + wpx;
+    const col  = dark ? '#ffffff' : '#000000';
+    overlayCtx.strokeStyle = col;
+    overlayCtx.lineWidth   = 1.5;
+    overlayCtx.beginPath();
+    overlayCtx.moveTo(x0, y); overlayCtx.lineTo(x1, y);          // bar
+    overlayCtx.moveTo(x0, y - 4); overlayCtx.lineTo(x0, y + 4);  // end caps
+    overlayCtx.moveTo(x1, y - 4); overlayCtx.lineTo(x1, y + 4);
+    overlayCtx.stroke();
+    overlayCtx.fillStyle    = col;
+    overlayCtx.font         = `${window.innerWidth <= 640 ? 11 : 12}px system-ui, -apple-system, sans-serif`;
+    overlayCtx.textAlign    = 'center';
+    overlayCtx.textBaseline = 'bottom';
+    overlayCtx.fillText(`${s}″`, (x0 + x1) / 2, y - 5);
+  }
+
   overlayCtx.restore();
 }
 
@@ -4000,7 +4467,7 @@ function _updateColorbar() {
   const ttl   = document.getElementById('sl-colorbar-title');
   if (!bar) return;
   const info = _VIZ_COLORBAR[state.vizMode];
-  if (!info || !state.showColorbar) { bar.style.display = 'none'; return; }
+  if (!info || !state.showColorbar || state.hideOverlays) { bar.style.display = 'none'; return; }
   const dark = document.documentElement.getAttribute('data-theme') === 'dark';
   const vs   = vizScaleFor(state.vizMode);
   const pal  = vs.palette ?? 0;
@@ -4181,6 +4648,8 @@ function _doRedraw() {
   drawOverlay();
   reportPerf(performance.now() - _t0);
   reportObjectCap();
+  updateOverlayChips();
+  updateZsChip();
 }
 
 // ── Capture & recording ───────────────────────────────────────────────────────
@@ -4568,30 +5037,17 @@ function _initGifEncoder(fps, liveCanvas) {
 
 // ── Tour / tutorial ───────────────────────────────────────────────────────────
 
-// Switch the mobile tab bar (Object / Settings / Recording / Planes). Drives the
-// .sl-body[data-mobile-tab] attribute the mobile CSS reads to show one panel (or
-// the plane-setup timeline) at a time. Inert on desktop: the tab bar is hidden and
-// the attribute-gated rules live inside the mobile media query.
-function setMobileTab(tab) {
-  document.querySelector('.sl-body').dataset.mobileTab = tab;
-  document.querySelectorAll('.sl-mobile-tab-btn').forEach(b =>
-    b.classList.toggle('active', b.dataset.tab === tab));
-  // Keep the desktop sidebar's Settings/Recording sub-tabs in sync.
-  if (tab === 'settings' || tab === 'recording') {
-    activeTab = tab;
-    document.querySelectorAll('.sl-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-    document.getElementById('sl-tab-settings').style.display  = tab === 'settings'  ? '' : 'none';
-    document.getElementById('sl-tab-recording').style.display = tab === 'recording' ? '' : 'none';
-  }
-  // The axis canvas can't measure itself while hidden; redraw once the tab reveals it.
-  if (tab === 'planes') requestAnimationFrame(drawAxisCanvas);
+// Tour helpers: the plane setup lives in the Scene tab (with the timeline shown
+// alongside it on mobile), so "opening" it just selects that tab.
+function _tourOpenPlaneSetup()  { setRailTab('scene'); }
+function _tourClosePlaneSetup() { setRailTab('scene'); }
+function _tourSetTab(tab)       { setRailTab(tab); }
+// On mobile the rail sits below the image; scroll the image back into view for
+// steps that talk about it.
+function _tourShowImage() {
+  if (window.innerWidth <= 640)
+    document.getElementById('sl-image-wrap')?.scrollIntoView({ block: 'start' });
 }
-
-// Tour helpers (mobile): the plane setup now lives in the "Planes" tab, so
-// "opening" it just selects that tab and "closing" returns to the Object tab.
-function _tourOpenPlaneSetup()  { if (window.innerWidth <= 640) setMobileTab('planes'); }
-function _tourClosePlaneSetup() { if (window.innerWidth <= 640) setMobileTab('object'); }
-function _tourSetMobileTab(tab) { if (window.innerWidth <= 640) setMobileTab(tab); }
 
 // Set the visualization mode and sync the dropdown, colorbar, and canvas class.
 function _tourSetViz(mode) {
@@ -4608,36 +5064,35 @@ const TOUR_STEPS = [
     onEnter: _tourOpenPlaneSetup,
     arrow: 'above',
     label: 'Redshift timeline',
-    text: 'This axis is your line of sight, from the observer at z = 0 out to high redshift. Click anywhere on it to add a plane at that redshift, and drag a marker to move a plane along the line of sight.',
+    text: 'This axis is your line of sight, from the observer at z = 0 out to high redshift. Click anywhere on it to add a plane at that redshift, drag a marker to move a plane along the line of sight, and click a marker to select that plane.',
   },
   {
-    target: '.sl-planes',
+    target: '#sl-plane-card',
     onEnter: _tourOpenPlaneSetup,
-    arrow: 'above',
+    arrow: 'left',
     label: 'Plane viewer',
-    text: 'Each plane is a slice of the sky at its redshift, shown here as a panel. Click an object to select it, or drag to move it. On each panel, the <b>○</b> button (key <kbd>O</kbd>) clears the plane and the <b>×</b> button (key <kbd>X</kbd>) deletes it.',
+    text: 'The selected plane is a slice of the sky at its redshift, shown here. Click to place an object, or drag one to move it. The <b>‹ ›</b> arrows (or a horizontal swipe on touch) step through the planes; the <b>z</b> field retunes the redshift, <b>○</b> (key <kbd>O</kbd>) clears the plane, and <b>×</b> (key <kbd>X</kbd>) deletes it.',
   },
   {
-    target: '#sl-plane-toolbar',
-    onEnter: _tourOpenPlaneSetup,
+    target: '#sl-canvas-tools',
+    onEnter: _tourClosePlaneSetup,
     arrow: 'right',
     label: 'Add tools',
-    text: 'These buttons set what a click in a plane creates: a <b>Lens</b> that bends light, a <b>Source</b> that emits it, or a <b>Hybrid</b> that does both. Keys <kbd>1</kbd>, <kbd>2</kbd>, <kbd>3</kbd> switch between them, and the trash button removes the selected object.',
+    text: 'Pick what to create: a <b>Lens</b> that bends light, a <b>Source</b> that emits it, or a <b>Hybrid</b> that does both. With a tool armed, click anywhere on the image to place the object in the selected plane, then drag to position it. Keys <kbd>1</kbd>, <kbd>2</kbd>, <kbd>3</kbd> arm the tools; the arrow (or <kbd>Esc</kbd>) returns to selecting.',
   },
   {
     target: '#sl-obj-panel',
-    mobileTarget: '#sl-obj-panel',
-    onEnter: () => { _tourClosePlaneSetup(); _tourSetMobileTab('object'); },
+    onEnter: () => { _tourSetTab(window.innerWidth <= 640 ? 'object' : 'scene'); },
     arrow: 'left',
     label: 'Object controls',
     text: 'Select any object to edit it here. The dropdown sets the objects mass or light profile shape. The <b>ⓘ</b> button explains each parameter for a given profile, and <kbd>H</kbd> can be used to hide the selected object temporarily.',
   },
   {
     target: '#sl-image-wrap',
-    onEnter: _tourClosePlaneSetup,
+    onEnter: () => { _tourClosePlaneSetup(); _tourShowImage(); },
     arrow: 'right',
     label: 'Lensed image',
-    text: 'This is what the observer at z = 0 sees. Light from every source is bent by all the lenses in front of it, with full multiplane lensing. Drag objects here or in the plane panels and the image updates in real time.',
+    text: 'This is what the observer at z = 0 sees. Light from every source is bent by all the lenses in front of it, with full multiplane lensing. Drag objects here or in the plane viewer and the image updates in real time. Zoom with the mouse wheel or a two-finger pinch; the scale bar at the bottom keeps track of the angular scale.',
   },
   {
     target: '#sl-image-wrap',
@@ -4646,10 +5101,11 @@ const TOUR_STEPS = [
       state.showCritCurves = true;
       state.showCaustics   = true;
       _tourSetViz(0);
+      _tourShowImage();
     },
     arrow: 'right',
     label: 'Critical curves',
-    text: 'The <b>Critical curves</b> are where magnification formally diverges, and the <b>caustics</b> are the critical curves mapped onto the source plane. Press <kbd>C</kbd> to toggle them, or use the Critical Curves section in Settings.',
+    text: 'The <b>Critical curves</b> are where magnification formally diverges, and the <b>caustics</b> are the critical curves mapped onto the source plane. Press <kbd>C</kbd> to toggle them, use the chips beside the view dropdown, or the View tab.',
   },
   {
     target: '#sl-viz-mode',
@@ -4658,33 +5114,39 @@ const TOUR_STEPS = [
       state.showCritCurves = false;
       state.showCaustics   = false;
       _tourSetViz(6);
+      _tourShowImage();
     },
     arrow: 'below',
     label: 'Lensing quantities',
     text: 'This dropdown maps a lensing quantity across the field: convergence κ, shear γ, magnification |μ|, deflection |α|, or the <b>Fermat potential φ</b> shown here. Its contours trace light arrival time, and the marked points are the images of the source (a minimum, saddle, or maximum of that surface). Press <kbd>I</kbd> to return to the lensed image.',
   },
   {
-    target: '.sl-tab-btn[data-tab="settings"]',
-    mobileTarget: '.sl-mobile-tab-btn[data-tab="settings"]',
-    onEnter: () => { _tourClosePlaneSetup(); _tourSetMobileTab('settings'); _tourSetViz(0); },
+    target: '.sl-rail-tab-btn[data-tab="view"]',
+    onEnter: () => { _tourSetTab('view'); _tourSetViz(0); },
     arrow: 'left',
-    label: 'Settings',
-    text: 'Settings holds the field of view, maximum redshift, and tone mapping, along with preset interesting lensing configurations and the resolution of certain numerically solved elements like critical curves or point source lensed image positions.',
+    label: 'View tab',
+    text: 'View holds everything about how the scene is displayed: the field of view, the reference source redshift z<sub>s</sub> used by the quantity maps and critical curves, overlay toggles, and the color mapping / brightness stretch. The <b>Quality</b> tab beside it holds resolution and performance settings.',
   },
   {
-    target: '.sl-tab-btn[data-tab="recording"]',
-    mobileTarget: '.sl-mobile-tab-btn[data-tab="recording"]',
-    onEnter: () => { _tourClosePlaneSetup(); _tourSetMobileTab('recording'); },
+    target: '.sl-rail-tab-btn[data-tab="export"]',
+    onEnter: () => { _tourSetTab('export'); },
     arrow: 'left',
-    label: 'Recording',
-    text: 'Recording has two modes. <b>Live</b> captures whatever you do, then saves it as a WebM or GIF (key <kbd>R</kbd> starts and stops it). <b>Programmatic</b> animates a set of objects moving between set start and end positions.',
+    label: 'Export tab',
+    text: 'Export saves pictures, movies, and data. <b>Live</b> recording captures whatever you do as a WebM or GIF (key <kbd>R</kbd> starts and stops it); <b>Programmatic</b> animates objects between set start and end positions; Save PNG grabs a still. The <b>Data</b> section exports critical curves, caustics, and point-source image positions as CSV.',
+  },
+  {
+    target: '.sl-rail-tab-btn[data-tab="quality"]',
+    onEnter: () => { _tourSetTab('quality'); },
+    arrow: 'left',
+    label: 'Quality tab',
+    text: 'Quality trades accuracy or sharpness against redraw speed: the critical-curve resolution, the point-source image-finding grid, and the render scale of the image itself. If a scene feels slow, this is the place to come.',
   },
   {
     target: 'a.sl-demo-btn',
-    onEnter: () => { _tourClosePlaneSetup(); _tourSetViz(0); },
+    onEnter: () => { _tourSetTab('scene'); _tourSetViz(0); },
     arrow: 'below',
     label: 'Ready to explore',
-    text: 'That is the tour. Build a scene by adding planes and objects, then watch the lensed image and quantity maps respond. For the physics and every control in full, open the <b>Docs</b> link here in the top bar.',
+    text: 'That is the tour. Build a scene by adding planes and objects, then watch the lensed image and quantity maps respond. Presets and YAML save/load live in the top bar, <kbd>?</kbd> shows every shortcut, and the <b>Docs</b> link here explains all the physics.',
     final: true,
   },
 ];
@@ -4769,6 +5231,16 @@ function _tourKeyHandler(e) {
 function startTour() {
   if (tour.active) return;
   dismissTourNudge();
+  // The tour demonstrates the overlays and the creation tools, so a hidden
+  // canvas makes no sense: drop the temporary clean-plot state and make sure
+  // the tools it points at are visible.
+  if (state.hideOverlays) {
+    state.hideOverlays = false;
+    document.querySelector('.sl-body')?.classList.remove('sl-hide-ov');
+    _updateColorbar(); updateZsChip(); redraw();
+  }
+  if (!state.showCreateTools) { state.showCreateTools = true; renderSidebar(); }
+  updateCanvasTools();
   tour.active = true;
   tour.step   = 0;
 

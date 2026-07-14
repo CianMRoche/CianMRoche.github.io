@@ -16,7 +16,9 @@
 //   r.resize()
 //   r.destroy()
 
-const MAX_PLANES  = 6;
+// Exported so the UI can warn when a scene exceeds it (planes beyond the cap are
+// dropped from the GPU render, sorted by redshift).
+export const MAX_PLANES = 6;
 // Per-type cap on objects uploaded to the shader (lenses and sources counted
 // separately). Exported so the UI can warn when a scene exceeds it. Each slot
 // costs a few uniform vectors; 32 stays within the WebGL2 fragment-uniform
@@ -738,6 +740,7 @@ export class Renderer {
     this._quad  = this._buildQuad();
     this._locs  = this._getLocations();
     this._scene = null;
+    this.dprMode = 'auto';   // 'auto' (dpr capped at 2) | '1x' | 'native'; see resize()
 
     // Cache: objId → { tex: WebGLTexture, w, h }
     this._pastedTexCache = new Map();
@@ -779,7 +782,13 @@ export class Renderer {
   }
 
   resize() {
-    const dpr = window.devicePixelRatio || 1;
+    // Backing-store scale: 'auto' caps the devicePixelRatio at 2 (visually near-
+    // indistinguishable, but a 2.25× fragment-load saving on dpr-3 phones);
+    // '1x' forces CSS-pixel resolution; 'native' uses the full ratio.
+    const raw = window.devicePixelRatio || 1;
+    const dpr = this.dprMode === '1x'     ? 1
+              : this.dprMode === 'native' ? raw
+              : Math.min(raw, 2);
     const r   = this.canvas.getBoundingClientRect();
     const w   = Math.max(1, Math.round(r.width  * dpr));
     const h   = Math.max(1, Math.round(r.height * dpr));

@@ -14,7 +14,11 @@
       "Bash(grep -o '<div class=\"doc-note\">.\\\\{0,180\\\\}' _site/caustica-documentation/index.html)",
       "Bash(grep -o '<div class=\"doc-key\">.\\\\{0,160\\\\}' _site/caustica-documentation/index.html)",
       "Bash(python3 -)",
-      "Bash(osascript -l JavaScript -e ' *)"
+      "Bash(osascript -l JavaScript -e ' *)",
+      "Bash(awk 'NR>=4330 && NR<=4360' assets/caustica/main.js)",
+      "Bash(awk '/── 5. Ruler measurements/,0' assets/caustica/main.js)",
+      "Bash(zsh /private/tmp/claude-501/-Users-roche-Documents-Projects-CianMRoche-github-io/d0596272-3b81-4543-b5cc-9b1945015478/scratchpad/shoot8.sh)",
+      "Bash(xargs kill)"
     ]
   }
 }

@@ -67,8 +67,9 @@ html, body {
   height: 100%;
 }
 
-/* Desktop 1.3× scale — same technique as chi-by-eye. */
-@media (min-width: 721px) and (min-aspect-ratio: 1) {
+/* Desktop 1.3× scale — same technique as chi-by-eye. min-height keeps short
+   viewports (landscape phones) at 1×, where every pixel of height matters. */
+@media (min-width: 721px) and (min-aspect-ratio: 1) and (min-height: 600px) {
   .app-inner {
     width: calc(100% / 1.3);
     height: calc(100% / 1.3);
@@ -97,13 +98,48 @@ html, body {
   color: var(--fg);
 }
 
-/* Undo/redo: icon buttons immediately right of the logo. margin-right:auto makes
-   this group the flex spacer, so Docs/Tour/theme stay pushed to the far right. */
+/* Undo/redo: icon buttons immediately right of the logo. */
 .sl-undo-group {
   display: flex;
   align-items: center;
   gap: 2px;
+}
+
+/* File cluster (presets + YAML save/load). margin-right:auto makes this group
+   the flex spacer, so Docs/?/Tour/theme stay pushed to the far right. */
+.sl-file-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin-right: auto;
+  min-width: 0;
+}
+/* element+class specificity: this select also carries .sl-select, whose later
+   rule (width:100%, padding, margin-bottom:10px) would otherwise win and shove
+   the box up out of line with the buttons. */
+select.sl-topbar-preset {
+  font-size: 12px;
+  padding: 0 6px;
+  margin: 0;
+  width: auto;
+  border: 1px solid var(--hairline);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  max-width: 150px;
+  font-family: inherit;
+}
+select.sl-topbar-preset:hover { color: var(--fg); border-color: var(--fg-soft); }
+/* One uniform control height across the topbar: selects, buttons, and the Docs
+   link compute slightly different natural heights, which reads as vertical
+   misalignment in the centered flex row. */
+select.sl-topbar-preset,
+.sl-demo-btn {
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
 }
 .sl-undo-btn {
   background: none;
@@ -121,19 +157,6 @@ html, body {
 .sl-undo-btn:hover:not(:disabled) { color: var(--fg); background: rgba(0,0,0,0.06); }
 html[data-theme="dark"] .sl-undo-btn:hover:not(:disabled) { background: rgba(255,255,255,0.06); }
 .sl-undo-btn:disabled { opacity: 0.3; cursor: default; }
-
-.sl-back-btn {
-  font-size: 12.5px;
-  color: var(--muted);
-  text-decoration: none;
-  padding: 4px 10px;
-  border: 1px solid var(--hairline);
-  border-radius: 5px;
-  background: transparent;
-  cursor: pointer;
-  transition: color 0.12s, border-color 0.12s;
-}
-.sl-back-btn:hover { color: var(--fg); border-color: var(--fg-soft); }
 
 .sl-demo-btn {
   font-size: 12px;
@@ -171,74 +194,51 @@ html[data-theme="dark"] .icon-moon { display: none;  }
 html[data-theme="dark"] .sl-theme-btn       { color: rgba(255,255,255,0.72); }
 html[data-theme="dark"] .sl-theme-btn:hover { color: #fff; background: rgba(255,255,255,0.06); }
 
-/* ── Body (upper + timeline) ──────────────────────────────────────────────── */
+/* ── Body: canvas-first grid — stage + timeline on the left, rail on the right ── */
 
 .sl-body {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "stage    rail"
+    "timeline rail";
   flex: 1;
   min-height: 0;
   overflow: hidden;
 }
 
-/* ── Upper: image panel + sidebar ────────────────────────────────────────── */
-
-/* ── Three-column flex layout — wraps when image would be smaller than min-basis ── */
-/* Wide:         [image 1fr] [plane-controls 270px] [settings 270px]            */
-/* Intermediate: [image full-width]                                              */
-/*               [plane-controls 270px] [settings 270px]                         */
-/* Thin:         [image full-width] [plane-controls] [settings] (all stacked)   */
-
-.sl-upper {
+/* Stage: letterboxes the square image panel into whatever space the grid gives it.
+   container-type:size lets the image size itself with cq units (content box). */
+.sl-stage {
+  grid-area: stage;
+  container-type: size;
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 14px;
-  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
   min-height: 0;
-  overflow-y: auto;
-  padding: 12px 14px 0;
+  padding: 12px;
+  overflow: hidden;
 }
 
-/* Image: tries to fill remaining space but never shrinks below 320px.          */
-/* When sidebars don't fit alongside it the image wraps to its own full row.    */
-/* Controls group: right-justified within its flex area, inner items can grow */
-.sl-upper .sl-controls-col {
-  flex: 1 0 270px;         /* can grow beyond its min; wraps when image needs room */
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;  /* blank space opens on the LEFT */
-  gap: 14px;
-  align-items: flex-start;
-  align-content: flex-start;
-  min-width: 270px;
-}
-
-/* Inner panels: grow from 270px min, capped so they don't become excessively wide */
-.sl-controls-col > .sl-param-col,
-.sl-controls-col > .sl-sidebar {
-  flex: 1 0 270px;
-  max-width: 400px;
-  min-width: 270px;
+/* Portrait viewports (tall stage cell): keep the image near the top of the cell
+   rather than floating in the vertical middle of a mostly-empty column. */
+@media (max-aspect-ratio: 1) {
+  .sl-stage { align-items: flex-start; }
 }
 
 /* ── Image panel ─────────────────────────────────────────────────────────── */
 
 .sl-image-wrap {
   touch-action: none; /* prevent page scroll / pull-to-refresh when dragging in the image */
-  flex: 1 1 320px;   /* grow freely, wraps to own row if it would be < 320px */
-  min-width: 0;
-  /* max-width caps the flex main axis so aspect-ratio:1 derives height without overflow.
-     Formula: (viewport_height / 1.3_scale) - topbar(44) - timeline(190) - padding(26)
-     The 780px hard cap prevents excessive size on very tall monitors. */
-  max-width: min(calc(100vh / 1.3 - 260px), 780px);
-  position: relative;
+  width: min(100cqw, 100cqh);   /* largest square that fits the stage */
   aspect-ratio: 1;
+  position: relative;
   border: 1px solid var(--hairline);
   border-radius: 6px;
   overflow: hidden;
   background: #000;
-  align-self: start;
 }
 
 /* WebGL canvas fills the wrapper. */
@@ -258,40 +258,6 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   inset: 0;
   pointer-events: none;
 }
-
-/* Empty-state hint shown before any sources are placed. */
-.sl-image-hint {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--muted);
-  font-size: 13px;
-  pointer-events: none;
-}
-
-/* Critical-curve toggle chip — top-right of the image. */
-.sl-crit-toggle {
-  position: absolute;
-  top: 36px;
-  right: 8px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11.5px;
-  color: var(--fg-soft);
-  background: var(--bg);
-  border: 1px solid var(--hairline);
-  border-radius: 4px;
-  padding: 3px 8px;
-  cursor: pointer;
-  pointer-events: auto;
-  user-select: none;
-  opacity: 0.85;
-}
-.sl-crit-toggle:hover { opacity: 1; }
-.sl-crit-toggle input { accent-color: var(--accent); }
 
 /* Visualization mode chip — top-right of image */
 .sl-viz-chip {
@@ -392,7 +358,7 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
    colorbar/ruler). Appears only while the overlay redraw is slow. */
 .sl-perf-warn {
   position: absolute;
-  bottom: 8px;
+  bottom: 42px;   /* above the zoom cluster (bottom-right) */
   right: 8px;
   z-index: 12;
   width: 26px;
@@ -417,7 +383,7 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
 
 .sl-perf-pop {
   position: absolute;
-  bottom: 42px;
+  bottom: 76px;
   right: 8px;
   z-index: 13;
   width: 260px;
@@ -502,25 +468,30 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
 /* ── Right sidebar ────────────────────────────────────────────────────────── */
 
 /* Default (narrow): single column, params first then settings. */
-/* ── Tabbed sidebar ───────────────────────────────────────────────────────── */
+/* ── Rail: tabbed control column (Scene / View / Data / Export + ⚙) ───────── */
 
-.sl-sidebar {
+.sl-rail {
+  grid-area: rail;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  flex: 1;
   min-height: 0;
+  min-width: 0;
+  border-left: 1px solid var(--hairline);
+  background: var(--bg);
+  position: relative;   /* anchors the quality popover */
 }
 
-.sl-tabs {
+.sl-rail-tabs {
   display: flex;
+  align-items: stretch;
   flex-shrink: 0;
   border-bottom: 1px solid var(--hairline);
+  background: var(--bg-soft);
 }
 
-.sl-tab-btn {
+.sl-rail-tab-btn {
   flex: 1;
-  padding: 8px 6px;
+  padding: 10px 4px;
   font-size: 12px;
   font-weight: 500;
   border: none;
@@ -530,21 +501,23 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
   transition: color 0.12s;
+  font-family: inherit;
 }
-.sl-tab-btn:hover:not(.active) { color: var(--fg-soft); }
-.sl-tab-btn.active {
+.sl-rail-tab-btn:hover:not(.active) { color: var(--fg-soft); }
+.sl-mobile-only-tab { display: none; }
+.sl-rail-tab-btn.active {
   color: var(--accent);
   border-bottom-color: var(--accent);
 }
 
 .sl-tab-content {
+  display: none;
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 10px 0 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  padding: 10px 12px 8px;
 }
+.sl-tab-content.active { display: block; }
 
 /* Critical curves subsection header within the Settings panel */
 .sl-subsection-header {
@@ -568,33 +541,7 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   font-family: inherit;
 }
 
-/* ── Object panel (bottom-right, lens/source params) ─────────────────────── */
-
-/* Plane Controls column — mirrors the sidebar in size and style */
-.sl-param-col {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  gap: 10px;   /* space between the .sl-tabs bar and sl-obj-panel */
-}
-
-#sl-obj-panel {
-  flex: 1;
-  overflow-y: auto;
-  min-height: 0;
-}
-
-/* Static title row for Plane Controls — matches tab row height but neutral */
-.sl-param-col-title {
-  flex: 1;
-  padding: 8px 6px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--fg-soft);
-  text-align: center;
-  cursor: default;
-  user-select: none;
-}
+/* ── Object panel (Scene tab, lens/source params) ─────────────────────────── */
 
 /* Shared grid on the panel so ALL rows share the same column widths.
    max-content on col 1 resolves to the WIDEST label, making all sliders equal length. */
@@ -672,7 +619,11 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
 .sl-delete-obj-btn {
   font-size: 11px;
   height: 24px;
-  padding: 0 9px;
+  width: 26px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--hairline);
   border-radius: 4px;
   background: transparent;
@@ -856,13 +807,14 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   flex-shrink: 0;
 }
 
-/* Checkbox row inside panels */
+/* Checkbox row inside panels: two toggles side by side */
 .sl-checkbox-row {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px 10px;
   margin-top: 8px;
 }
+.sl-checkbox-row + .sl-checkbox-row { margin-top: 5px; }
 .sl-checkbox-row label {
   display: flex;
   align-items: center;
@@ -1183,113 +1135,88 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
 
 /* ── Timeline panel ───────────────────────────────────────────────────────── */
 
-/* Visual divider inside the sidebar */
-.sl-sidebar-divider {
-  height: 1px;
-  background: var(--hairline);
-  flex-shrink: 0;
-}
-
-/* ── Timeline (bottom bar: z-axis + plane boxes) ─────────────────────────── */
+/* ── Timeline (slim strip under the stage: the redshift axis) ─────────────── */
 
 .sl-timeline {
-  display: flex;
-  flex-direction: row;
-  flex-shrink: 0;
-  height: 190px;
-  border-top: 1px solid var(--hairline);
-  margin-top: 10px;
-  background: var(--bg-soft);
-  overflow: hidden;
-}
-
-/* Clickable z-axis strip. */
-.sl-axis-wrap {
+  grid-area: timeline;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  width: 220px;
-  border-right: 1px solid var(--hairline);
-  padding: 8px 0 0;
+  border-top: 1px solid var(--hairline);
+  background: var(--bg);
+  min-width: 0;
+}
+
+/* Clickable z-axis strip: label | axis canvas (flexes) | z_max input. */
+.sl-axis-wrap {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 14px 4px;
   position: relative;
   background: var(--bg);
+  min-width: 0;
 }
 
 .sl-axis-label {
   font-size: 11px;
   color: var(--muted);
-  text-align: center;
-  margin-bottom: 4px;
   letter-spacing: 0.05em;
+  flex-shrink: 0;
 }
 
 .sl-axis-canvas {
   flex: 1;
-  width: 100%;
+  min-width: 0;
+  height: 74px;
   cursor: crosshair;
   display: block;
 }
 
-/* Scrollable plane-box area. */
-.sl-planes-wrap {
-  position: relative;
-  flex: 1;
-  min-width: 0;
+.sl-zmax-ctl {
   display: flex;
-  align-items: stretch;
-}
-.sl-planes {
-  display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  gap: 10px;
-  flex: 1;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: 8px 12px;
-}
-.sl-planes-arrow {
-  display: none; /* shown only on mobile via media query */
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 10;
-  width: 28px;
-  height: 44px;
-  border: none;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--bg-soft) 90%, transparent);
-  color: var(--fg-soft);
-  font-size: 18px;
-  cursor: pointer;
   align-items: center;
-  justify-content: center;
-  line-height: 1;
-  backdrop-filter: blur(4px);
+  gap: 5px;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--muted);
 }
-.sl-planes-arrow:hover { background: var(--bg-soft2); }
-.sl-planes-arrow-l { left: 0; }
-.sl-planes-arrow-r { right: 0; }
+.sl-zmax-ctl input {
+  width: 52px;
+  font-size: 11.5px;
+  padding: 2px 4px;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+}
 
-/* Individual plane box. */
-.sl-plane-box {
+/* ── Selected-plane card (Scene tab) ──────────────────────────────────────── */
+/* A hairline on top sections the viewer off from the object controls above;
+   the plane-type colour lives on the viewer canvas, not this box. */
+.sl-plane-card {
   display: flex;
   flex-direction: column;
-  flex-shrink: 0;
-  width: 152px;
-  border: 2px solid var(--plane-color, var(--hairline));
-  border-radius: 6px;
+  border-top: 1px solid var(--hairline);
   background: var(--bg);
-  overflow: hidden;
+  margin-bottom: 10px;
 }
-
-.sl-plane-header {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 6px;
-  border-bottom: 1px solid var(--hairline);
-  background: var(--bg-soft);
+.sl-plane-z-input {
+  width: 58px;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 4px;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+  margin-right: auto;
+}
+.sl-plane-empty {
+  padding: 12px 0 4px;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 /* Compact z label in plane header */
@@ -1302,290 +1229,88 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   white-space: nowrap;
 }
 
-/* Paste-image button */
-.sl-plane-paste {
+/* Plane-side labeled buttons (Image / Clear / Delete), stacked next to the viewer */
+.sl-plane-paste, .sl-plane-clear, .sl-plane-del {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1px 4px;
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-}
-.sl-plane-paste:hover { color: var(--accent); }
-
-/* Clear-plane button */
-.sl-plane-clear {
-  font-size: 14px;
-  line-height: 1;
-  padding: 2px 6px;
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-}
-.sl-plane-clear:hover { color: var(--warn); }
-
-/* ── Plane toolbar (left of .sl-planes, above on mobile) ────────────────── */
-.sl-plane-toolbar {
-  display: flex;
-  flex-direction: column;
   align-items: center;
   gap: 5px;
-  padding: 8px 5px;
-  border-right: 1px solid var(--hairline);
-  background: var(--bg);
-  flex-shrink: 0;
-  width: 38px;
-}
-.sl-tool-btn {
-  width: 28px;
-  height: 28px;
+  font-size: 11px;
+  line-height: 1;
+  padding: 4px 7px;
   border: 1px solid var(--hairline);
   border-radius: 4px;
-  background: transparent;
-  color: var(--muted);
+  background: var(--bg);
+  color: var(--fg-soft);
   cursor: pointer;
-  font-size: 11px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.1s, color 0.1s, border-color 0.1s;
-  flex-shrink: 0;
+  white-space: nowrap;
 }
-.sl-tool-btn:hover:not(.active) { color: var(--fg); border-color: var(--fg); }
-.sl-tool-btn[data-mode="lens"].active   { background: var(--lens-color);   border-color: var(--lens-color);   color: #fff; }
-.sl-tool-btn[data-mode="source"].active { background: var(--src-color);    border-color: var(--src-color);    color: #fff; }
-.sl-tool-btn[data-mode="hybrid"].active { background: var(--hybrid-color); border-color: var(--hybrid-color); color: #fff; }
-/* Short label shown on desktop (vertical column), long label on mobile (horizontal row) */
-.sl-tool-s { display: inline; }
-.sl-tool-l { display: none;   }
-.sl-tool-del { margin-top: auto; } /* bottom-justify in the column */
-.sl-tool-del:hover { color: var(--bad) !important; border-color: var(--bad) !important;
-  background: color-mix(in srgb, var(--bad) 8%, transparent) !important; }
-/* sep is a spacer that grows to push delete down */
-.sl-tool-sep { flex: 1; width: 18px; min-height: 6px; }
+.sl-plane-paste:hover { color: var(--accent); border-color: var(--accent); }
+.sl-plane-clear:hover { color: var(--warn);   border-color: var(--warn); }
+.sl-plane-del:hover   { color: var(--bad);    border-color: var(--bad); }
 
-/* Effective-type drives border and button active color via --plane-color */
-.sl-plane-box[data-effective-type="lens"]   { --plane-color: var(--lens-color);   }
-.sl-plane-box[data-effective-type="source"] { --plane-color: var(--src-color);    }
-.sl-plane-box[data-effective-type="hybrid"] { --plane-color: var(--hybrid-color); }
-.sl-plane-box[data-effective-type="empty"]  { --plane-color: var(--hairline);     }
+/* Effective-type drives the viewer-canvas border colour via --plane-color */
+.sl-plane-card[data-effective-type="lens"]   { --plane-color: var(--lens-color);   }
+.sl-plane-card[data-effective-type="source"] { --plane-color: var(--src-color);    }
+.sl-plane-card[data-effective-type="hybrid"] { --plane-color: var(--hybrid-color); }
+.sl-plane-card[data-effective-type="empty"]  { --plane-color: var(--hairline);     }
 
-.sl-plane-del {
-  font-size: 13px;
-  line-height: 1;
-  padding: 1px 4px;
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-}
-.sl-plane-del:hover { color: var(--bad); }
-
-.sl-axis-canvas  { cursor: crosshair; }
 .sl-plane-canvas {
   display: block;
-  width: 148px;
-  height: 148px;
+  width: 100%;
+  aspect-ratio: 1;
+  height: auto;
   cursor: crosshair;
   touch-action: none;
 }
 .sl-plane-canvas.has-selected { cursor: grab; }
 
-/* Empty timeline prompt. */
-.sl-timeline-hint {
-  padding: 8px 16px;
-  font-size: 12.5px;
-  color: var(--muted);
-  align-self: center;
-}
-
-/* Mobile tab bar — hidden on desktop */
-.sl-mobile-tabs { display: none; }
-/* Timeline caption (axis labels) — mobile-only, below the axis */
+/* Timeline caption (axis hint) — mobile-only, below the axis */
 .sl-timeline-caption { display: none; }
 
-/* ── Narrow screens: tighter padding, sidebars wrap to full rows ───────────── */
-
-@media (max-width: 600px) {
-  .sl-upper { padding: 8px 8px 0; gap: 10px; }
-  /* On very narrow screens controls group fills its row */
-  .sl-upper .sl-controls-col { flex: 1 0 100%; min-width: 0; }
-  .sl-controls-col > .sl-param-col,
-  .sl-controls-col > .sl-sidebar { max-width: 100%; }
-}
-
-/* ── Mobile layout: single-column, plane setup in a slide-up drawer ───────── */
+/* ── Narrow screens: single column — image, timeline (Scene tab), rail ────── */
 
 @media (max-width: 640px) {
-  /* Make the body scroll; -webkit-overflow-scrolling:touch enables it inside
+  /* Topbar wraps: the file cluster takes its own row. */
+  .sl-topbar { flex-wrap: wrap; height: auto; min-height: 44px; padding: 6px 10px; row-gap: 2px; }
+  .sl-file-group { order: 10; flex-basis: 100%; margin-right: 0; }
+  .sl-topbar-preset { flex: 1; max-width: none; }
+
+  /* Single scrolling column; -webkit-overflow-scrolling:touch enables it inside
      position:fixed ancestors on iOS Safari. */
   .sl-body {
+    display: flex;
+    flex-direction: column;
     overflow-y: scroll;
     -webkit-overflow-scrolling: touch;
     /* Breathing room at the end of the scroll + device safe-area (home indicator). */
     padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   }
 
-  /* Stack image above controls, stretch children to full width */
-  .sl-upper {
-    flex-wrap: nowrap;
-    flex-direction: column;
-    align-items: stretch;
+  /* Image: full width, square; no letterboxing on a scrolling column. */
+  .sl-stage {
+    container-type: normal;
+    display: block;
     padding: 8px 8px 0;
-    gap: 0;
-    flex: 0 0 auto;
     overflow: visible;
-  }
-
-  /* Image: full width, square */
-  .sl-image-wrap {
-    flex: 0 0 auto;
-    width: 100%;
-    max-width: 100%;
-    aspect-ratio: 1;
-    align-self: stretch;
-  }
-
-  /* Controls: full width below image, no internal scroll */
-  .sl-upper .sl-controls-col {
-    flex: 0 0 auto;
-    width: 100%;
-    min-width: 0;
-    align-self: stretch;
-    flex-direction: column;
-    flex-wrap: nowrap;
-    gap: 0;
-    padding-bottom: 12px;
-  }
-  .sl-controls-col > .sl-param-col,
-  .sl-controls-col > .sl-sidebar {
-    max-width: 100%;
-    min-width: 0;
-    width: 100%;
-    overflow: visible;
-    height: auto;
-  }
-  /* Panels expand to natural height — no internal scrollbars */
-  #sl-obj-panel,
-  .sl-tab-content {
-    overflow: visible;
-    height: auto;
-    min-height: 0;
     flex: 0 0 auto;
   }
-  .sl-sidebar { overflow: visible; height: auto; min-height: 0; flex: 0 0 auto; }
-  .sl-param-col { overflow: visible; height: auto; min-height: 0; }
+  .sl-image-wrap { width: 100%; }
 
-  /* Mobile tab bar — full width, equal columns */
-  .sl-mobile-tabs {
-    display: flex;
-    width: 100%;
-    flex-shrink: 0;
-    border-bottom: 1px solid var(--hairline);
-    background: var(--bg-soft);
-  }
-  .sl-mobile-tab-btn {
-    flex: 1;
-    padding: 10px 4px;
-    font-size: 12px;
-    font-weight: 500;
-    border: none;
-    background: none;
-    color: var(--muted);
-    cursor: pointer;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
-  }
-  .sl-mobile-tab-btn.active {
-    color: var(--accent);
-    border-bottom-color: var(--accent);
-  }
+  /* Rail stacks below at natural height — panels expand, the page scrolls. */
+  .sl-rail { border-left: none; flex: 0 0 auto; min-height: 0; }
+  .sl-tab-content { overflow: visible; flex: 0 0 auto; }
 
-  /* Which panel shows is driven by .sl-body[data-mobile-tab]. The Planes tab hides
-     these panels and reveals the timeline (rule further down). */
-  .sl-body[data-mobile-tab="object"]    .sl-param-col { display: flex; }
-  .sl-body[data-mobile-tab="object"]    .sl-sidebar   { display: none; }
-  .sl-body[data-mobile-tab="settings"]  .sl-param-col { display: none; }
-  .sl-body[data-mobile-tab="settings"]  .sl-sidebar   { display: flex; }
-  .sl-body[data-mobile-tab="recording"] .sl-param-col { display: none; }
-  .sl-body[data-mobile-tab="recording"] .sl-sidebar   { display: flex; }
-  .sl-body[data-mobile-tab="planes"]    .sl-param-col { display: none; }
-  .sl-body[data-mobile-tab="planes"]    .sl-sidebar   { display: none; }
-
-  /* Desktop tab header inside sidebar hidden — mobile tab bar takes over */
-  .sl-sidebar #sl-tabs { display: none; }
-  /* Object Controls title hidden — mobile tab bar already labels it */
-  .sl-param-col-title { display: none; }
-
-  /* Zero gap between the mobile tab bar and the content below it: drop the now-empty
-     Object-Controls title bar, the param-col gap, the settings/recording top padding,
-     and (Planes tab) the controls-col bottom padding above the timeline. */
-  .sl-controls-col > .sl-param-col { gap: 0; }
-  .sl-param-col > .sl-tabs { display: none; }
-  .sl-tab-content { padding-top: 0; }
-  .sl-body[data-mobile-tab="planes"] .sl-controls-col { padding-bottom: 0; }
-  /* Axis label hidden on mobile — the .sl-timeline-caption below the axis shows it */
+  /* Timeline: hidden except on the Scene tab, where it sits between the image
+     and the rail so the axis stays next to the picture it controls. */
+  .sl-timeline { display: none; }
+  .sl-body[data-tab="scene"] .sl-timeline { display: flex; }
   .sl-timeline .sl-axis-label { display: none; }
-
-  /* Timeline in the "Planes" tab: hidden until that tab is active, then laid out as
-     a grid so the L/S/H toolbar stays a vertical column on the LEFT (as on desktop),
-     with the plane boxes to its right and the redshift axis full-width below. */
-  .sl-timeline {
-    display: none;
-    height: auto;
-    margin-top: 0;
-  }
-  .sl-body[data-mobile-tab="planes"] .sl-timeline {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    grid-template-rows: auto auto;
-    grid-template-areas:
-      "toolbar planes"
-      "axis    axis";
-  }
-
-  /* Toolbar: keep the desktop vertical column (short L/S/H labels, delete bottom-
-     justified), pinned to the left. No mobile row overrides — inherits the base. */
-  .sl-timeline .sl-plane-toolbar { grid-area: toolbar; }
-
-  /* Show scroll arrows on mobile */
-  .sl-planes-arrow { display: flex; }
-
-  /* Plane boxes (top-right); smaller so the whole timeline fits with less scrolling.
-     The canvas redraws at this size (buffer derived from offsetWidth), staying crisp. */
-  .sl-timeline .sl-planes-wrap { grid-area: planes; min-width: 0; }
-  .sl-timeline .sl-planes       { overflow-x: auto; overflow-y: hidden; }
-  .sl-timeline .sl-plane-box    { width: 116px; }
-  .sl-timeline .sl-plane-canvas { width: 112px; height: 112px; }
-
-  /* Redshift axis: full width along the bottom. Fixed canvas height keeps the
-     timeline height stable across widths; drawAxisCanvas() scales the marker bump
-     to fit this box (no clip, no gap). */
-  .sl-timeline .sl-axis-wrap {
-    grid-area: axis;
-    width: auto;
-    height: auto;
-    padding: 0;                 /* drop the base 8px top pad above the axis canvas */
-    border-right: none;
-    border-top: 1px solid var(--hairline);
-  }
-  .sl-timeline .sl-axis-canvas {
-    flex: 0 0 60px;
-    height: 60px;
-  }
-
-  /* Axis labels sit in this caption BELOW the axis (they used to crowd the top of
-     the axis canvas). Only shown while the Planes tab is active. */
-  .sl-body[data-mobile-tab="planes"] .sl-timeline-caption {
+  .sl-body[data-tab="scene"] .sl-timeline-caption {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
     gap: 8px;
-    margin-top: -3px;      /* pull it snug under the axis / L/S row */
+    margin-top: -3px;      /* pull it snug under the axis */
     padding: 0 12px 2px;
     font-size: 10.5px;
     color: var(--muted);
@@ -1593,7 +1318,43 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
 
   /* Axis canvas: allow vertical swipes to scroll the page; horizontal moves stay
      with the app so plane markers can still be dragged along z. */
-  .sl-axis-canvas { touch-action: pan-y; }
+  .sl-axis-canvas { height: 60px; touch-action: pan-y; }
+
+  /* Mobile-only Object tab: object controls live under Object, the plane
+     viewer + timeline under Scene (both share the Scene container). */
+  .sl-mobile-only-tab { display: block; }
+  .sl-body[data-tab="object"] #sl-plane-card { display: none; }
+  .sl-body[data-tab="scene"]  #sl-obj-panel  { display: none; }
+  /* The card sits directly under the tab bar here; no divider needed. */
+  #sl-tab-scene .sl-plane-card { margin-top: 0; border-top: none; }
+
+  /* Column order: image, rail (tabs + panel), timeline at the very bottom. */
+  .sl-stage    { order: 0; }
+  .sl-rail     { order: 1; }
+  .sl-timeline { order: 2; }
+}
+
+/* ── Short viewports (landscape phones): two columns, timeline over the stage ── */
+
+@media (min-width: 641px) and (max-height: 480px) {
+  .sl-body {
+    grid-template-columns: minmax(0, 1fr) minmax(250px, 320px);
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: "stage rail";
+  }
+  /* The timeline shares the stage cell, pinned to its bottom edge over the
+     letterbox margin; the stage padding keeps the square image clear of it. */
+  .sl-timeline {
+    grid-area: stage;
+    align-self: end;
+    z-index: 5;
+    background: color-mix(in srgb, var(--bg) 84%, transparent);
+    backdrop-filter: blur(3px);
+  }
+  .sl-stage { padding-bottom: 88px; }
+  .sl-axis-canvas { height: 56px; }
+  /* Narrower rail: a smaller viewer keeps the labeled side buttons on-row. */
+  .sl-plane-card .sl-plane-canvas { width: 120px; }
 }
 
 /* ── Tour overlay (mirrors chi-by-eye tutorial styles) ───────────────────── */
@@ -1677,10 +1438,13 @@ button.sl-demo-btn.sl-tour-nudge {
   55%  { box-shadow: 0 0 0 7px transparent; }
   100% { box-shadow: 0 0 0 0 transparent; }
 }
+/* Hangs to the LEFT of the Tour button (inside the topbar) so it never covers
+   the rail tabs or canvas chrome below. */
 .sl-tour-bubble {
   position: absolute;
-  top: calc(100% + 11px);
-  right: 0;
+  top: 50%;
+  right: calc(100% + 10px);
+  transform: translateY(-50%);
   display: block;
   background: var(--bg);
   border: 1px solid var(--hairline);
@@ -1698,16 +1462,319 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
 .sl-tour-bubble::before {
   content: '';
   position: absolute;
-  top: -5px;
-  right: 16px;
+  top: 50%;
+  right: -5px;
+  margin-top: -4.5px;
   width: 9px;
   height: 9px;
   background: var(--bg);
-  border-left: 1px solid var(--hairline);
+  border-right: 1px solid var(--hairline);
   border-top: 1px solid var(--hairline);
   transform: rotate(45deg);
 }
 @keyframes sl-tour-bubble-in {
-  from { opacity: 0; transform: translateY(-4px); }
-  to   { opacity: 1; transform: none; }
+  from { opacity: 0; transform: translateY(-50%) translateX(5px); }
+  to   { opacity: 1; transform: translateY(-50%); }
 }
+
+
+/* ── Overlay chips (top-right, under the view dropdown) ───────────────────── */
+.sl-overlay-chips {
+  position: absolute;
+  top: 38px;
+  right: 8px;
+  z-index: 10;
+  display: flex;
+  gap: 4px;
+  pointer-events: auto;
+  opacity: 0.85;
+  transition: opacity 0.15s;
+}
+.sl-overlay-chips:hover { opacity: 1; }
+.sl-overlay-chips button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0;
+}
+@media (hover: hover) {
+  .sl-overlay-chips button:hover { color: var(--fg); border-color: var(--fg-soft); }
+}
+.sl-overlay-chips button.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* Reference-plane chip: which z_s the maps/curves refer to. */
+.sl-zs-chip {
+  position: absolute;
+  top: 68px;
+  right: 8px;
+  z-index: 10;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-soft);
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  padding: 2px 7px;
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+/* ── Keyboard-shortcut overlay (the "?" button) ───────────────────────────── */
+.sl-kbd-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.sl-kbd-panel {
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.35);
+  max-width: 460px;
+  width: 100%;
+  max-height: min(80vh, 620px);
+  overflow-y: auto;
+  padding: 14px 18px 16px;
+}
+.sl-kbd-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13.5px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.sl-kbd-close {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+.sl-kbd-close:hover { color: var(--fg); }
+.sl-kbd-table { border-collapse: collapse; width: 100%; }
+.sl-kbd-table td {
+  padding: 4px 8px 4px 0;
+  font-size: 12.5px;
+  color: var(--fg-soft);
+  vertical-align: top;
+}
+.sl-kbd-table td:first-child { white-space: nowrap; }
+.sl-kbd-table kbd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  background: var(--bg-soft);
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--hairline);
+}
+
+
+/* ── Canvas tool rail (left edge of the image): select / L / S / H ────────── */
+.sl-canvas-tools {
+  position: absolute;
+  top: 50%;
+  left: 8px;
+  transform: translateY(-50%);
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: auto;
+  opacity: 0.85;
+  transition: opacity 0.15s;
+}
+.sl-canvas-tools:hover { opacity: 1; }
+.sl-ctool-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  color: var(--fg-soft);
+  font-size: 11px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+@media (hover: hover) {
+  .sl-ctool-btn:hover:not(.active) { color: var(--fg); border-color: var(--fg); }
+}
+.sl-ctool-btn[data-tool="select"].active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.sl-ctool-btn[data-tool="lens"].active   { background: var(--lens-color);   border-color: var(--lens-color);   color: #fff; }
+.sl-ctool-btn[data-tool="source"].active { background: var(--src-color);    border-color: var(--src-color);    color: #fff; }
+.sl-ctool-btn[data-tool="hybrid"].active { background: var(--hybrid-color); border-color: var(--hybrid-color); color: #fff; }
+
+/* ── Plane card body: tool column on the left, viewer filling the rest ────── */
+.sl-plane-body {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0 2px;
+  min-width: 0;
+}
+.sl-plane-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.sl-plane-tools-sep { flex: 1; min-height: 4px; }
+.sl-ctool-del {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  color: var(--fg-soft);
+  cursor: pointer;
+  padding: 0;
+}
+.sl-ctool-del:hover { color: var(--bad); border-color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 8%, transparent); }
+/* Compact square viewer; the side column absorbs the leftover width. The
+   plane-type colour highlights this canvas border (see --plane-color). */
+.sl-plane-card .sl-plane-canvas {
+  flex: 0 0 auto;
+  width: 150px;
+  border: 2px solid var(--plane-color, var(--hairline));
+  border-radius: 4px;
+}
+
+/* ── View tab: plain section headers (always expanded) ─────────────────────── */
+.sl-view-hdr {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0 0;
+}
+
+/* ── Plane viewer: prev/next arrows and the side control column ───────────── */
+.sl-plane-arrow {
+  align-self: stretch;
+  width: 18px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 0;
+  flex-shrink: 0;
+}
+.sl-plane-arrow:hover:not(:disabled) { color: var(--fg); background: var(--bg-soft2); }
+.sl-plane-arrow:disabled { opacity: 0.25; cursor: default; }
+.sl-plane-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.sl-plane-side .sl-plane-z {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+}
+
+/* Bottom-justify the plane viewer within the Scene tab (desktop). */
+#sl-tab-scene.active { display: flex; flex-direction: column; }
+#sl-tab-scene .sl-plane-card { margin-top: auto; margin-bottom: 0; flex-shrink: 0; }
+/* Long object controls (e.g. a hybrid's two sections) scroll inside their own
+   box instead of pushing the plane viewer down or squeezing it. Desktop only:
+   narrow screens scroll the whole page instead. */
+@media (min-width: 641px) {
+  #sl-tab-scene #sl-obj-panel { min-height: 0; overflow-y: auto; margin-bottom: 8px; }
+}
+
+/* ── Compact z inputs: no number spinners ─────────────────────────────────── */
+#sl-zmax::-webkit-outer-spin-button, #sl-zmax::-webkit-inner-spin-button,
+#sl-plane-z-input::-webkit-outer-spin-button, #sl-plane-z-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+#sl-zmax, #sl-plane-z-input { -moz-appearance: textfield; appearance: textfield; }
+
+/* ── Hide-all-overlays master switch (top of the View tab) ────────────────── */
+.sl-hide-all-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--fg-soft);
+  padding: 2px 2px 10px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--hairline);
+  margin-bottom: 10px;
+}
+
+/* View → Creation tools off: the image is selection-only; hide its tool rail. */
+.sl-body.sl-no-create .sl-canvas-tools { display: none !important; }
+
+/* Hide-all-overlays also hides the on-canvas controls (temporary clean view).
+   !important because the ruler cluster's display is managed inline by JS. */
+.sl-body.sl-hide-ov .sl-canvas-tools,
+.sl-body.sl-hide-ov .sl-viz-chip,
+.sl-body.sl-hide-ov .sl-overlay-chips,
+.sl-body.sl-hide-ov .sl-ruler-tools { display: none !important; }
+
+/* ── Toggle-switch styling for every checkbox ─────────────────────────────── */
+.app-inner input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 26px;
+  height: 15px;
+  border-radius: 8px;
+  background: var(--bg-soft2);
+  border: 1px solid var(--hairline);
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+  vertical-align: -3px;
+  margin: 0 3px 0 0;
+  transition: background 0.15s, border-color 0.15s;
+}
+.app-inner input[type="checkbox"]::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 0.15s, background 0.15s;
+}
+.app-inner input[type="checkbox"]:checked { background: var(--accent-soft); border-color: var(--accent); }
+.app-inner input[type="checkbox"]:checked::after { transform: translateX(11px); background: var(--accent); }
+.app-inner input[type="checkbox"]:disabled { opacity: 0.4; cursor: default; }
+.app-inner label:has(> input[type="checkbox"]:disabled) { opacity: 0.55; cursor: default; }

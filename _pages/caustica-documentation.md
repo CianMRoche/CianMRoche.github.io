@@ -7,9 +7,9 @@ permalink: /caustica-documentation/
 [Caustica](/assets/caustica/) is a tool for easily visualizing strong gravitational lensing, named after the term used by 17th century mathematicians for the curves onto which refracted light rays converge, which were capable of burning objects.
 
 <figure class="doc-fig-wide">
-  <img class="img-light" src="/images/caustica-docs/ui-light.png" alt="The Caustica interface: lensed-image panel, redshift axis, plane panels, and controls.">
-  <img class="img-dark"  src="/images/caustica-docs/ui-dark.png"  alt="The Caustica interface: lensed-image panel, redshift axis, plane panels, and controls.">
-  <figcaption>The Caustica interface recreating a zigzag lens configuration. The image panel shows the lensed view; the redshift axis and plane panels hold the lens and source objects.</figcaption>
+  <img class="img-light" src="/images/caustica-docs/ui-light.png" alt="The Caustica interface: lensed-image panel, redshift timeline, and control tabs.">
+  <img class="img-dark"  src="/images/caustica-docs/ui-dark.png"  alt="The Caustica interface: lensed-image panel, redshift timeline, and control tabs.">
+  <figcaption>The Caustica interface recreating a zigzag lens configuration. The image panel shows the lensed view; the redshift timeline below it and the Scene tab on the right hold the lens and source objects.</figcaption>
 </figure>
 
 <div class="doc-cyan" markdown="1">
@@ -18,19 +18,19 @@ Caustica was built with heavy use of AI tools for code generation, and its calcu
 
 ## Quick start
 
-1. **Click the redshift axis** (bottom left) to add an empty plane. Drag existing plane markers to reposition them along the axis.
-2. **Pick a tool** using the L / S / H toolbar (or press 1 / 2 / 3): Lens (deflects light), Source (emits light), or Hybrid (both at once, shown as a purple dot).
-3. **Click inside a plane panel** to place an object. Drag from an existing marker to move it. You can also drag objects directly in the main image panel.
-4. **Adjust parameters** in the Object Controls panel on the right. For hybrid objects, separate collapsible sections appear for the lens and source halves, each with its own show/hide (eye) and delete buttons, so a single half can be toggled or removed while the other stays. The eye button excludes an object from the computation without deleting it. Copy the selected object with **Cmd/Ctrl+C** and paste a duplicate in the same place with **Cmd/Ctrl+V**. Scene edits — adding, moving, deleting, and adjusting objects and planes — can be reversed with the **undo/redo arrows** to the right of the title (or **Cmd/Ctrl+Z** and **Cmd/Ctrl+Shift+Z**); view settings such as field of view and colour mapping are not part of the undo history.
-5. **The image panel** updates in real time. Press C to overlay critical curves and caustics. Use the recording tab to save a PNG, WebM, or GIF.
-6. **Measure angular distances** with the ruler. The ruler button sits at the bottom-left of the image panel (its visibility is controlled by **Show ruler** in the Settings tab, on by default). Click it or press **L** to arm it, then click-and-drag on the image between two points: a line appears with its separation in arcseconds and position angle (e.g. `1.42″ · 34°`). Each new measurement becomes the selected item, and measurements are editable: click one to select it, drag its line to move it, or drag an endpoint to reshape it. Delete the selected measurement with its **trash** button or **Backspace**; clear all of them with the **×** button. Measurements persist when you toggle the ruler off. The measurement lines are captured in saved PNGs and recordings; the ruler buttons themselves are not.
-7. **Save and load configurations** using the Save YAML / Load YAML buttons at the bottom of the Settings tab. The file stores all planes, objects, and parameters along with the full view state, so a loaded config reproduces the same picture: field of view, active quantity, per-quantity color mapping, contour spacing, the critical-curve resolution and point-source grid density, and the overlay toggles. Any setting absent from a file (for instance one saved by an older version) loads at its default value.
+1. **Click the redshift timeline** (the axis under the image) to add an empty plane. Plane markers sit on the axis itself (stacking upward only when they would overlap); drag one to reposition it, and click one to select that plane — the selected marker carries a ring and a bold redshift label. The **z<sub>max</sub>** field at the axis's right end sets its range.
+2. **Arm a creation tool** from the toolbar on the left edge of the image (or press 1 / 2 / 3): Lens (deflects light), Source (emits light), or Hybrid (both at once, shown as a purple dot). The arrow button (or **Esc**) returns to the select tool.
+3. **Click the image** to place an object of the armed type in the selected plane at that sky position, then drag to fine-tune. Existing objects can always be dragged, whatever tool is armed. The plane viewer, at the bottom of the **Scene** tab, shows the selected plane's true (unlensed) positions: its own copy of the L / S / H tools and a trash button run down its left side, the **‹ ›** arrows flank the canvas (a horizontal swipe on touch, when not starting on an object, also steps through the planes), and the plane's **z** field sits to the right above labelled **Clear** (clear all objects) and **Delete** (delete plane) buttons. The viewer accepts click-to-place. The View tab's **Creation tools** toggle hides the on-image L / S / H toolbar entirely; the image is then always in selection mode (clicks only select and drag), and objects are created in the plane viewer, where L / S / H pick the type it places. On phones the object controls live in their own **Object** tab, and the redshift timeline sits at the bottom of the Scene tab.
+4. **Adjust parameters** in the Scene tab on the right. For hybrid objects, separate collapsible sections appear for the lens and source halves, each with its own show/hide (eye) and delete buttons, so a single half can be toggled or removed while the other stays. The eye button excludes an object from the computation without deleting it. Copy the selected object with **Cmd/Ctrl+C** and paste a duplicate in the same place with **Cmd/Ctrl+V**. Scene edits — adding, moving, deleting, and adjusting objects and planes — can be reversed with the **undo/redo arrows** to the right of the title (or **Cmd/Ctrl+Z** and **Cmd/Ctrl+Shift+Z**); view settings such as field of view and colour mapping are not part of the undo history.
+5. **The image panel** updates in real time. Press C to overlay critical curves and caustics (the chips beside the view dropdown toggle the same overlays). **Zoom** with the mouse wheel or a two-finger pinch; the **scale bar** at the bottom of the image tracks the angular scale as you zoom (1″, 2″, 5″, or 10″ depending on the field of view), and the View tab accepts an exact FOV value. The View tab's **Hide all overlays** switch blanks every annotation and the on-canvas controls (view dropdown, overlay chips, creation tools, ruler buttons) for a clean plot until switched back. Use the **Export** tab to save a PNG, WebM, or GIF.
+6. **Measure angular distances** with the ruler. The ruler button sits at the bottom-left of the image panel. Click it or press **L** to arm it, then click-and-drag on the image between two points: a line appears with its separation in arcseconds and position angle (e.g. `1.42″ · 34°`). Each new measurement becomes the selected item, and measurements are editable: click one to select it, drag its line to move it, or drag an endpoint to reshape it. Delete the selected measurement with its **trash** button or **Backspace**; clear all of them with the **×** button. Measurements persist when you toggle the ruler off. The measurement lines are captured in saved PNGs and recordings; the ruler buttons themselves are not.
+7. **Save and load configurations** using the Save / Load buttons in the top bar, next to the preset dropdown. The file stores all planes, objects, and parameters along with the full view state, so a loaded config reproduces the same picture: field of view, active quantity, per-quantity color mapping, contour spacing, the critical-curve resolution, point-source grid density, and render scale, and the overlay and creation-tools toggles. Any setting absent from a file (for instance one saved by an older version) loads at its default value.
 
 ## Keyboard shortcuts
 
 | Key | Action |
 |---|---|
-| `1` / `2` / `3` | Select add mode: Lens / Source / Hybrid |
+| `1` / `2` / `3` | Arm the add tool: Lens / Source / Hybrid (click the image or plane card to place). With the creation tools hidden, they only pick the type the plane viewer places |
 | `C` | Toggle critical curves and caustics |
 | `I` | Show lensed image (exit any quantity map) |
 | `K` | Convergence κ map |
@@ -44,21 +44,22 @@ Caustica was built with heavy use of AI tools for code generation, and its calcu
 | `R` | Start / stop live recording |
 | `L` | Toggle ruler mode (arm / disarm the ruler) |
 | `D` | Toggle dark / light theme |
+| `?` | Show the in-app keyboard-shortcut overlay |
 | `Cmd/Ctrl` + `C` / `V` | Copy the selected object / paste a duplicate in place |
 | `Cmd/Ctrl` + `Z` / `Shift`+`Z` | Undo / redo the last scene edit |
 | `↑ ↓ ← →` | Nudge selected object (hold for acceleration) |
 | `Delete` / `Backspace` | Delete the selected object, or the selected ruler measurement |
-| `Escape` | Deselect the selected ruler, else disarm the ruler tool, else deselect the object |
+| `Escape` | Deselect the selected ruler, else disarm the ruler tool, else disarm the add tool, else deselect the object |
 
 ## 1. Coordinate system
 
 All angular positions are measured in **arcseconds** (″): object coordinates $(c_x, c_y)$, deflection angles, and size parameters all use this unit.
-The image panel shows a square patch of sky of side *field of view* `fov` (default 4″), centred on the optical axis.
+The image panel shows a square patch of sky of side *field of view* `fov` (default 4″), centred on the optical axis. A **scale bar** at the bottom of the image shows a round angular length (1″ for fov ≤ 6″, 2″ up to 10″, 5″ up to 30″, 10″ beyond), togglable in the View tab and included in captures.
 Radians appear only in intermediate formulae and are converted back to arcseconds throughout.
 
 ### Measuring with the ruler
 
-To read an angular separation directly off the image, click the ruler button in the bottom-left corner of the image panel, or press **L**, to arm it (the button's visibility is controlled by **Show ruler** in the Settings tab, on by default). With the tool armed, click and drag between any two points: the line's length is reported in arcseconds and its **position angle**, measured counter-clockwise from the positive $x$-axis (rightward) with $y$ increasing upward, as `distance″ · angle°`.
+To read an angular separation directly off the image, click the ruler button in the bottom-left corner of the image panel, or press **L**, to arm it. With the tool armed, click and drag between any two points: the line's length is reported in arcseconds and its **position angle**, measured counter-clockwise from the positive $x$-axis (rightward) with $y$ increasing upward, as `distance″ · angle°`.
 
 Endpoints are stored in sky coordinates, so a measurement stays anchored to the same points (and its readout stays constant) as you change the field of view. Measurements are additive: each drag adds another line, and the newest one becomes selected. A committed measurement is a first-class object: click it to select it, drag its line to move it, or drag either endpoint to reshape it. Only one thing (a measurement or an object) is selected at a time. Delete the selected measurement with the **trash** button next to the ruler or with **Backspace**; the **×** button clears all of them. Measurements persist when you toggle the ruler off (**Esc** first deselects the current measurement, then disarms the tool). The ruler lines are drawn on the same overlay as the markers and critical curves, so they appear in saved PNGs and recordings; the ruler buttons, being ordinary UI chrome, are excluded from both.
 
@@ -213,7 +214,7 @@ The shear and magnification maps are less affected.
 
 ### Colour scale, limits, and palette
 
-The $\kappa$, $\gamma$, $\lvert\mu\rvert$, and $\lvert\hat{\boldsymbol{\alpha}}\rvert$ maps share a set of controls in the collapsible **Color Map** section of the Settings tab. Each map remembers its own settings.
+The $\kappa$, $\gamma$, $\lvert\mu\rvert$, and $\lvert\hat{\boldsymbol{\alpha}}\rvert$ maps share a set of controls in the **Color Map** section of the View tab. Each map remembers its own settings. The reference source redshift these maps use is set by the **z<sub>s</sub> ref** control in the View tab's Display section (Auto tracks the highest source plane; a chip on the image shows the value in use), and quick toggles for critical curves, caustics, markers, and the colorbar sit beside the view dropdown on the image itself.
 
 A raw quantity value $v$ is mapped to a colour in two steps: first warped to a normalised position $t \in [0,1]$ between the chosen limits, then passed through the selected colour palette.
 
@@ -306,7 +307,7 @@ By Morse theory, for a source inside all caustics the image count follows the se
 
 #### Display
 
-The map shows iso-$\varphi$ contour lines computed analytically per pixel in the fragment shader. The default contour spacing is $0.002\,\text{fov}^2$ arcsec², adjustable with the **Spacing** control in the Contours section of the Settings panel (a multiplier of this default, available whenever the Fermat map is shown). Because the spacing scales with the field of view, the contour density stays similar as you zoom. Contours fade toward the edge of the field. The contour passing through each Type II (saddle) image is drawn thicker and brighter because it separates distinct image regions on the arrival-time surface, and this highlight tracks the chosen spacing. Stationary point positions are overlaid as markers (circle for Type I, diamond for Type II, triangle for Type III) with a type legend in the lower right.
+The map shows iso-$\varphi$ contour lines computed analytically per pixel in the fragment shader. The default contour spacing is $0.002\,\text{fov}^2$ arcsec², adjustable with the **Spacing** control in the Fermat Potential section of the View tab (a multiplier of this default, available whenever the Fermat map is shown). Because the spacing scales with the field of view, the contour density stays similar as you zoom. Contours fade toward the edge of the field. The contour passing through each Type II (saddle) image is drawn thicker and brighter because it separates distinct image regions on the arrival-time surface, and this highlight tracks the chosen spacing. Stationary point positions are overlaid as markers (circle for Type I, diamond for Type II, triangle for Type III) with a type legend in the lower right.
 
 #### Lensing potentials by model
 
@@ -419,7 +420,7 @@ This follows from the lensing potential $\psi = \tfrac{\gamma_\text{ext}}{2}\lef
 | $\gamma_\text{ext}$ | Shear strength (dimensionless). Typical values 0.01–0.2 for galaxy-scale lenses. |
 | $\varphi$ | Shear position angle (radians), aligned with the direction of the tidal field. |
 
-The shear object's position in the plane panel has no effect on the lensing computation; the deflection is always computed relative to the coordinate origin. The marker and direction arrow can be repositioned freely for visual organisation.
+The shear object's position in the plane card has no effect on the lensing computation; the deflection is always computed relative to the coordinate origin. The marker and direction arrow can be repositioned freely for visual organisation.
 
 <div class="doc-note" markdown="1">
 **Note.** The effective shear visible in the lensing-quantities map is $\gamma_\text{eff} = \gamma_\text{ext} \cdot D_{ls}/D_s$, not $\gamma_\text{ext}$ itself. See §4 for details.
@@ -519,7 +520,7 @@ Image positions are found via a two-stage algorithm: a coarse grid search using 
 **Heads up.** Einstein rings and arc-shaped images do not appear in this mode. Use a Gaussian or uniform circle source for extended-emission lensing. Highly demagnified images (such as the central odd image of an SIE lens) may be missed by the grid search.
 </div>
 
-The grid density used for image finding is set in the Settings tab under **Point Source**, as the number of sample points across the field of view (Coarse 150, Medium 300, Fine 600, or Very fine 1200). Denser grids find images more reliably near caustics but are slower; the default is Medium (300). Because the count is fixed rather than an absolute angular spacing, the cost stays bounded as the field of view grows to cluster scale.
+The grid density used for image finding is set in the **Quality** tab as **Point source**, the number of sample points across the field of view (Coarse 150, Medium 300, Fine 600, or Very fine 1200). Denser grids find images more reliably near caustics but are slower; the default is Medium (300). Because the count is fixed rather than an absolute angular spacing, the cost stays bounded as the field of view grows to cluster scale.
 
 ### Pasted image
 
@@ -532,7 +533,7 @@ Contributions from all source objects across all planes are summed per pixel to 
 Hidden objects contribute nothing to the sum, nor to deflection or critical curve computation.
 The sum is clamped to $[0,1]$ and passed through a nonlinear stretch before display.
 
-The dynamic range of astrophysical sources (bright ring core to faint extended arcs) far exceeds what a monitor can show linearly, so the stretch is essential. In surface-brightness mode the **Color Map** section of the Settings tab is titled **Brightness stretch** and exposes the same machinery used for the quantity maps (§4), applied independently to each RGB channel:
+The dynamic range of astrophysical sources (bright ring core to faint extended arcs) far exceeds what a monitor can show linearly, so the stretch is essential. In surface-brightness mode the **Color Map** section of the View tab is titled **Brightness stretch** and exposes the same machinery used for the quantity maps (§4), applied independently to each RGB channel:
 
 - **Black / White** points (the Min/Max limits, default $0$ and $1$): intensities at or below Black map to the background; at or above White they saturate.
 - **Scale**: Linear, Square root (default, $\gamma=0.5$), Log, Power law ($\gamma \in [0.1, 2]$; lower $\gamma$ lifts faint emission more aggressively), or Asinh ($a \in [0.5, 20]$; near-linear at low intensity, logarithmic at high, the stretch used by SDSS, HST, and modern survey pipelines, Lupton et al. 2004).
@@ -547,7 +548,7 @@ Their pre-images in the source plane are the **caustics**; crossing a caustic ch
 
 The computation proceeds in four steps:
 
-1. **Sample a ray grid.** Trace $N \times N$ rays (Resolution dropdown, default $N = 512$) to the chosen source plane using the multiplane recursion, recording $\boldsymbol{\beta}$ at each image-plane point.
+1. **Sample a ray grid.** Trace $N \times N$ rays (the **Critical curves** resolution in the Quality tab, default $N = 512$) to the chosen source plane using the multiplane recursion, recording $\boldsymbol{\beta}$ at each image-plane point.
 
 2. **Compute the Jacobian.** At each interior grid point, approximate the $2\times2$ Jacobian $\partial\boldsymbol{\beta}/\partial\boldsymbol{\theta}$ via central finite differences and compute its determinant.
 
@@ -567,7 +568,7 @@ The computation proceeds in four steps:
 
 ## 8. Recording, capture, and animation
 
-The **Recording tab** in the right sidebar turns the live view into a still image, a video, or a smooth animation. Every capture reflects exactly what is on screen: the active view (lensed image or any quantity map), the overlay (position markers, critical curves and caustics, ruler measurements), and the color bar. UI chrome (the sidebar, the quantity dropdown, the ruler buttons, the performance badge) is excluded, and in the lensed-image view the same light-mode inversion used on screen is baked into the output so the file matches what you see.
+The **Export tab** in the right rail turns the live view into a still image, a video, or a smooth animation. Every capture reflects exactly what is on screen: the active view (lensed image or any quantity map), the overlay (position markers, critical curves and caustics, ruler measurements), and the color bar. UI chrome (the rail, the quantity dropdown, the ruler and zoom buttons, the performance badge) is excluded, and in the lensed-image view the same light-mode inversion used on screen is baked into the output so the file matches what you see.
 
 ### Still image
 
@@ -604,9 +605,13 @@ Every listed object is interpolated linearly and **simultaneously** from its ini
   <figcaption>A programmatic GIF recording of two point-mass lenses, one moving left and one moving right, passing in front of a central background source. Each lens carries a circular critical curve (pink) and cuspy caustic (green).</figcaption>
 </figure>
 
+### Data export (CSV)
+
+The **Data** section at the bottom of the Export tab writes the most recently computed overlays to CSV, with all positions in arcseconds. **Curves** exports the critical-curve and caustic segments (one row per segment, labelled `critical` or `caustic`, at the source redshift they were computed for); **Image positions** exports the numerically solved point-source image positions. Each button enables once the corresponding overlay has been computed at least once (show critical curves, or add a point source).
+
 ## 9. Preset Configurations
 
-The *Load a preset scene* dropdown in the Settings tab loads ready-made scenes:
+The *Presets…* dropdown in the top bar loads ready-made scenes:
 
 - **SIE lens + Point Source**: one SIE lens at $z = 0.5$ with a point source at $z = 1.5$. Critical curves, caustics, and the numerically solved image positions are shown.
 - **Double Lens + Uniform Source**: two SIE lenses at $z = 0.5$, a main galaxy and an off-centre companion, lensing a uniform disc source at $z = 1.5$.
@@ -639,27 +644,33 @@ WebGL2 GPU renderer.
 - The shader includes `lensPotential()` for analytic per-model potentials and `fermatPotential()`, which traces the ray and evaluates the comoving arrival-time surface (§4) for the Fermat map.
 - `vizWarp()` applies the value→$[0,1]$ warp (linear/sqrt/log/power/asinh) and `applyColormap()` selects the palette; both are driven by the `u_vizScale`, `u_vizScaleParam`, `u_vizMin`, `u_vizMax`, and `u_colormap` uniforms.
 - The `Renderer` class manages the WebGL context, shader compilation, geometry, and texture slots. `setScene(planes, dist, fov, viz, vizMode, vizSrcIdx, isDark, saddlePhis, fermatBeta)` triggers a redraw, where `viz = { scale, param, min, max, palette }`.
+- `resize()` respects a `dprMode` property (`'auto'` caps the devicePixelRatio at 2, `'1x'` forces CSS-pixel resolution, `'native'` uses the full ratio), driven by the **Render scale** setting in the Quality tab.
+- `MAX_PLANES` (6) and `MAX_OBJECTS` (32 per type) are exported so the UI can warn when a scene exceeds the shader's caps.
 - `preserveDrawingBuffer: true` is set on the WebGL context to allow screenshot and recording capture.
 
 ### `main.js`
 
-Application shell (~4500 lines).
+Application shell (~5300 lines).
 
-- **`state`**: single object holding all mutable app state: planes and their objects, selected IDs, display flags, add mode, per-viz-mode colour-mapping settings (`vizScale`: scale, parameter, limits, and palette for each of surface brightness, $\kappa$, $\gamma$, $\lvert\mu\rvert$, $\lvert\hat{\boldsymbol{\alpha}}\rvert$), recording state.
-- **`buildDOM()`**: constructs the entire UI tree in one pass (image panel, sidebar tabs, mobile tab bar, redshift axis, plane boxes area, toolbar).
-- **Event wiring**: `attachHandlers()` for global keyboard/tab/toolbar events; `attachAxisHandlers()` for plane-dragging on the redshift axis; `attachPlaneCanvasHandlers(canvas, plane)` per plane panel; `attachImageHandlers(wrap)` for drag-to-move in the main image.
-- **`renderSidebar()`**: rebuilds the Object Controls and settings/recording tab content. Called whenever selection or state changes.
-- **`rebuildPlaneBoxes()`**: rebuilds the plane panel DOM from scratch, called when planes are added or removed.
+- **`state`**: single object holding all mutable app state: planes and their objects, selected IDs, display flags, add mode, per-viz-mode colour-mapping settings (`vizScale`: scale, parameter, limits, and palette for each of surface brightness, $\kappa$, $\gamma$, $\lvert\mu\rvert$, $\lvert\hat{\boldsymbol{\alpha}}\rvert$), render scale, recording state.
+- **`buildDOM()`**: constructs the entire UI tree in one pass: topbar (with the preset/YAML file cluster and ? shortcut button), the stage holding the image panel and its chrome (view dropdown, overlay chips, z<sub>s</sub> chip, colorbar, the canvas tool rail, ruler cluster, warning badges; the angular scale bar is drawn on the overlay canvas), the slim redshift timeline with its z<sub>max</sub> input, and the right rail (tab bar, the four tab containers, and the persistent plane-card skeleton with its tool column).
+- **Event wiring**: `attachHandlers()` for global keyboard/tab/toolbar/file-cluster events; `attachAxisHandlers()` for plane add/select/drag on the redshift axis; `attachPlaneCardHandlers(canvas)` once for the plane card (the plane is resolved at pointerdown); `attachImageHandlers(wrap)` for drag-to-move and armed click-to-place in the main image (`setCanvasTool()` arms the select / lens / source / hybrid tools; with the View tab's Creation tools switch off, `state.showCreateTools`, the rail is hidden and the image stays in selection mode, L/S/H then only picking the plane viewer's type); `attachZoomHandlers(wrap)` for wheel zoom and two-finger pinch (both funnel through `setFov()`, which clamps to [0.5, 300]″ and syncs the View-tab input).
+- **`setRailTab(tab)`** switches the active rail tab (`scene` | `view` | `data` | `export`) for desktop and mobile alike, stamping `.sl-body[data-tab]` for the responsive CSS.
+- **`renderSidebar()`**: renders the Scene panel (always) plus whichever other tab is active, via `renderScenePanel()` / `renderViewPanel()` / `renderExportPanel()` / `renderQualityPanel()`.
+- **`renderPlaneCard()`**: refreshes the selected-plane viewer (the viewer canvas's plane-type border colour, z input, prev/next arrow states, canvas) in the Scene tab; `selectPlaneOffset()` implements the arrow buttons and the mobile swipe. The viewer's skeleton is static DOM, so its listeners are wired once. On desktop the viewer is pinned below the object controls, which scroll within their own box when long.
+- **`computeThetaE(obj, plane, zs)`**: Einstein-radius helper, not currently surfaced; retained for the upcoming physics-readout pass.
 - **`_doRedraw()`**: packs the scene into the renderer, redraws the axis canvas, and redraws the overlay (critical curves, position markers, legend, and ruler measurements) on a 2D canvas layered above the WebGL output. Ruler measurements live in `state.rulers` (arcsec endpoints) and are drawn by `drawOverlay()`; a ruler drag updates only the overlay, not the GPU scene. In Fermat mode, `findStationaryPoints()` locates images of the source at $\boldsymbol{\beta}_s$ via a grid search followed by Newton-Raphson refinement, classifies them by Jacobian type, and computes their $\varphi$ values using `_computeFullFermat()` (a CPU-side mirror of the shader's comoving arrival-time surface) before passing saddle $\varphi$ levels to the renderer.
 - **Recording**: `captureSnapshot()` composites the WebGL canvas and overlay into a PNG, reflecting the current view (lensed image or quantity map); `startRecording()` / `stopRecording()` drive a `MediaRecorder` for WebM or a gif.js encoder for GIF. UI chrome (the viz-mode chip, colour bar, sidebar, ruler buttons, and the performance badge) lives in separate DOM elements and is intentionally excluded from both PNG and recordings. The light-mode colour inversion that matches the on-screen lensed image is applied only in surface-brightness mode, since the quantity maps carry their own theming.
 - **Programmatic recording**: each selected object can have an initial and final position set; `startProgrammaticRecording()` interpolates all registered objects simultaneously.
-- **Config save/load**: `configToYaml()` serialises all planes and objects, plus the view state needed to reproduce the rendered image (field of view, $z_\text{max}$, active viz mode, per-mode color mapping, contour spacing, critical-curve resolution and point-source grid density, the critical-curve redshift, and the marker/legend/colorbar/critical-curve/caustic toggles), to a human-readable YAML string. `parseYamlConfig()` parses it back with strict type and range validation (allowlisted model names, hex-only color strings, bounded numeric coordinates). The scalar view settings are centralised in a `CONFIG_DEFAULTS` table that both seeds the initial state and supplies the fallback for any field missing from a loaded file, so older or partial configs load to a fully defined visual state rather than inheriting whatever was on screen. The page theme and pasted-image textures are not part of the config (the former is a site-wide preference, the latter is binary data).
-- **Tour**: `startTour()` / `showTourStep()`: spotlight-and-tooltip tutorial with mobile-aware step callbacks that switch mobile tabs (including the Planes tab that reveals the plane setup) as needed.
+- **Config save/load**: `configToYaml()` serialises all planes and objects, plus the view state needed to reproduce the rendered image (field of view, $z_\text{max}$, active viz mode, per-mode color mapping, contour spacing, critical-curve resolution, point-source grid density, render scale, the critical-curve redshift, and the marker/legend/colorbar/critical-curve/caustic toggles), to a human-readable YAML string. `parseYamlConfig()` parses it back with strict type and range validation (allowlisted model names, hex-only color strings, bounded numeric coordinates). The scalar view settings are centralised in a `CONFIG_DEFAULTS` table that both seeds the initial state and supplies the fallback for any field missing from a loaded file, so older or partial configs load to a fully defined visual state rather than inheriting whatever was on screen. The page theme and pasted-image textures are not part of the config (the former is a site-wide preference, the latter is binary data).
+- **Data export**: `drawOverlay()` caches its last computed critical-curve/caustic segments (`state._lastCurves`) and point-source image positions (`state._lastPsImages`); the Export tab's Data section serialises these via `_downloadCSV()`.
+- **Tour**: `startTour()` / `showTourStep()`: spotlight-and-tooltip tutorial whose step callbacks switch rail tabs (`setRailTab`) as needed, on desktop and mobile alike. A one-time nudge bubble on the Tour button invites first-time visitors.
+- **Shortcut overlay**: `toggleKbdOverlay()` shows the in-app keyboard reference (the topbar **?** button, or the `?` key).
 
 ### `style.css`
 
 Single stylesheet using CSS custom properties for theming (`--accent`, `--lens-color`, `--src-color`, `--hybrid-color`, and others) with `html[data-theme="dark"]` overrides.
-The layout uses flexbox throughout: three-column on wide screens, collapsing to a single-column mobile layout with a tab bar (Object / Settings / Recording / Planes); the Planes tab reveals the redshift axis and plane panels.
+The layout is a CSS grid: the stage (which letterboxes the square image using container-query units) and the slim timeline strip on the left, the tabbed rail on the right. Narrow screens (≤ 640px) collapse to a single scrolling column — image, then the rail, with the redshift timeline at the very bottom of the Scene tab, and a mobile-only Object tab hosting the object controls — and short viewports (landscape phones, height ≤ 480px) drop the timeline onto the bottom edge of the stage so the image keeps its height.
 
 ### `gif.js` + `gif.worker.js`
 
