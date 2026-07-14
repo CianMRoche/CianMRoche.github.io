@@ -8,7 +8,7 @@ vizScale3: 4 0.5 1 30 0
 vizScale5: 0 0.5 0 2 0
 showCritCurves: false
 showCaustics: true
-showMarkers: false
+showMarkers: true
 showLegend: true
 showColorbar: true
 showRuler: true
@@ -17,7 +17,10 @@ psGridN: 300
 critZs: null
 contourSpacing: 1
 contourScale: linear
-fermatUseSourcePos: false
+fermatUseSourcePos: true
+fermatBetaX: 0.178296
+fermatBetaY: 0.002522
+fermatSrcPlaneZ: 1.9900
 planes:
   - z: 0.500
     objects:
@@ -45,3 +48,15 @@ planes:
           q: 0.35
           phi: 1.6
           rc: 0.017206
+  - z: 1.990
+    objects:
+      - type: source
+        model: pointsource
+        cx: 0.1783
+        cy: 0.00252
+        hidden: false
+        showShape: false
+        params:
+          sigma: 0.063246
+          amplitude: 1
+          color: '#e8fff1'
