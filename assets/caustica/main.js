@@ -986,6 +986,7 @@ function init() {
   rebuildPlaneBoxes();
   renderSidebar();
   resetHistory();  // the initial demo scene is the baseline, not an undoable edit
+  _initTourNudge();
 
   requestAnimationFrame(() => { renderer?.resize(); redraw(); });
 
@@ -4723,6 +4724,42 @@ const tour = {
   backdrop: null, spotlight: null, tooltip: null, quitBtn: null,
 };
 
+// ── First-visit tour nudge ────────────────────────────────────────────────────
+// One-time callout for new visitors: the Tour button takes accent styling and a
+// small bubble hangs beneath it. Clicking the bubble starts the tour (it is a
+// child of the button, so the click bubbles into the existing listener). The
+// first interaction anywhere else — pointer or key — dismisses it, and either
+// way a localStorage flag stops it ever appearing again on this browser.
+let _tourNudge = null;
+
+function _initTourNudge() {
+  try { if (localStorage.getItem('causticaTourPrompted')) return; } catch {}
+  const btn = document.getElementById('sl-demo');
+  if (!btn) return;
+  btn.classList.add('sl-tour-nudge');
+  const bubble = document.createElement('span');
+  bubble.className = 'sl-tour-bubble';
+  bubble.textContent = 'New here? Take the tour';
+  btn.appendChild(bubble);
+  // Presses on the button (or bubble) are left to the click → startTour path, so
+  // removing the bubble mid-press can't swallow the click that starts the tour.
+  const onDown = e => { if (!e.target?.closest?.('#sl-demo')) dismissTourNudge(); };
+  const onKey  = () => dismissTourNudge();
+  document.addEventListener('pointerdown', onDown, true);
+  document.addEventListener('keydown', onKey, true);
+  _tourNudge = { btn, bubble, onDown, onKey };
+}
+
+function dismissTourNudge() {
+  if (!_tourNudge) return;
+  document.removeEventListener('pointerdown', _tourNudge.onDown, true);
+  document.removeEventListener('keydown', _tourNudge.onKey, true);
+  _tourNudge.btn.classList.remove('sl-tour-nudge');
+  _tourNudge.bubble.remove();
+  _tourNudge = null;
+  try { localStorage.setItem('causticaTourPrompted', '1'); } catch {}
+}
+
 function _tourKeyHandler(e) {
   if (!tour.active) return;
   if (e.key === 'Enter') { e.preventDefault(); tourNext(); }
@@ -4731,6 +4768,7 @@ function _tourKeyHandler(e) {
 
 function startTour() {
   if (tour.active) return;
+  dismissTourNudge();
   tour.active = true;
   tour.step   = 0;
 

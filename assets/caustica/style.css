@@ -1660,3 +1660,54 @@ html[data-theme="dark"] .tutorial-tooltip { box-shadow: 0 12px 32px rgba(0,0,0,0
   transition: color 0.12s, border-color 0.12s, background 0.12s;
 }
 .tutorial-quit:hover { color: var(--fg); border-color: var(--fg); background: var(--bg-soft); }
+
+/* ── First-visit tour nudge ──────────────────────────────────────────────────
+   One-time accent on the Tour button plus a bubble hung beneath it (a child of
+   the button, so clicking it starts the tour). Removed on first interaction;
+   see _initTourNudge() in main.js. Placed after .sl-demo-btn:hover so the
+   accent colour wins while the nudge is active. */
+.sl-demo-btn { position: relative; }
+button.sl-demo-btn.sl-tour-nudge {
+  color: var(--accent);
+  border-color: var(--accent);
+  animation: sl-tour-pulse 1.8s ease-out 0.6s 3;
+}
+@keyframes sl-tour-pulse {
+  0%   { box-shadow: 0 0 0 0 var(--accent-soft); }
+  55%  { box-shadow: 0 0 0 7px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+.sl-tour-bubble {
+  position: absolute;
+  top: calc(100% + 11px);
+  right: 0;
+  display: block;
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  padding: 7px 11px;
+  font-size: 12px;
+  color: var(--fg);
+  white-space: nowrap;
+  box-shadow: 0 8px 22px rgba(0,0,0,0.18);
+  z-index: 120;
+  cursor: pointer;
+  animation: sl-tour-bubble-in 0.35s ease-out 0.4s backwards;
+}
+html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55); }
+.sl-tour-bubble::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  right: 16px;
+  width: 9px;
+  height: 9px;
+  background: var(--bg);
+  border-left: 1px solid var(--hairline);
+  border-top: 1px solid var(--hairline);
+  transform: rotate(45deg);
+}
+@keyframes sl-tour-bubble-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+}
