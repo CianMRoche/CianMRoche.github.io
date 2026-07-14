@@ -565,17 +565,6 @@ The computation proceeds in four steps:
 **Note.** Fine features such as cusps are only resolved at higher resolutions.
 </div>
 
-### Caustic metamorphoses: the butterfly
-
-Folds and cusps are the only caustic features that are *stable* — a generic lens shows nothing else.
-A compound lens, however, can be tuned through special configurations where **higher-order catastrophes** appear: as the alignment, strengths, or shapes of the component lenses change, cusps collide and unfold, momentarily forming **swallowtail** and **butterfly** singularities in which the caustic folds back over itself.
-A source placed inside the extra folded region gains additional image pairs, producing exotic image configurations such as broken and angular Einstein rings.
-[Orban de Xivry & Marshall (2009)](https://ui.adsabs.harvard.edu/abs/2009MNRAS.399....2O/abstract) give an atlas of these exotic lenses and predict how often each should turn up in surveys.
-
-The **Butterfly Caustic** preset (Settings tab → *Load a preset scene…*) reproduces such a configuration: two flattened nonsingular isothermal (NIE) lenses at $z = 0.500$ and $z = 0.510$ with nearly perpendicular position angles.
-The source-plane caustic develops butterfly metamorphoses at its cusps, visible as multi-cusped pockets where the caustic folds over itself.
-Toggle the critical curves with `C`, and drag a source through the folded pockets to watch the extra images appear and merge.
-
 ## 8. Recording, capture, and animation
 
 The **Recording tab** in the right sidebar turns the live view into a still image, a video, or a smooth animation. Every capture reflects exactly what is on screen: the active view (lensed image or any quantity map), the overlay (position markers, critical curves and caustics, ruler measurements), and the color bar. UI chrome (the sidebar, the quantity dropdown, the ruler buttons, the performance badge) is excluded, and in the lensed-image view the same light-mode inversion used on screen is baked into the output so the file matches what you see.
@@ -615,7 +604,19 @@ Every listed object is interpolated linearly and **simultaneously** from its ini
   <figcaption>A programmatic GIF recording of two point-mass lenses, one moving left and one moving right, passing in front of a central background source. Each lens carries a circular critical curve (pink) and cuspy caustic (green).</figcaption>
 </figure>
 
-## 9. Code structure
+## 9. Preset Configurations
+
+The *Load a preset scene* dropdown in the Settings tab loads ready-made scenes:
+
+- **SIE lens + Point Source**: one SIE lens at $z = 0.5$ with a point source at $z = 1.5$. Critical curves, caustics, and the numerically solved image positions are shown.
+- **Double Lens + Uniform Source**: two SIE lenses at $z = 0.5$, a main galaxy and an off-centre companion, lensing a uniform disc source at $z = 1.5$.
+- **Two lens planes (multiplane)**: SIE lenses at $z = 0.4$ and $z = 0.8$ deflecting a Gaussian source at $z = 1.6$ in sequence.
+- **Fermat surface demo**: an SIE and NIE lens pair at $z = 0.5$ with a uniform disc source at $z = 1.0$. Opens in the Fermat potential view with contours pinned to the source position.
+- **ZigZag Lens**: a point source at $z = 2.38$ lensed twice, by a galaxy at $z = 1.89$ and again by one at $z = 0.18$, so the light path zigzags between planes.
+- **Butterfly Caustic**: two flattened NIE lenses at $z = 0.5$ and with nearly perpendicular position angles. The caustic folds into butterfly metamorphoses at its cusps; [Orban de Xivry & Marshall (2009)](https://ui.adsabs.harvard.edu/abs/2009MNRAS.399....2O/abstract) give an atlas of such exotic lens configurations. Lenses split into two planes for ease of editing, but are effectively coplanar.
+- **Galaxy group (wide field)**: six SIE galaxies with external shear at $z = 0.5$ in a 40 arcsec field, with background sources at $z = 1.15$, $2.0$, and $3.0$.
+
+## 10. Code structure
 
 Caustica is written in vanilla JavaScript with no framework. The source lives in `/assets/caustica/`.
 
