@@ -11,6 +11,7 @@ showCaustics: true
 showMarkers: true
 showLegend: true
 showColorbar: true
+showTimeDelays: true
 critGridN: 512
 psGridN: 300
 critZs: null
