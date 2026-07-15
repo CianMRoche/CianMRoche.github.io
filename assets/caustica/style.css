@@ -1394,7 +1394,11 @@ input.sl-scrub { cursor: col-resize; }
      theme). position:relative anchors the dropdown below the bar. */
   .sl-topbar { flex-wrap: nowrap; height: 44px; padding: 6px 10px; gap: 8px; position: relative; }
   .sl-file-group { flex-basis: auto; margin: 0; min-width: 0; }
-  .sl-topbar-preset { flex: 0 1 auto; max-width: 88px; }
+  /* min-width:0 lets the select shrink below its content width so it yields space
+     to the ⋯ menu / theme instead of overlapping them; flex-shrink does the rest,
+     sizing it dynamically to whatever room is left. */
+  .sl-topbar-preset { flex: 0 1 auto; min-width: 0; max-width: 130px; }
+  .sl-menu-btn, #sl-theme { flex: 0 0 auto; }
   .sl-topbar-overflow { display: none; }   /* moved into the ⋯ dropdown */
   /* The theme toggle stays on the bar at the far right; the ⋯ (pushed right by
      its auto margin) sits just to its left. */
