@@ -194,6 +194,58 @@ html[data-theme="dark"] .icon-moon { display: none;  }
 html[data-theme="dark"] .sl-theme-btn       { color: rgba(255,255,255,0.72); }
 html[data-theme="dark"] .sl-theme-btn:hover { color: #fff; background: rgba(255,255,255,0.06); }
 
+/* ── Mobile overflow menu (⋯) ─────────────────────────────────────────────── */
+/* Hidden on desktop entirely; the ≤640px block reveals the button and turns the
+   menu into a dropdown of the topbar items that don't fit on one phone row. */
+.sl-menu-btn { display: none; }
+.sl-topbar-menu { display: none; }
+.sl-menu-btn {
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 26px;
+  margin-left: auto;          /* push to the right end of the one-row topbar */
+  padding: 0;
+  border: 1px solid var(--hairline);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 0;
+}
+.sl-menu-btn:hover { color: var(--fg); border-color: var(--fg-soft); }
+.sl-topbar-menu {
+  position: absolute;
+  top: 100%;
+  right: 10px;
+  margin-top: 4px;
+  z-index: 150;               /* above the body, below the tour (200) */
+  flex-direction: column;
+  min-width: 184px;
+  padding: 5px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--bg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+html[data-theme="dark"] .sl-topbar-menu { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55); }
+.sl-menu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 10px 11px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--fg-soft);
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.sl-menu-item:hover { background: var(--bg-soft2); color: var(--fg); }
+
 /* ── Body: canvas-first grid — stage + timeline on the left, rail on the right ── */
 
 .sl-body {
@@ -1282,15 +1334,19 @@ input.sl-scrub { cursor: col-resize; }
 /* ── Narrow screens: single column — image, timeline (Scene tab), rail ────── */
 
 @media (max-width: 640px) {
-  /* Topbar wraps: the file cluster takes its own row. On the first row, the
-     undo group becomes the flex spacer so Docs / Tour / ? / theme sit at the
-     right edge. */
-  .sl-topbar { flex-wrap: wrap; height: auto; min-height: 44px; padding: 6px 10px; row-gap: 2px; }
-  .sl-undo-group { margin-right: auto; }
-  .sl-file-group { order: 10; flex-basis: 100%; margin-right: 0; }
-  /* The preset keeps its natural width (does not stretch to fill the row);
-     Save / Load are pushed to the right edge instead. */
-  #sl-save-config { margin-left: auto; }
+  /* Topbar stays a single row: title, undo/redo, presets, then a ⋯ overflow
+     menu (pushed to the right) holding everything else (Save/Load/Docs/Tour/?/
+     theme). position:relative anchors the dropdown below the bar. */
+  .sl-topbar { flex-wrap: nowrap; height: 44px; padding: 6px 10px; gap: 8px; position: relative; }
+  .sl-file-group { flex-basis: auto; margin: 0; min-width: 0; }
+  .sl-topbar-preset { flex: 0 1 auto; }
+  .sl-topbar-overflow { display: none; }   /* moved into the ⋯ dropdown */
+  /* The theme toggle stays on the bar at the far right; the ⋯ (pushed right by
+     its auto margin) sits just to its left. */
+  .sl-menu-btn { display: inline-flex; order: 2; }
+  #sl-theme { order: 3; }
+  .sl-topbar-menu { display: flex; }
+  .sl-topbar-menu[hidden] { display: none; }
 
   /* Single scrolling column; -webkit-overflow-scrolling:touch enables it inside
      position:fixed ancestors on iOS Safari. */

@@ -1097,13 +1097,13 @@ function buildDOM() {
             <option value="" selected>Presets…</option>
             ${PRESETS.map(p => `<option value="${p.file}">${p.name}</option>`).join('')}
           </select>
-          <button class="sl-demo-btn" id="sl-save-config" title="Download the current scene as a YAML file">↓ Save</button>
-          <button class="sl-demo-btn" id="sl-load-config" title="Load a scene from a YAML file">↑ Load</button>
+          <button class="sl-demo-btn sl-topbar-overflow" id="sl-save-config" title="Download the current scene as a YAML file">↓ Save</button>
+          <button class="sl-demo-btn sl-topbar-overflow" id="sl-load-config" title="Load a scene from a YAML file">↑ Load</button>
           <input type="file" id="sl-config-file" accept=".yaml,.yml" style="display:none">
         </div>
-<a class="sl-demo-btn" href="/caustica-documentation/" target="_blank" rel="noopener">Docs</a>
-        <button class="sl-demo-btn" id="sl-demo" title="Walk through a tour of the controls">Tour</button>
-        <button class="sl-demo-btn" id="sl-kbd-btn" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
+<a class="sl-demo-btn sl-topbar-overflow" href="/caustica-documentation/" target="_blank" rel="noopener">Docs</a>
+        <button class="sl-demo-btn sl-topbar-overflow" id="sl-demo" title="Walk through a tour of the controls">Tour</button>
+        <button class="sl-demo-btn sl-topbar-overflow" id="sl-kbd-btn" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
         <button class="sl-theme-btn" id="sl-theme" title="Toggle dark mode (D)" aria-label="Toggle dark mode">
           <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
@@ -1112,6 +1112,18 @@ function buildDOM() {
             <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
           </svg>
         </button>
+        <!-- Mobile-only overflow menu: keeps the top bar to one row (undo/redo +
+             presets stay visible; everything else moves into this dropdown). -->
+        <button class="sl-menu-btn" id="sl-menu-btn" aria-label="More options" aria-haspopup="true" aria-expanded="false" title="More">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+        </button>
+        <div class="sl-topbar-menu" id="sl-topbar-menu" role="menu" hidden>
+          <button class="sl-menu-item" role="menuitem" data-fwd="sl-save-config">Save config</button>
+          <button class="sl-menu-item" role="menuitem" data-fwd="sl-load-config">Load config</button>
+          <a class="sl-menu-item" role="menuitem" href="/caustica-documentation/" target="_blank" rel="noopener">Docs</a>
+          <button class="sl-menu-item" role="menuitem" data-fwd="sl-demo">Tour</button>
+          <button class="sl-menu-item" role="menuitem" data-fwd="sl-kbd-btn">Keyboard shortcuts</button>
+        </div>
       </div>
       <div class="sl-body" data-tab="scene">
         <div class="sl-stage" id="sl-stage">
@@ -1336,6 +1348,30 @@ function attachHandlers() {
     if (file) loadPreset(file);
     else updatePresetSelect(); // placeholder re-chosen: restore the current label
   });
+
+  // Mobile overflow menu (⋯): a dropdown for the topbar items that don't fit on
+  // one phone row. Each item forwards its click to the real (hidden) control, so
+  // there is no duplicated logic and the desktop bar is untouched.
+  const _menuBtn  = document.getElementById('sl-menu-btn');
+  const _menuPop  = document.getElementById('sl-topbar-menu');
+  const _closeMenu = () => { _menuPop.hidden = true; _menuBtn.setAttribute('aria-expanded', 'false'); };
+  const _openMenu  = () => { _menuPop.hidden = false; _menuBtn.setAttribute('aria-expanded', 'true'); };
+  _menuBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    _menuPop.hidden ? _openMenu() : _closeMenu();
+  });
+  _menuPop.addEventListener('click', e => {
+    const item = e.target.closest('.sl-menu-item');
+    if (!item) return;
+    const fwd = item.dataset.fwd;
+    if (fwd) document.getElementById(fwd)?.click(); // Docs is a plain link, no fwd
+    _closeMenu();
+  });
+  // Dismiss on an outside tap or Escape.
+  document.addEventListener('click', e => {
+    if (!_menuPop.hidden && !_menuPop.contains(e.target) && !_menuBtn.contains(e.target)) _closeMenu();
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !_menuPop.hidden) _closeMenu(); });
 
   // Plane-viewer tool column (select / add-lens / add-source / add-hybrid),
   // plus delete-selected-object. The chosen tool decides what a click on the
