@@ -3163,7 +3163,7 @@ function renderViewPanel() {
             </select>
             <input type="number" id="sl-crit-zs-gen" min="0.1" max="15" step="0.1" value="${ezs.toFixed(2)}" ${auto?'disabled':''}>
           </div>
-          <p class="sl-perf-note" style="margin:2px 0 8px">The source redshift the quantity maps and critical curves refer to. Auto tracks the highest source plane.</p>
+          <p class="sl-perf-note" style="margin:2px 0 8px">The source redshift referred to by the lensing quantity maps and critical curves. Auto tracks the highest source plane.</p>
           <div class="sl-checkbox-row">
             <label><input type="checkbox" id="sl-show-markers" ${state.showMarkers?'checked':''}> Positions</label>
             <label><input type="checkbox" id="sl-show-legend"  ${state.showLegend ?'checked':''}> Legend</label>
@@ -4377,6 +4377,15 @@ function drawOverlay() {
     if (hasSrcObj)    legendItems.push({ color: typeColorHex('source'), label: 'Source', isDot: true, markerType: 'source' });
     if (hasHybridObj) legendItems.push({ color: typeColorHex('hybrid'), label: 'Hybrid', isDot: true, markerType: 'hybrid' });
   }
+  // Dashed-ellipse "show shape" outlines get a legend entry so the dotted line reads.
+  // Only the ellipse-drawing models qualify; the external-field models (shear /
+  // convergence / deflection) draw solid arrows, not a dotted shape.
+  const _ELLIPSE_LENS = new Set(['sie', 'nie', 'epl', 'pointmass']);
+  const _ELLIPSE_SRC  = new Set(['gaussian', 'exponential', 'point']);
+  const _anyShape = (type, models) => state.planes.some(p => p.objects.some(o =>
+    o.showShape && !o.hidden && o.type === type && models.has(o.model)));
+  if (_anyShape('lens',   _ELLIPSE_LENS)) legendItems.push({ color: typeColorHex('lens'),   label: 'Lens shape',   isDash: true });
+  if (_anyShape('source', _ELLIPSE_SRC))  legendItems.push({ color: typeColorHex('source'), label: 'Source shape', isDash: true });
 
   if (state.showLegend && !hideOv && legendItems.length > 0) {
     const _mob  = window.innerWidth <= 640;
@@ -4396,6 +4405,11 @@ function drawOverlay() {
       if (item.isLine) {
         overlayCtx.strokeStyle = item.color; overlayCtx.lineWidth = _mob ? 2.5 : 3.5;
         overlayCtx.beginPath(); overlayCtx.moveTo(ix, iy); overlayCtx.lineTo(ix + iconW, iy); overlayCtx.stroke();
+      } else if (item.isDash) {
+        overlayCtx.strokeStyle = item.color; overlayCtx.lineWidth = _mob ? 1.5 : 2;
+        overlayCtx.setLineDash(_mob ? [4, 3] : [6, 4]);
+        overlayCtx.beginPath(); overlayCtx.moveTo(ix, iy); overlayCtx.lineTo(ix + iconW, iy); overlayCtx.stroke();
+        overlayCtx.setLineDash([]);
       } else if (item.isDot) {
         overlayCtx.fillStyle = item.color;
         drawShapeMarker(overlayCtx, item.markerType, ix + iconW / 2, iy, dotR);

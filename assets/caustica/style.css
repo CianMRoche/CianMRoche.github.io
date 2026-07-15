@@ -1460,6 +1460,13 @@ input.sl-scrub { cursor: col-resize; }
      viewer (pinned to the rail on desktop) reappears only under the Scene tab,
      with the redshift timeline below it. */
   .sl-mobile-only-tab { display: block; }
+  /* Mobile tab order: Scene leads, then Object (the DOM has Object first for the
+     desktop layout, so reorder with flex order here). */
+  .sl-rail-tab-btn[data-tab="scene"]   { order: 1; }
+  .sl-mobile-only-tab                  { order: 2; }
+  .sl-rail-tab-btn[data-tab="view"]    { order: 3; }
+  .sl-rail-tab-btn[data-tab="export"]  { order: 4; }
+  .sl-rail-tab-btn[data-tab="quality"] { order: 5; }
   .sl-tablabel-scene { display: inline; }
   .sl-tablabel-obj   { display: none; }
   /* The card sits directly under the tab bar here; no divider, own padding. */
