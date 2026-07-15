@@ -243,12 +243,14 @@ function _numStep(v) {
 function _attachScrub(inp, { lo = -Infinity, hi = Infinity, onChange }) {
   if (!inp) return;
   inp.classList.add('sl-scrub');
-  let dragging = false, moved = false, startX = 0, startVal = 0, step = 0.01;
+  let dragging = false, moved = false, startX = 0, startVal = 0, step = 0.01, startSig = null;
   inp.addEventListener('pointerdown', e => {
     if (e.button !== 0) return;
     startVal = parseFloat(inp.value) || 0;
     step = _numStep(startVal || 1);
+    startSig = _sceneSig();
     startX = e.clientX; dragging = true; moved = false;
+    beginAction();
     inp.setPointerCapture(e.pointerId);
   });
   inp.addEventListener('pointermove', e => {
@@ -263,6 +265,9 @@ function _attachScrub(inp, { lo = -Infinity, hi = Infinity, onChange }) {
   const end = (e) => {
     if (!dragging) return;
     dragging = false;
+    if (moved && startSig !== null && _sceneSig() !== startSig) commitAction();
+    else { _history.pending = null; _history.pendingSig = null; }
+    startSig = null;
     try { inp.releasePointerCapture(e.pointerId); } catch (_) {}
   };
   inp.addEventListener('pointerup', end);
@@ -1264,12 +1269,12 @@ function buildDOM() {
                 </div>
                 <div class="sl-plane-spacer" aria-hidden="true"></div>
                 <div class="sl-plane-side" id="sl-plane-side">
-                  <label class="sl-plane-z">Redshift:<input type="number" class="sl-plane-z-input" id="sl-plane-z-input" min="0.01" step="0.01" aria-label="Plane redshift"></label>
-                  <button class="sl-plane-paste" id="sl-plane-paste" title="Load image from file" style="display:none"><svg width="12" height="11" viewBox="0 0 14 12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M1 3.5V10a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V4.5a1 1 0 0 0-1-1H7L5.5 2H2a1 1 0 0 0-1 1.5z"/></svg> Image</button>
+                  <label class="sl-plane-z"><span class="sl-plane-z-label sl-plane-z-label-full">Redshift:</span><span class="sl-plane-z-label sl-plane-z-label-compact">z</span><input type="number" class="sl-plane-z-input" id="sl-plane-z-input" min="0.01" step="0.01" aria-label="Plane redshift"></label>
+                  <button class="sl-plane-paste" id="sl-plane-paste" title="Load image from file" style="display:none"><svg width="12" height="11" viewBox="0 0 14 12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M1 3.5V10a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V4.5a1 1 0 0 0-1-1H7L5.5 2H2a1 1 0 0 0-1 1.5z"/></svg> <span class="sl-plane-btn-label">Image</span></button>
                   <div class="sl-plane-side-bottom">
                     <div class="sl-plane-side-label">Plane:</div>
-                    <button class="sl-plane-clear" id="sl-plane-clear" title="Clear all objects on this plane (O)"><span class="sl-pglyph">○</span> Clear</button>
-                    <button class="sl-plane-del" id="sl-plane-del" title="Delete plane (X)"><span class="sl-pglyph sl-pglyph-x">×</span> Delete</button>
+                    <button class="sl-plane-clear" id="sl-plane-clear" title="Clear all objects on this plane (O)"><span class="sl-pglyph">○</span> <span class="sl-plane-btn-label">Clear</span></button>
+                    <button class="sl-plane-del" id="sl-plane-del" title="Delete plane (X)"><span class="sl-pglyph sl-pglyph-x">×</span> <span class="sl-plane-btn-label">Delete</span></button>
                   </div>
                 </div>
               </div>
@@ -1357,7 +1362,7 @@ function attachHandlers() {
     const zEl = document.querySelector('#sl-obj-panel .sl-params-z');
     if (zEl && selectedPlane()) zEl.textContent = `z: ${selectedPlane().z.toFixed(2)}`;
   };
-  _zIn.addEventListener('change', e => _applyPlaneZ(parseFloat(e.target.value)));
+  _zIn.addEventListener('change', e => { record(); _applyPlaneZ(parseFloat(e.target.value)); });
   _attachScrub(_zIn, { lo: 0.01, hi: 15, onChange: _applyPlaneZ });
   document.getElementById('sl-plane-clear').addEventListener('click', () => {
     const pl = selectedPlane(); if (!pl) return;
@@ -2247,6 +2252,10 @@ function attachImageHandlers(wrap) {
     }
     e.preventDefault();
     const pos = imageWrapToArcsec(wrap, e);
+    if (!imgDrag.historyRecorded) {
+      record();
+      imgDrag.historyRecorded = true;
+    }
     imgDrag.obj.cx = imgDrag.startCx + (pos.x - imgDrag.startMx);
     imgDrag.obj.cy = imgDrag.startCy + (pos.y - imgDrag.startMy);
     const partner = hybridPartner(imgDrag.plane, imgDrag.obj);
@@ -2479,6 +2488,10 @@ function attachPlaneCardHandlers(canvas) {
       renderPlaneCard(); renderSidebar();
     }
     if (istate === 'dragging' || istate === 'add-dragging') {
+      if (!pStart.historyRecorded) {
+        record();
+        pStart.historyRecorded = true;
+      }
       hitObj.cx = pStart.cx + dx;
       hitObj.cy = pStart.cy + dy;
       // Move hybrid partner in sync.
@@ -2510,7 +2523,7 @@ function attachPlaneCardHandlers(canvas) {
     if (hitObj) {
       // Started on an existing object → drag it.
       istate = 'hit-pending'; canvas.style.cursor = 'grab';
-      pStart = { cx: hitObj.cx, cy: hitObj.cy, mx: pos.x, my: pos.y, touch };
+      pStart = { cx: hitObj.cx, cy: hitObj.cy, mx: pos.x, my: pos.y, touch, historyRecorded: false };
       state.selectedObjId   = hitObj.id;
       clearRulerSelectionForObject();  // one selection at a time
       renderSidebar(); redraw();

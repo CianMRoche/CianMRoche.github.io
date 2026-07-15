@@ -1123,7 +1123,8 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
 }
 .sl-global-input input[type="range"] { flex: 1; min-width: 0; }
 /* Drag horizontally to scrub the value (also typeable / spinner-adjustable). */
-.sl-global-input input.sl-scrub { cursor: ew-resize; }
+.sl-global-input input.sl-scrub,
+input.sl-scrub { cursor: col-resize; }
 .sl-tone-param-val {
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
@@ -1355,46 +1356,81 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   #sl-plane-body {
     display: flex;
     flex-direction: row;
-    align-items: center;
+    align-items: stretch;
     gap: 0;
   }
   #sl-plane-tools { flex: 0 0 auto; }
   /* id+class beats the later desktop `.sl-plane-spacer { display:none }`. */
-  #sl-plane-body .sl-plane-spacer { display: block; flex: 1 1 0; min-width: 12px; align-self: stretch; }
+  #sl-plane-body .sl-plane-spacer { display: block; flex: 1 1 0; min-width: 4px; align-self: stretch; }
   #sl-plane-body .sl-plane-viewgroup {
     display: flex;
     align-items: center;
-    gap: 5px;              /* tight, equal ‹↔canvas and canvas↔› gaps */
+    gap: 3px;              /* tight, equal ‹↔canvas and canvas↔› gaps */
     min-width: 0;
     flex: 0 1 auto;
   }
   /* Canvas caps at its desktop size and shrinks to fit on narrow phones. */
-  #sl-plane-canvas { flex: 0 1 150px; min-width: 40px; width: auto; }
-  #sl-plane-prev, #sl-plane-next { width: 30px; align-self: stretch; font-size: 20px; flex: 0 0 auto; }
-  #sl-plane-side { flex: 0 1 auto; min-width: 0; }
+  #sl-plane-canvas { flex: 1 1 156px; min-width: 80px; max-width: 210px; width: auto; }
+  #sl-plane-prev, #sl-plane-next { width: 22px; align-self: stretch; font-size: 18px; flex: 0 0 auto; }
+  #sl-plane-side { flex: 0 1 auto; min-width: 0; gap: 4px; }
   #sl-plane-tools {
     align-self: center;
     flex-direction: row;
-    gap: 10px;             /* horizontal gap between the two button columns */
+    gap: 8px;             /* horizontal gap between the two button columns */
     align-items: center;   /* centre each short column against the canvas height */
   }
   #sl-plane-tools .sl-ptool-col {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 5px;
   }
   #sl-plane-tools .sl-ctool-btn,
   #sl-plane-tools .sl-ctool-del {
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
     margin-top: 0;         /* clear the desktop trash's bottom-pinning margin */
-    font-size: 13px;
+    font-size: 12px;
+  }
+  #sl-plane-side .sl-plane-z { gap: 2px; font-size: 10px; }
+  #sl-plane-side .sl-plane-z-label-full { display: inline; }
+  #sl-plane-side .sl-plane-z-label-compact,
+  #sl-plane-side .sl-plane-btn-label {
+    display: none;
+  }
+  #sl-plane-z-input { width: 46px; padding: 2px 4px; }
+  #sl-plane-side .sl-plane-paste,
+  #sl-plane-side .sl-plane-clear,
+  #sl-plane-side .sl-plane-del {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    font-size: 10px;
+  }
+  #sl-plane-side .sl-plane-paste svg,
+  #sl-plane-side .sl-plane-clear svg,
+  #sl-plane-side .sl-plane-del svg {
+    flex: 0 0 auto;
   }
 
   /* Column order: image, rail (tabs + panel), timeline at the very bottom. */
   .sl-stage    { order: 0; }
   .sl-rail     { order: 1; }
   .sl-timeline { order: 2; }
+}
+
+@media (max-width: 420px), (max-height: 700px) and (orientation: portrait) {
+  .sl-body[data-tab="scene"] #sl-plane-body .sl-plane-spacer { min-width: 2px; }
+  .sl-body[data-tab="scene"] #sl-plane-body .sl-plane-viewgroup { gap: 2px; }
+  .sl-body[data-tab="scene"] #sl-plane-canvas { flex-basis: 148px; min-width: 72px; }
+  .sl-body[data-tab="scene"] #sl-plane-prev,
+  .sl-body[data-tab="scene"] #sl-plane-next { width: 20px; }
+  .sl-body[data-tab="scene"] #sl-plane-side .sl-plane-z-label-full { display: none; }
+  .sl-body[data-tab="scene"] #sl-plane-side .sl-plane-z-label-compact { display: inline; }
+  .sl-body[data-tab="scene"] #sl-plane-z-input { width: 36px; }
 }
 
 /* ── Short viewports (landscape phones, squat windows): the layout cannot fit,
@@ -1766,6 +1802,8 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
   padding: 2px 0;
 }
 .sl-plane-side .sl-plane-z { flex: 0 0 auto; }
+.sl-plane-z-label-full { display: inline; }
+.sl-plane-z-label-compact { display: none; }
 .sl-plane-side-bottom {
   margin-top: auto;
   display: flex;
