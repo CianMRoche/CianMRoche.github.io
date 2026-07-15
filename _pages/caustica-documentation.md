@@ -65,14 +65,16 @@ Endpoints are stored in sky coordinates, so a measurement stays anchored to the 
 
 ## 2. Cosmological distances
 
-The simulation uses a spatially flat ΛCDM cosmology with the following fixed parameters:
+The simulation uses a spatially flat ΛCDM cosmology. $H_0$ and $\Omega_m$ are adjustable in the Settings tab (the gear icon); the universe is kept flat, so $\Omega_\Lambda = 1 - \Omega_m$. Defaults:
 
-| Symbol | Value | Meaning |
+| Symbol | Default | Meaning |
 |---|---|---|
-| $H_0$ | 70 km s⁻¹ Mpc⁻¹ | Hubble constant |
-| $\Omega_m$ | 0.3 | Matter density parameter |
-| $\Omega_\Lambda$ | 0.7 | Dark-energy density parameter |
+| $H_0$ | 70 km s⁻¹ Mpc⁻¹ | Hubble constant (adjustable, 50–100) |
+| $\Omega_m$ | 0.3 | Matter density parameter (adjustable, 0.05–0.6) |
+| $\Omega_\Lambda$ | $1 - \Omega_m$ | Dark-energy density parameter (flat universe) |
 | $c$ | $2.998\times10^5$ km s⁻¹ | Speed of light |
+
+Because the lensed image, the $\kappa/\gamma/\mu$ maps, and the critical curves depend only on ratios of angular-diameter distances, $H_0$ leaves them unchanged and only $\Omega_m$ shifts them. $H_0$ does set the absolute distance scale, so it rescales the physical time delays (§ below): the delays scale as $1/H_0$, which is the basis of time-delay cosmography.
 
 ### Dimensionless Hubble parameter
 
@@ -328,6 +330,16 @@ For EPL lenses $\psi_k = 0$ (no closed form for the scaled-SIE approximation), s
 
 The zero level of $\varphi$ has no absolute physical meaning; it depends on the normalisation convention. For a singular isothermal sphere with Einstein radius $b$ and source at the origin, $\varphi(\boldsymbol{\theta};0) = 0$ at $r = 0$ and $r = 2b$, not at the Einstein ring ($r = b$). What is physically meaningful is the **difference** in $\varphi$ between two images, which is proportional to the relative time delay between those images.
 
+#### Time delays (days)
+
+The **Time delays** toggle in the View tab annotates each point-source image with its light-travel-time delay in days, measured relative to the first-arriving image (the global minimum of the arrival-time surface). The delay between two images is
+
+$$\Delta t_{ij} = \frac{D_{\Delta t}}{c}\,\big(\varphi_i - \varphi_j\big),\qquad D_{\Delta t} = (1+z_L)\,\frac{D_L D_S}{D_{LS}}$$
+
+where $\varphi$ is the reduced Fermat potential (arcsec², converted to radians² in the code) and $D_{\Delta t}$ is the **time-delay distance**. Because $D_{\Delta t}\propto 1/H_0$, the delays scale inversely with the Hubble constant, and they also depend on $\Omega_m$ through the distances, so both cosmology sliders move them. This is exactly the dependence exploited by time-delay cosmography to measure $H_0$.
+
+The single–lens-plane identity $D_{\Delta t} = \chi_L\chi_S/(\chi_S-\chi_L)$ (the Fermat normalisation $K$ above) makes the conversion exact for one lens plane only. Genuine multiplane arrival times require the generalised time-delay expression, so the toggle is **disabled when more than one plane contains a lens**, and it applies only to point sources that produce two or more images.
+
 ## 5. Lens deflection models
 
 All models take the ray–lens separation $\mathbf{u} = \boldsymbol{\theta}_k - (c_x, c_y)$ (arcsec) and return a deflection angle $\hat{\boldsymbol{\alpha}}$ (arcsec).
@@ -520,7 +532,7 @@ Image positions are found via a two-stage algorithm: a coarse grid search using 
 **Heads up.** Einstein rings and arc-shaped images do not appear in this mode. Use a Gaussian or uniform circle source for extended-emission lensing. Highly demagnified images (such as the central odd image of an SIE lens) may be missed by the grid search.
 </div>
 
-The grid density used for image finding is set in the **Quality** tab as **Point source**, the number of sample points across the field of view (Coarse 150, Medium 300, Fine 600, or Very fine 1200). Denser grids find images more reliably near caustics but are slower; the default is Medium (300). Because the count is fixed rather than an absolute angular spacing, the cost stays bounded as the field of view grows to cluster scale.
+The grid density used for image finding is set in the **Settings** tab (the gear icon) as **Point source**, the number of sample points across the field of view (Coarse 150, Medium 300, Fine 600, or Very fine 1200). Denser grids find images more reliably near caustics but are slower; the default is Medium (300). Because the count is fixed rather than an absolute angular spacing, the cost stays bounded as the field of view grows to cluster scale.
 
 ### Pasted image
 
@@ -548,7 +560,7 @@ Their pre-images in the source plane are the **caustics**; crossing a caustic ch
 
 The computation proceeds in four steps:
 
-1. **Sample a ray grid.** Trace $N \times N$ rays (the **Critical curves** resolution in the Quality tab, default $N = 512$) to the chosen source plane using the multiplane recursion, recording $\boldsymbol{\beta}$ at each image-plane point.
+1. **Sample a ray grid.** Trace $N \times N$ rays (the **Critical curves** resolution in the Settings tab, default $N = 512$) to the chosen source plane using the multiplane recursion, recording $\boldsymbol{\beta}$ at each image-plane point.
 
 2. **Compute the Jacobian.** At each interior grid point, approximate the $2\times2$ Jacobian $\partial\boldsymbol{\beta}/\partial\boldsymbol{\theta}$ via central finite differences and compute its determinant.
 
@@ -644,8 +656,8 @@ WebGL2 GPU renderer.
 - The shader includes `lensPotential()` for analytic per-model potentials and `fermatPotential()`, which traces the ray and evaluates the comoving arrival-time surface (§4) for the Fermat map.
 - `vizWarp()` applies the value→$[0,1]$ warp (linear/sqrt/log/power/asinh) and `applyColormap()` selects the palette; both are driven by the `u_vizScale`, `u_vizScaleParam`, `u_vizMin`, `u_vizMax`, and `u_colormap` uniforms.
 - The `Renderer` class manages the WebGL context, shader compilation, geometry, and texture slots. `setScene(planes, dist, fov, viz, vizMode, vizSrcIdx, isDark, saddlePhis, fermatBeta)` triggers a redraw, where `viz = { scale, param, min, max, palette }`.
-- `resize()` respects a `dprMode` property (`'auto'` caps the devicePixelRatio at 2, `'1x'` forces CSS-pixel resolution, `'native'` uses the full ratio), driven by the **Render scale** setting in the Quality tab.
-- `MAX_PLANES` (6) and `MAX_OBJECTS` (32 per type) are exported so the UI can warn when a scene exceeds the shader's caps.
+- `resize()` respects a `dprMode` property (`'auto'` caps the devicePixelRatio at 2, `'1x'` forces CSS-pixel resolution, `'native'` uses the full ratio), driven by the **Render scale** setting in the Settings tab.
+- `MAX_PLANES` (8) and `MAX_OBJECTS` (32 per type) are exported so the UI can enforce the shader's caps: plane creation is blocked once 8 planes exist (with a toast), and the object count triggers a warning badge past 32 lenses or sources per type.
 - `preserveDrawingBuffer: true` is set on the WebGL context to allow screenshot and recording capture.
 
 ### `main.js`

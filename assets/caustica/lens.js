@@ -4,12 +4,26 @@
 // All angular quantities in arcseconds. Distances in Mpc.
 
 // ── Cosmology ──────────────────────────────────────────────────────────────
+//
+// Flat ΛCDM. H0 and Omega_m are user-adjustable at runtime (Omega_L = 1 − Omega_m
+// keeps the universe flat); C_LIGHT is fixed. After changing them the caller must
+// recompute any cached distances (main.js: invalidateDistances → precomputeDistances).
 
-const H0      = 70;
-const Omega_m = 0.3;
-const Omega_L = 0.7;
-const C_LIGHT = 2.998e5;
-const DH      = C_LIGHT / H0;
+const C_LIGHT = 2.998e5;   // km/s
+let H0      = 70;          // km/s/Mpc
+let Omega_m = 0.3;
+let Omega_L = 0.7;
+let DH      = C_LIGHT / H0;
+
+// Update the cosmology in place (flat ΛCDM). Silently ignores out-of-range inputs.
+export function setCosmology({ H0: h, Omega_m: om } = {}) {
+  if (isFinite(h)  && h  > 0)              H0      = h;
+  if (isFinite(om) && om >= 0 && om <= 1)  Omega_m = om;
+  Omega_L = 1 - Omega_m;   // flat
+  DH      = C_LIGHT / H0;
+}
+
+export function getCosmology() { return { H0, Omega_m, Omega_L }; }
 
 function Ez(z) { return Math.sqrt(Omega_m * (1 + z) ** 3 + Omega_L); }
 
@@ -26,6 +40,31 @@ export function angDiamDist(z) { return comovingDist(z) / (1 + z); }
 export function angDiamDistBetween(z1, z2) {
   if (z2 <= z1) return 0;
   return (comovingDist(z2) - comovingDist(z1)) / (1 + z2);
+}
+
+// ── Time delays ──────────────────────────────────────────────────────────────
+//
+// Single-lens-plane time-delay distance D_Δt = (1+z_L)·D_L·D_S/D_LS (Mpc). Scales
+// as 1/H0 and depends on Omega_m through the angular-diameter distances, so both
+// cosmology sliders move the resulting delays. Returns 0 when the geometry is
+// degenerate (source at/behind lens). NOTE: valid for a SINGLE lens plane only;
+// genuine multiplane arrival times need the generalized time-delay formula.
+export function timeDelayDistance(zL, zS) {
+  const DL  = angDiamDist(zL);
+  const DS  = angDiamDist(zS);
+  const DLS = angDiamDistBetween(zL, zS);
+  if (DLS <= 0 || DS <= 0) return 0;
+  return (1 + zL) * DL * DS / DLS;
+}
+
+// Convert a difference in the reduced Fermat potential (arcsec², as returned by the
+// Fermat surface) at a given time-delay distance into a time delay in days.
+//   Δt = D_Δt/c · Δφ·(arcsec→rad)²
+export function fermatDiffToDays(dtDistMpc, dPhiArcsec2) {
+  const ARCSEC2RAD = Math.PI / (180 * 3600);
+  const MPC_KM     = 3.0856775815e19;
+  const seconds = (dtDistMpc * MPC_KM / C_LIGHT) * dPhiArcsec2 * ARCSEC2RAD * ARCSEC2RAD;
+  return seconds / 86400;
 }
 
 // ── Lens deflection angles ─────────────────────────────────────────────────

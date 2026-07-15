@@ -5,6 +5,10 @@ import { precomputeDistances,
          computeCriticalCurves,
          angDiamDist,
          angDiamDistBetween,
+         setCosmology,
+         getCosmology,
+         timeDelayDistance,
+         fermatDiffToDays,
          traceRay }                            from './lens.js';
 
 // ── ID generator ──────────────────────────────────────────────────────────────
@@ -175,6 +179,9 @@ const CONFIG_DEFAULTS = {
   fermatUseSourcePos: false,  // when true, use lastFermatSource for Fermat β_s and source plane
   contourSpacing:     1.0,    // Fermat contour spacing multiplier (interval = 0.002·fov²·this)
   contourScale:       0,      // Fermat contour scale: 0=linear, 1=asinh (compress steep skirt)
+  H0:                 70,     // Hubble constant (km/s/Mpc); flat ΛCDM
+  Omega_m:            0.3,    // matter density; Omega_L = 1 − Omega_m
+  showTimeDelays:     false,  // annotate point-source images with relative time delays (days)
 };
 
 const state = {
@@ -482,6 +489,8 @@ function configToYaml() {
   y += `critZs: ${state.critZs === null ? 'null' : state.critZs}\n`;
   y += `contourSpacing: ${state.contourSpacing}\n`;
   y += `contourScale: ${state.contourScale === 1 ? 'asinh' : 'linear'}\n`;
+  y += `H0: ${state.H0}\nOmega_m: ${state.Omega_m}\n`;
+  y += `showTimeDelays: ${state.showTimeDelays}\n`;
   y += `fermatUseSourcePos: ${state.fermatUseSourcePos}\n`;
   if (state.lastFermatSource) {
     const fsp = state.planes.find(p => p.id === state.lastFermatSource.planeId);
@@ -698,6 +707,12 @@ function loadConfigFromYaml(yaml) {
     state.critZs        = (isFinite(cfg.critZs) && cfg.critZs > 0) ? cfg.critZs : CONFIG_DEFAULTS.critZs;
     state.contourSpacing = isFinite(cfg.contourSpacing) ? Math.max(0.05, cfg.contourSpacing) : CONFIG_DEFAULTS.contourSpacing;
     state.contourScale = (cfg.contourScale === 'asinh' || cfg.contourScale === 1) ? 1 : 0;
+    // Cosmology (flat ΛCDM): apply before invalidateDistances() below so the distance
+    // matrix is built with the loaded values.
+    state.H0      = (isFinite(cfg.H0) && cfg.H0 > 0) ? cfg.H0 : CONFIG_DEFAULTS.H0;
+    state.Omega_m = (isFinite(cfg.Omega_m) && cfg.Omega_m >= 0 && cfg.Omega_m <= 1) ? cfg.Omega_m : CONFIG_DEFAULTS.Omega_m;
+    setCosmology({ H0: state.H0, Omega_m: state.Omega_m });
+    state.showTimeDelays = _bool(cfg.showTimeDelays, CONFIG_DEFAULTS.showTimeDelays);
     if (isFinite(cfg.fermatBetaX) && isFinite(cfg.fermatBetaY) && isFinite(cfg.fermatSrcPlaneZ)) {
       const fsp = state.planes.find(p => Math.abs(p.z - cfg.fermatSrcPlaneZ) < 1e-4);
       state.lastFermatSource = fsp ? { cx: cfg.fermatBetaX, cy: cfg.fermatBetaY, planeId: fsp.id } : null;
@@ -805,6 +820,20 @@ function removePlane(id) {
 }
 
 function invalidateDistances() { state.dist = precomputeDistances(state.planes); }
+
+// ── Time-delay eligibility ──────────────────────────────────────────────────
+// Relative image time delays are annotated only for a SINGLE lens plane, where the
+// Fermat normalisation K equals the time-delay distance D_Δt = (1+z_L)D_L D_S/D_LS.
+// Genuine multiplane arrival times need the generalized formula, so the toggle is
+// disabled (with an explanatory tooltip) whenever more than one plane holds a lens.
+function lensPlaneCount() {
+  return state.planes.filter(p => p.objects.some(o => !o.hidden && o.type === 'lens')).length;
+}
+function timeDelaysAvailable() { return lensPlaneCount() === 1; }
+function singleLensPlaneZ() {
+  const p = state.planes.find(pl => pl.objects.some(o => !o.hidden && o.type === 'lens'));
+  return p ? p.z : null;
+}
 
 // ── Undo / redo (scene edits only: planes, objects, params — not view settings) ──
 // Memento approach: snapshot the scene before a change, restore it on undo. The
@@ -1029,6 +1058,7 @@ function init() {
   }
 
   loadDemoState();
+  setCosmology({ H0: state.H0, Omega_m: state.Omega_m });  // sync lens.js with state defaults
   invalidateDistances();
   attachHandlers();
   renderPlaneCard();
@@ -1173,9 +1203,9 @@ function buildDOM() {
               </button>
               <b style="color:#e8912e">⚠ Slow redraw</b><br>
               If you would like to reduce the time to draw new frames, try the following:<br><br>
-              • Turn off critical curves or lower the <b>Critical curves</b> resolution (Quality tab)<br>
-              • If a point source is present, lower the <b>Point source</b> grid density (Quality tab)<br>
-              • Lower the <b>Render scale</b> (Quality tab)<br>
+              • Turn off critical curves or lower the <b>Critical curves</b> resolution (Settings)<br>
+              • If a point source is present, lower the <b>Point source</b> grid density (Settings)<br>
+              • Lower the <b>Render scale</b> (Settings)<br>
               • Reduce the number of objects<br>
               • Reduce the field of view
             </div>
@@ -1279,7 +1309,7 @@ function buildDOM() {
             <button class="sl-rail-tab-btn active" data-tab="scene"><span class="sl-tablabel-obj">Object</span><span class="sl-tablabel-scene">Scene</span></button>
             <button class="sl-rail-tab-btn" data-tab="view">View</button>
             <button class="sl-rail-tab-btn" data-tab="export">Export</button>
-            <button class="sl-rail-tab-btn" data-tab="quality">Quality</button>
+            <button class="sl-rail-tab-btn sl-tab-gear" data-tab="quality" title="Settings" aria-label="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
           </div>
           <div class="sl-tab-content active" id="sl-tab-scene">
             <div id="sl-obj-panel"></div>
@@ -1855,7 +1885,21 @@ function renderQualityPanel() {
   if (!pop) return;
   pop.innerHTML = `
     <div class="sl-panel">
-    <div class="sl-panel-title" style="margin-bottom:6px">Quality &amp; performance</div>
+    <div class="sl-panel-title" style="margin-bottom:6px">Cosmology</div>
+    <p class="sl-perf-note" style="margin-bottom:8px">Flat &Lambda;CDM (&Omega;<sub>&Lambda;</sub> = 1 &minus; &Omega;<sub>m</sub>). H<sub>0</sub> sets the absolute distance scale, so it rescales time delays; &Omega;<sub>m</sub> also shifts the distance ratios that set the effective convergence, shear, and critical curves.</p>
+    <div class="sl-cosmo-row">
+      <label><span class="sl-cosmo-name">H<sub>0</sub></span><span class="sl-cosmo-unit">km/s/Mpc</span><b id="sl-h0-val">${(+state.H0).toFixed(0)}</b></label>
+      <input type="range" id="sl-h0" min="50" max="100" step="0.5" value="${state.H0}">
+    </div>
+    <div class="sl-cosmo-row">
+      <label><span class="sl-cosmo-name">&Omega;<sub>m</sub></span><b id="sl-om-val">${(+state.Omega_m).toFixed(2)}</b></label>
+      <input type="range" id="sl-om" min="0.05" max="0.6" step="0.01" value="${state.Omega_m}">
+    </div>
+    <div style="text-align:right;margin-bottom:2px">
+      <button class="sl-demo-btn" id="sl-cosmo-reset">Reset (70, 0.3)</button>
+    </div>
+
+    <div class="sl-panel-title" style="margin:14px 0 6px">Quality &amp; performance</div>
     <p class="sl-perf-note" style="margin-bottom:8px">These trade accuracy or sharpness against redraw speed.</p>
     <div class="sl-global-input">
       <label>Critical curves</label>
@@ -1887,6 +1931,36 @@ function renderQualityPanel() {
   document.getElementById('sl-crit-res')?.addEventListener('change', e => { state.critGridN = parseInt(e.target.value, 10); redraw(); });
   document.getElementById('sl-ps-grid')?.addEventListener('change',  e => { state.psGridN = parseInt(e.target.value, 10); redraw(); });
   document.getElementById('sl-render-scale')?.addEventListener('change', e => { applyRenderScale(e.target.value); });
+
+  const h0El = document.getElementById('sl-h0');
+  const omEl = document.getElementById('sl-om');
+  h0El?.addEventListener('input', e => {
+    state.H0 = parseFloat(e.target.value);
+    document.getElementById('sl-h0-val').textContent = state.H0.toFixed(0);
+    applyCosmology();
+  });
+  omEl?.addEventListener('input', e => {
+    state.Omega_m = parseFloat(e.target.value);
+    document.getElementById('sl-om-val').textContent = state.Omega_m.toFixed(2);
+    applyCosmology();
+  });
+  document.getElementById('sl-cosmo-reset')?.addEventListener('click', () => {
+    state.H0 = CONFIG_DEFAULTS.H0; state.Omega_m = CONFIG_DEFAULTS.Omega_m;
+    if (h0El) h0El.value = state.H0;
+    if (omEl) omEl.value = state.Omega_m;
+    document.getElementById('sl-h0-val').textContent = state.H0.toFixed(0);
+    document.getElementById('sl-om-val').textContent = state.Omega_m.toFixed(2);
+    applyCosmology();
+  });
+}
+
+// Push the current cosmology into lens.js and recompute everything distance-dependent
+// (distance matrix → critical curves, effective κ/γ maps, time delays) via redraw().
+// Global setting, so (like FOV) it is not part of the scene undo history.
+function applyCosmology() {
+  setCosmology({ H0: state.H0, Omega_m: state.Omega_m });
+  invalidateDistances();
+  redraw();
 }
 
 // Push the render-scale mode into the renderer and re-derive the canvas size.
@@ -3057,6 +3131,10 @@ function renderViewPanel() {
   if (!el) return;
   const ezs  = effectiveCritZs();
   const auto = state.critZs === null;
+  const tdAvail = timeDelaysAvailable();
+  const tdTitle = tdAvail
+    ? 'Annotate each point-source image with its arrival-time delay in days, relative to the first-arriving image (needs a point source with 2+ images). Scales with H₀ and Ω_m in the Settings tab.'
+    : 'Time delays are shown only for a single lens plane, where the time-delay distance is well defined. Multiple lens planes need the generalized multiplane formula.';
 
   el.innerHTML = `
     <div class="sl-panel">
@@ -3099,6 +3177,7 @@ function renderViewPanel() {
           </div>
           <div class="sl-checkbox-row">
             <label title="Measure distances and angles on the image (key L also enables the ruler)"><input type="checkbox" id="sl-show-ruler" ${state.showRuler?'checked':''}> Ruler</label>
+            <label class="${tdAvail?'':'sl-label-disabled'}" title="${tdTitle}"><input type="checkbox" id="sl-show-td" ${state.showTimeDelays?'checked':''} ${tdAvail?'':'disabled'}> Time delays</label>
           </div>
         </div>
       </div>
@@ -3168,7 +3247,7 @@ function renderViewPanel() {
           ${infoSection('sl-contours-info', contourInfoHtml())}
         </div>
         <div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
-          <div class="sl-checkbox-row">
+          <div class="sl-checkbox-row sl-checkbox-row-full">
             <label><input type="checkbox" id="sl-fermat-use-src" ${state.fermatUseSourcePos?'checked':''}> Use last selected source for the source position and redshift</label>
           </div>
           ${state.fermatUseSourcePos && state.lastFermatSource ? `
@@ -3220,6 +3299,7 @@ function renderViewPanel() {
   document.getElementById('sl-show-colorbar')?.addEventListener('change', e => { state.showColorbar = e.target.checked; _updateColorbar(); redraw(); });
   document.getElementById('sl-show-crit')?.addEventListener('change', e => { state.showCritCurves = e.target.checked; redraw(); });
   document.getElementById('sl-show-caus')?.addEventListener('change', e => { state.showCaustics   = e.target.checked; redraw(); });
+  document.getElementById('sl-show-td')?.addEventListener('change', e => { state.showTimeDelays = e.target.checked; redraw(); });
   document.getElementById('sl-viz-scale')?.addEventListener('change', e => {
     const vs = vizScaleFor(state.vizMode);
     vs.scale = parseInt(e.target.value, 10);
@@ -4025,6 +4105,10 @@ function drawOverlay() {
 
   // ── Point source image circles ─────────────────────────────────────────────────────
   const _psAll = [];  // collected for the Data tab's CSV export
+  // Relative time-delay annotations (days): single lens plane only, source behind it,
+  // ≥2 images. Reference = first-arriving image (Fermat minimum); others show +Δt.
+  const _tdOn = state.showTimeDelays && !hideOv && timeDelaysAvailable();
+  const _tdZL = _tdOn ? singleLensPlaneZ() : null;
   for (const plane of state.planes) {
     for (const obj of plane.objects) {
       if (obj.type !== 'source' || obj.model !== 'pointsource' || obj.hidden) continue;
@@ -4043,6 +4127,34 @@ function drawOverlay() {
         overlayCtx.fill();
       }
       overlayCtx.globalAlpha = 1;
+
+      // Time-delay labels beside each image of this source.
+      if (_tdOn && _tdZL != null && plane.z > _tdZL && imagePositions.length >= 2) {
+        const srcIdx = state.planes.indexOf(plane);
+        const dtDist = timeDelayDistance(_tdZL, plane.z);
+        const phis = imagePositions.map(([tx, ty]) =>
+          _computeFullFermat(tx, ty, state.planes, state.dist, srcIdx, obj.cx, obj.cy));
+        let refI = 0;
+        for (let i = 1; i < phis.length; i++) if (phis[i] < phis[refI]) refI = i;
+        overlayCtx.save();
+        overlayCtx.font = '11px system-ui, -apple-system, sans-serif';
+        overlayCtx.textAlign = 'left';
+        overlayCtx.textBaseline = 'middle';
+        overlayCtx.lineWidth = 3;
+        overlayCtx.lineJoin = 'round';
+        imagePositions.forEach(([tx, ty], i) => {
+          const [px, py] = toPixel(tx, ty);
+          const days = fermatDiffToDays(dtDist, phis[i] - phis[refI]);
+          const label = (i === refI) ? '0 d (ref)'
+                      : `+${days >= 10 ? days.toFixed(0) : days.toFixed(1)} d`;
+          const lx = px + r_px + 4, ly = py;
+          overlayCtx.strokeStyle = dark ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.92)';
+          overlayCtx.strokeText(label, lx, ly);
+          overlayCtx.fillStyle = dark ? '#ffffff' : '#111111';
+          overlayCtx.fillText(label, lx, ly);
+        });
+        overlayCtx.restore();
+      }
     }
   }
   state._lastPsImages = _psAll;
@@ -5194,8 +5306,8 @@ const TOUR_STEPS = [
     target: '.sl-rail-tab-btn[data-tab="quality"]',
     onEnter: () => { _tourSetTab('quality'); },
     arrow: 'left',
-    label: 'Quality tab',
-    text: 'Quality trades accuracy or sharpness against redraw speed: the critical-curve resolution, the point-source image-finding grid, and the render scale of the image itself. If a scene feels slow, this is the place to come.',
+    label: 'Settings',
+    text: 'The gear holds two things. <b>Cosmology</b> lets you vary H<sub>0</sub> and &Omega;<sub>m</sub> (flat &Lambda;CDM), which rescales time delays and shifts the distance ratios behind the lensing. <b>Quality &amp; performance</b> trades accuracy or sharpness against redraw speed: the critical-curve resolution, the point-source image-finding grid, and the render scale. If a scene feels slow, come here.',
   },
   {
     target: '.sl-topbar',
