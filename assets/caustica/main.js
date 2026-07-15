@@ -1239,27 +1239,27 @@ function buildDOM() {
         <div class="sl-rail" id="sl-rail">
           <div class="sl-rail-tabs" id="sl-rail-tabs">
             <button class="sl-rail-tab-btn sl-mobile-only-tab" data-tab="object">Object</button>
-            <button class="sl-rail-tab-btn active" data-tab="scene">Scene</button>
+            <button class="sl-rail-tab-btn active" data-tab="scene"><span class="sl-tablabel-obj">Object</span><span class="sl-tablabel-scene">Scene</span></button>
             <button class="sl-rail-tab-btn" data-tab="view">View</button>
             <button class="sl-rail-tab-btn" data-tab="export">Export</button>
             <button class="sl-rail-tab-btn" data-tab="quality">Quality</button>
           </div>
           <div class="sl-tab-content active" id="sl-tab-scene">
             <div id="sl-obj-panel"></div>
-            <div class="sl-plane-card" id="sl-plane-card" data-effective-type="empty">
+          </div>
+          <div class="sl-tab-content" id="sl-tab-view"></div>
+          <div class="sl-tab-content" id="sl-tab-export"></div>
+          <div class="sl-tab-content" id="sl-tab-quality"></div>
+          <!-- Plane viewer: a direct child of the rail (not a tab), so on desktop
+               it stays pinned below whichever tab is open. On mobile it is shown
+               only under the Scene tab (see the responsive rules). -->
+          <div class="sl-plane-card" id="sl-plane-card" data-effective-type="empty">
               <div class="sl-plane-body" id="sl-plane-body">
                 <div class="sl-plane-tools" id="sl-plane-tools">
-                  <div class="sl-ptool-col sl-ptool-col-sel">
-                    <button class="sl-ctool-btn" data-tool="select" title="Select / move (Esc)" aria-label="Select tool">
-                      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.5 L12 8.5 L8.5 9 L10.5 13 L8.8 13.8 L7 10 L4.5 12.5 Z"/></svg>
-                    </button>
-                    <button class="sl-ctool-del" id="sl-card-del-obj" title="Delete selected object" aria-label="Delete selected object"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="1.5" y1="4" x2="12.5" y2="4"/><path d="M4 4l.5 7h5l.5-7"/><path d="M5 4V3h4v1"/></svg></button>
-                  </div>
-                  <div class="sl-ptool-col sl-ptool-col-add">
-                    <button class="sl-ctool-btn" data-tool="lens"   title="Add lens — click this panel to place (1)"   aria-label="Add lens tool">L</button>
-                    <button class="sl-ctool-btn" data-tool="source" title="Add source — click this panel to place (2)" aria-label="Add source tool">S</button>
-                    <button class="sl-ctool-btn" data-tool="hybrid" title="Add hybrid — click this panel to place (3)" aria-label="Add hybrid tool">H</button>
-                  </div>
+                  <button class="sl-ctool-btn" data-tool="lens"   title="Add lens — click this panel to place (1). Click again to stop adding." aria-label="Add lens tool">L</button>
+                  <button class="sl-ctool-btn" data-tool="source" title="Add source — click this panel to place (2). Click again to stop adding." aria-label="Add source tool">S</button>
+                  <button class="sl-ctool-btn" data-tool="hybrid" title="Add hybrid — click this panel to place (3). Click again to stop adding." aria-label="Add hybrid tool">H</button>
+                  <button class="sl-ctool-del" id="sl-card-del-obj" title="Delete selected object" aria-label="Delete selected object"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="1.5" y1="4" x2="12.5" y2="4"/><path d="M4 4l.5 7h5l.5-7"/><path d="M5 4V3h4v1"/></svg></button>
                 </div>
                 <div class="sl-plane-spacer" aria-hidden="true"></div>
                 <div class="sl-plane-viewgroup">
@@ -1279,11 +1279,7 @@ function buildDOM() {
                 </div>
               </div>
               <div class="sl-plane-empty" id="sl-plane-empty" style="display:none">Click the redshift timeline to add a plane, or click a marker to select one.</div>
-            </div>
           </div>
-          <div class="sl-tab-content" id="sl-tab-view"></div>
-          <div class="sl-tab-content" id="sl-tab-export"></div>
-          <div class="sl-tab-content" id="sl-tab-quality"></div>
         </div>
       </div>
       <div class="sl-rotate-overlay" id="sl-rotate-overlay" role="alert">
@@ -1738,13 +1734,16 @@ function attachHandlers() {
   });
 }
 
-// ── Plane-viewer tools (select / add-lens / add-source / add-hybrid) ──────────
-// The chosen tool decides what a click on the VIEWER canvas does: 'select'
-// only picks and drags objects, L/S/H place an object of that type on an
-// empty-space click. The main image is always selection-only; objects there
-// can be dragged but never created.
+// ── Plane-viewer tools (no-tool / add-lens / add-source / add-hybrid) ─────────
+// The chosen tool decides what a click on the VIEWER canvas does: with no tool
+// active ('select') clicks only pick and drag objects; L/S/H place an object of
+// that type on an empty-space click. There is no explicit select button — the
+// L/S/H buttons toggle, so clicking the active tool (or Esc) returns to the
+// no-tool state where clicks/taps never create an object. The main image is
+// always selection-only; objects there can be dragged but never created.
 function setCanvasTool(tool) {
-  state.addMode = tool;
+  // Clicking the already-active creation tool toggles it back off (no-tool).
+  state.addMode = (tool === state.addMode && tool !== 'select') ? 'select' : tool;
   updateCanvasTools();
 }
 
@@ -1918,7 +1917,7 @@ const _pinchPtrs = new Map();      // pointerId → last client position on the 
 
 // ── Keyboard-shortcut overlay (the "?" button) ────────────────────────────────
 const SHORTCUTS = [
-  ['1 / 2 / 3', 'Pick the Lens / Source / Hybrid tool (click the plane viewer to place)'],
+  ['1 / 2 / 3', 'Toggle the Lens / Source / Hybrid tool (click the plane viewer to place)'],
   ['C', 'Toggle critical curves and caustics'],
   ['I', 'Show lensed image (exit any quantity map)'],
   ['K / G / M / A', 'Convergence κ / Shear γ / Magnification |μ| / Deflection |α| map'],
@@ -1934,7 +1933,7 @@ const SHORTCUTS = [
   ['⌘/Ctrl + Z / ⇧Z', 'Undo / redo the last scene edit'],
   ['↑ ↓ ← →', 'Nudge the selected object (hold to accelerate)'],
   ['Delete / Backspace', 'Delete the selected object or ruler measurement'],
-  ['Escape', 'Deselect ruler → disarm ruler → back to the select tool → deselect object'],
+  ['Escape', 'Deselect ruler → disarm ruler → clear the active plane tool → deselect object'],
 ];
 let _kbdOverlay = null;
 
@@ -5071,7 +5070,7 @@ const TOUR_STEPS = [
     onEnter: _tourOpenPlaneSetup,
     arrow: 'left',
     label: 'Plane viewer',
-    text: 'The selected plane is a slice of the sky at its redshift, shown here. The tool column picks what a click on this canvas does: a <b>Lens</b> that bends light, a <b>Source</b> that emits it, a <b>Hybrid</b> that does both (keys <kbd>1</kbd>, <kbd>2</kbd>, <kbd>3</kbd>), or the arrow to only select and drag (<kbd>Esc</kbd>). The <b>‹ ›</b> arrows (or a horizontal swipe on touch) step through the planes; the <b>z</b> field retunes the redshift, <b>Clear</b> (key <kbd>O</kbd>) empties the plane, and <b>Delete</b> (key <kbd>X</kbd>) removes it.',
+    text: 'The selected plane is a slice of the sky at its redshift, shown here. The tool column picks what a click on this canvas creates: a <b>Lens</b> that bends light, a <b>Source</b> that emits it, or a <b>Hybrid</b> that does both (keys <kbd>1</kbd>, <kbd>2</kbd>, <kbd>3</kbd>). With no tool active a click only selects and drags, so click the highlighted tool again (or press <kbd>Esc</kbd>) to stop placing objects. The <b>‹ ›</b> arrows (or a horizontal swipe on touch) step through the planes; the <b>z</b> field retunes the redshift, <b>Clear</b> (key <kbd>O</kbd>) empties the plane, and <b>Delete</b> (key <kbd>X</kbd>) removes it.',
   },
   {
     target: '#sl-obj-panel',
