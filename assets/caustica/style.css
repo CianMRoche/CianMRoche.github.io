@@ -908,6 +908,8 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   margin-top: 8px;
 }
 .sl-checkbox-row + .sl-checkbox-row { margin-top: 5px; }
+/* Single-column variant for a long label that would be squished by the 2-col grid. */
+.sl-checkbox-row-full { grid-template-columns: 1fr; }
 .sl-checkbox-row label {
   display: flex;
   align-items: center;
@@ -1392,7 +1394,7 @@ input.sl-scrub { cursor: col-resize; }
      theme). position:relative anchors the dropdown below the bar. */
   .sl-topbar { flex-wrap: nowrap; height: 44px; padding: 6px 10px; gap: 8px; position: relative; }
   .sl-file-group { flex-basis: auto; margin: 0; min-width: 0; }
-  .sl-topbar-preset { flex: 0 1 auto; max-width: 110px; }
+  .sl-topbar-preset { flex: 0 1 auto; max-width: 88px; }
   .sl-topbar-overflow { display: none; }   /* moved into the ⋯ dropdown */
   /* The theme toggle stays on the bar at the far right; the ⋯ (pushed right by
      its auto margin) sits just to its left. */
