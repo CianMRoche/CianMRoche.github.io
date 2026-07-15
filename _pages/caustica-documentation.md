@@ -170,7 +170,7 @@ Four Jacobian-derived quantities are available:
 
 | Quantity | Formula | Notes |
 |---|---|---|
-| Convergence $\kappa$ | $1 - \tfrac{1}{2}(A_{11}+A_{22})$ | Dimensionless projected mass density scaled by the critical surface density. $\kappa=0$ in empty space; $\kappa=1$ on the Einstein ring. |
+| Convergence $\kappa$ | $1 - \tfrac{1}{2}(A_{11}+A_{22})$ | Dimensionless projected mass density scaled by the critical surface density. $\kappa=0$ in empty space; the *mean* convergence enclosed within the Einstein radius is $\bar\kappa=1$ (the local $\kappa$ on the ring is smaller, e.g. $0.5$ for an SIS and $0$ for a point mass). |
 | Shear $\gamma$ | $\sqrt{\gamma_1^2+\gamma_2^2}$, where $\gamma_1=\tfrac{1}{2}(A_{22}-A_{11})$, $\gamma_2=-\tfrac{1}{2}(A_{12}+A_{21})$ | Tidal distortion; zero for a circularly symmetric lens at its centre. |
 | Magnification $\mu$ | $1/\lvert\det A\rvert$ | Ratio of image to source solid angle; diverges on critical curves. Log colour scale over $\mu \in [1, 30]$ by default (adjustable). |
 | Deflection $\lvert\hat{\boldsymbol{\alpha}}\rvert$ | $\lvert\boldsymbol{\theta} - \boldsymbol{\beta}(\boldsymbol{\theta})\rvert$ | Total accumulated deflection angle in arcseconds from observer to source plane. Linear colour scale over $[0, 2]$″ by default (adjustable). |
@@ -208,7 +208,7 @@ This is the physically correct behaviour: the same lens produces weaker effectiv
 
 ### Numerical accuracy near singular profiles
 
-The finite-difference Jacobian is accurate everywhere except very close to singular or steep profiles (point mass, EPL with large $\gamma$), where the deflection angle varies as $\sim 1/r$ or faster.
+The finite-difference Jacobian is accurate everywhere except very close to singular or steep profiles (point mass, EPL with large $\gamma'$), where the deflection angle varies as $\sim 1/r$ or faster.
 Near such singularities the truncation error of the central-difference scheme can produce small spurious structure in the $\kappa$ map; convergence is clamped to zero in the display to suppress the most prominent artefacts.
 The shear and magnification maps are less affected.
 
@@ -389,11 +389,11 @@ All four SIE steps apply unchanged. The NIE has no critical curve at the origin 
 ### EPL (Elliptical Power Law)
 
 A generalisation of the SIE in which the density slope is a free parameter.
-The projected surface density follows $\Sigma \propto r_e^{1-\gamma}$, where $r_e$ is the elliptical radius and $\gamma$ is the power-law slope; $\gamma = 2$ recovers the SIE exactly.
+The projected surface density follows $\Sigma \propto r_e^{1-\gamma'}$, where $r_e$ is the elliptical radius and $\gamma'$ is the power-law slope (written with a prime to distinguish it from the external-shear strength $\gamma$); $\gamma' = 2$ recovers the SIE exactly.
 
 The deflection is the SIE result scaled by a radial factor:
 
-$$\hat{\boldsymbol{\alpha}}_\text{EPL}(\mathbf{u}) = \left(\frac{r_e}{b}\right)^{2-\gamma} \hat{\boldsymbol{\alpha}}_\text{SIE}(\mathbf{u})$$
+$$\hat{\boldsymbol{\alpha}}_\text{EPL}(\mathbf{u}) = \left(\frac{r_e}{b}\right)^{2-\gamma'} \hat{\boldsymbol{\alpha}}_\text{SIE}(\mathbf{u})$$
 
 where $r_e$ is the elliptical radius from step 2 of the SIE and $\hat{\boldsymbol{\alpha}}_\text{SIE}$ is the SIE deflection at that position.
 
@@ -402,7 +402,7 @@ where $r_e$ is the elliptical radius from step 2 of the SIE and $\hat{\boldsymbo
 | $b$ | Deflection scale (arcsec), same role as in SIE |
 | $q$ | Axis ratio $0 \lt q \leq 1$ |
 | $\varphi$ | Position angle of the major axis (radians) |
-| $\gamma$ | Power-law slope: $\gamma = 2$ isothermal, $\gamma \lt 2$ steeper central density, $\gamma \gt 2$ shallower. Observed galaxies typically have $\gamma \approx 1.9$–$2.1$. |
+| $\gamma'$ | Radial mass-density slope ($\rho \propto r^{-\gamma'}$): $\gamma' = 2$ isothermal, $\gamma' \lt 2$ shallower central density, $\gamma' \gt 2$ steeper. Observed galaxies typically have $\gamma' \approx 1.9$–$2.1$. |
 | $r_e$ | Elliptical radius from SIE step 2: $r_e = \sqrt{q^2(x_r^2+s^2)+y_r^2}$ |
 
 ### External shear

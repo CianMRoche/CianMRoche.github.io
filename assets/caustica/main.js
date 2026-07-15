@@ -612,7 +612,7 @@ function loadConfigFromYaml(yaml) {
     for (const p of state.planes)
       p.objects.filter(o => o.model === 'pastedimage').forEach(o => renderer?.clearPastedTexture(o.id));
     const VALID_TYPES  = new Set(['lens', 'source']);
-    const VALID_MODELS = new Set(['pointmass','sie','nie','epl','nfw','shear','convergence','deflection','gaussian','exponential','point','pointsource','pastedimage']);
+    const VALID_MODELS = new Set(['pointmass','sie','nie','epl','shear','convergence','deflection','gaussian','exponential','point','pointsource','pastedimage']);
     const COLOR_RE     = /^#[0-9a-fA-F]{6}$/;
     state.planes = (cfg.planes || []).map(p => ({
       id: uid(), z: isFinite(p.z) ? +p.z : 0,
@@ -639,6 +639,11 @@ function loadConfigFromYaml(yaml) {
       })
     }));
     state.planes.sort((a, b) => a.z - b.z);
+    // Freeze pasted-image angular size for legacy configs that predate angSize, so
+    // they too stay fixed under FOV zoom (state.fov was set from cfg above).
+    for (const _pl of state.planes)
+      for (const _o of _pl.objects)
+        if (_o.model === 'pastedimage' && !(_o.params.angSize > 0)) _o.params.angSize = state.fov;
     // Prefer a pure (non-hybrid) source as the initial selection. A hybrid lens is a
     // poor default focus, and selecting it would hijack the Fermat β_s through its
     // partner source (see _doRedraw). Fall back to the first object when none exists.
@@ -721,7 +726,6 @@ function defaultParams(model) {
   if (model === 'sie')         return { b: 1.0, q: 0.75, phi: 0 };
   if (model === 'nie')         return { b: 1.0, q: 0.75, phi: 0, rc: 0.2 };
   if (model === 'epl')         return { b: 1.0, q: 0.75, phi: 0, gamma: 2.0 };
-  if (model === 'nfw')         return { kappaS: 0.5, rS: 0.4 };
   if (model === 'shear')       return { gamma: 0.05, phi: 0 };
   if (model === 'convergence') return { kappa: 0.05 };
   if (model === 'deflection')  return { alpha: 0.1, phi: 0 };
@@ -729,7 +733,7 @@ function defaultParams(model) {
   if (model === 'exponential') return { sigma: 0.05, q: 0.40, phi: 0, amplitude: 2.20, color: '#ffffff' };
   if (model === 'point')       return { sigma: 0.08, amplitude: 1.0, color: '#ffffff' };
   if (model === 'pointsource') return { sigma: 0.05, amplitude: 1.0, color: '#ffffff' };
-  if (model === 'pastedimage') return { sigma: 1.0, amplitude: 1.0 };
+  if (model === 'pastedimage') return { sigma: 1.0, amplitude: 1.0, angSize: 0 };
   return {};
 }
 
@@ -765,7 +769,28 @@ function hybridPartControls(part, kind) {
     <button type="button" class="sl-hybrid-part-btn sl-hybrid-part-del" id="sl-part-del-${kind}" title="Delete ${label} (keeps the other)">${trashIcon()}</button>`;
 }
 
+// Brief transient message centered over the image stage; auto-dismisses. Reuses a
+// single element so rapid calls just refresh the text and restart the timer.
+let _toastTimer = null;
+function showToast(msg) {
+  let el = document.getElementById('sl-toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'sl-toast';
+    el.className = 'sl-toast';
+    (document.querySelector('.sl-stage') || document.body).appendChild(el);
+  }
+  el.textContent = msg;
+  el.classList.add('sl-toast-show');
+  if (_toastTimer) clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('sl-toast-show'), 2200);
+}
+
 function addPlane(z) {
+  // Hard cap: the shader renders at most MAX_PLANES, so refuse to create beyond it
+  // rather than silently dropping the excess from the image (see showToast feedback
+  // in the interactive callers). Returns null when the scene is already full.
+  if (state.planes.length >= MAX_PLANES) return null;
   const plane = { id: uid(), z, objects: [] };
   state.planes.push(plane);
   state.planes.sort((a, b) => a.z - b.z);
@@ -2417,9 +2442,13 @@ function attachAxisHandlers() {
       const r  = axisCanvas.getBoundingClientRect();
       const z  = Math.round(axisXToZ(e.clientX - r.left, r.width) * 100) / 100;
       const pl = addPlane(z);
-      state.selectedPlaneId = pl.id;
-      state.selectedObjId   = pl.objects[0]?.id ?? null;
-      renderPlaneCard(); renderSidebar(); redraw();
+      if (!pl) {
+        showToast(`Limit reached: at most ${MAX_PLANES} planes.`);
+      } else {
+        state.selectedPlaneId = pl.id;
+        state.selectedObjId   = pl.objects[0]?.id ?? null;
+        renderPlaneCard(); renderSidebar(); redraw();
+      }
     }
     dragPlane = null; tapStart = null;
     _draggingPlaneId = null;
@@ -2611,6 +2640,9 @@ function _applyImageFile(file, obj) {
     cvs.getContext('2d').drawImage(img, 0, 0);
     URL.revokeObjectURL(url);
     record();  // async load lands outside any pointer gesture, so snapshot here
+    // Freeze the source's angular size at the current FOV so later zooming does not
+    // rescale it (unlike analytic sources, whose size is an absolute arcsec param).
+    obj.params.angSize = state.fov;
     obj.pasteCanvas = cvs;
     renderer?.setPastedTexture(obj.id, cvs);
     renderPlaneCard(); renderSidebar(); redraw();
@@ -2759,7 +2791,7 @@ const LENS_INFO = {
   epl: `<b>b</b>: deflection scale (arcsec), same role as in SIE.<br>
         <b>q</b>: axis ratio (1 = circular, lower = more elliptical).<br>
         <b>φ</b>: position angle of the major axis (radians).<br>
-        <b>γ</b>: power-law slope. γ = 2 is isothermal (identical to SIE); γ &lt; 2 steepens the central density, γ &gt; 2 shallows it. Typical galaxies have γ ≈ 1.9–2.1.`,
+        <b>γ'</b>: radial mass-density slope (ρ ∝ r<sup>−γ'</sup>), written with a prime to distinguish it from the external-shear strength γ. γ' = 2 is isothermal (identical to SIE); γ' &lt; 2 shallows the central density, γ' &gt; 2 steepens it. Typical galaxies have γ' ≈ 1.9–2.1.`,
 };
 const SOURCE_INFO = {
   gaussian: `<b>σ</b>: half-width at 1/e² of the Gaussian profile (arcsec).<br>
@@ -2822,7 +2854,7 @@ function renderScenePanel() {
       const lensExp = _hybridExpanded.lens, srcExp = _hybridExpanded.src;
 
       const lensModelOpts = `
-        <option value="sie"       ${lensObj.model==='sie'       ?'selected':''}>SIE (Isothermal, γ=2)</option>
+        <option value="sie"       ${lensObj.model==='sie'       ?'selected':''}>SIE (Isothermal, γ'=2)</option>
         <option value="nie"       ${lensObj.model==='nie'       ?'selected':''}>NIE (Nonsingular isothermal)</option>
         <option value="epl"       ${lensObj.model==='epl'       ?'selected':''}>EPL (Power law)</option>
         <option value="pointmass" ${lensObj.model==='pointmass' ?'selected':''}>Point mass</option>
@@ -2873,7 +2905,7 @@ function renderScenePanel() {
       // ── Single-type object ──
       const isLens = obj.type === 'lens';
       const modelOptions = isLens
-        ? `<option value="sie"       ${obj.model==='sie'       ?'selected':''}>SIE (Isothermal, γ=2)</option>
+        ? `<option value="sie"       ${obj.model==='sie'       ?'selected':''}>SIE (Isothermal, γ'=2)</option>
            <option value="nie"       ${obj.model==='nie'       ?'selected':''}>NIE (Nonsingular isothermal)</option>
            <option value="epl"       ${obj.model==='epl'       ?'selected':''}>EPL (Power law)</option>
            <option value="pointmass" ${obj.model==='pointmass' ?'selected':''}>Point mass</option>
@@ -3536,13 +3568,9 @@ function lensParamRows(obj, showAttach) {
     return sliderRowLog('b (")',   'b',     0.01, 100,   p.b     ?? 1)
          + sliderRow   ('q',       'q',     0.05, 1.0,   0.05, p.q     ?? 0.75)
          + sliderRow   ('φ (rad)', 'phi',   0,   Math.PI, 0.05, p.phi   ?? 0)
-         + sliderRow   ('γ',       'gamma', 0.5, 3.0,     0.05, p.gamma ?? 2.0)
+         + sliderRow   ("γ'",      'gamma', 0.5, 3.0,     0.05, p.gamma ?? 2.0)
          + objFooter(obj, showAttach)
          + '<p style="font-size:11px;color:var(--muted);margin-top:4px;grid-column:1/-1">Fermat potential (T) uses the geometric term only for EPL: the potential has no closed form for the scaled-SIE approximation.</p>';
-  if (obj.model === 'nfw')
-    return sliderRowLog('κ<sub>s</sub>',     'kappaS', 0.01, 5.0, p.kappaS ?? 0.5)
-         + sliderRowLog('r<sub>s</sub> (")', 'rS',     0.01, 60, p.rS     ?? 0.4)
-         + objFooter(obj, showAttach);
   return '';
 }
 

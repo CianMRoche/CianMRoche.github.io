@@ -18,7 +18,7 @@
 
 // Exported so the UI can warn when a scene exceeds it (planes beyond the cap are
 // dropped from the GPU render, sorted by redshift).
-export const MAX_PLANES = 6;
+export const MAX_PLANES = 8;
 // Per-type cap on objects uploaded to the shader (lenses and sources counted
 // separately). Exported so the UI can warn when a scene exceeds it. Each slot
 // costs a few uniform vectors; 32 stays within the WebGL2 fragment-uniform
@@ -938,7 +938,11 @@ export class Renderer {
           const slot = pastedCount++;
           pastedSlot[si]    = slot;
           const cached = this._pastedTexCache.get(obj.id) ?? null;
-          slotEntries[slot] = cached ? { ...cached, scale: obj.params.sigma ?? 1.0 } : null;
+          // angSize freezes the source's angular full-height (arcsec) at paste time so
+          // it stays fixed under FOV zoom; legacy configs without it fall back to the
+          // old fov-relative sizing (0 sentinel).
+          const angSize = (obj.params.angSize > 0) ? obj.params.angSize : 0;
+          slotEntries[slot] = cached ? { ...cached, scale: obj.params.sigma ?? 1.0, angSize } : null;
         }
         si++;
       }
@@ -961,7 +965,9 @@ export class Renderer {
       gl.uniform1i(txLocs[s], s);
       const ar    = entry ? (entry.w / entry.h) : 1;
       const scale = entry ? (entry.scale ?? 1.0) : 1.0;
-      const szH   = fovArcsec * 0.5 * scale;
+      // Prefer the frozen angular size; fall back to fov-relative for legacy configs.
+      const fullH = (entry && entry.angSize > 0) ? entry.angSize : fovArcsec;
+      const szH   = fullH * 0.5 * scale;
       gl.uniform2f(szLocs[s], szH * ar, szH);
     }
 
