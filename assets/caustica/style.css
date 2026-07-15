@@ -1380,9 +1380,11 @@ input.sl-scrub { cursor: col-resize; }
     min-width: 0;
     flex: 0 1 auto;
   }
-  /* Canvas caps at its desktop size and shrinks to fit on narrow phones. */
-  #sl-plane-canvas { flex: 1 1 156px; min-width: 80px; max-width: 210px; width: auto; }
-  #sl-plane-prev, #sl-plane-next { width: 22px; align-self: stretch; font-size: 18px; flex: 0 0 auto; }
+  /* Canvas is kept a bit smaller than desktop so its (square) height leaves room
+     for the redshift timeline on screen without scrolling; the wider arrow strips
+     take up the width the smaller canvas frees. */
+  #sl-plane-canvas { flex: 1 1 144px; min-width: 76px; max-width: 168px; width: auto; }
+  #sl-plane-prev, #sl-plane-next { width: 34px; align-self: stretch; font-size: 19px; flex: 0 0 auto; }
   /* Tools: one column of larger tap targets, L/S/H at the top and the trash
      floated to the bottom (margin-top:auto) to sit apart from the mode toggles. */
   #sl-plane-tools {
@@ -1436,9 +1438,9 @@ input.sl-scrub { cursor: col-resize; }
 @media (max-width: 420px), (max-height: 700px) and (orientation: portrait) {
   .sl-body[data-tab="scene"] #sl-plane-body { gap: 9px; }
   .sl-body[data-tab="scene"] #sl-plane-body .sl-plane-viewgroup { gap: 2px; }
-  .sl-body[data-tab="scene"] #sl-plane-canvas { flex-basis: 148px; min-width: 72px; }
+  .sl-body[data-tab="scene"] #sl-plane-canvas { flex-basis: 128px; min-width: 68px; }
   .sl-body[data-tab="scene"] #sl-plane-prev,
-  .sl-body[data-tab="scene"] #sl-plane-next { width: 20px; }
+  .sl-body[data-tab="scene"] #sl-plane-next { width: 30px; }
   .sl-body[data-tab="scene"] #sl-plane-side .sl-plane-z-label-full { display: none; }
   .sl-body[data-tab="scene"] #sl-plane-side .sl-plane-z-label-compact { display: inline; }
   .sl-body[data-tab="scene"] #sl-plane-z-input { width: 36px; }
