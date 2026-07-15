@@ -147,26 +147,42 @@ vec2 deflectNIE(vec2 u, float b, float q, float phi, float rc) {
   return vec2(cp * ax - sp * ay, sp * ax + cp * ay);
 }
 
-// EPL — Elliptical Power Law.
-// Computed as SIE deflections scaled by the radial power (m/b)^(2-gamma).
-// At gamma=2 this reduces exactly to the SIE; other values adjust the
-// density slope while preserving the elliptical geometry.
+// EPL — exact Elliptical Power Law (Tessore & Metcalf 2015; ported from the
+// lenstronomy epl_numba reference implementation). A true gradient field for all
+// q and gamma (curl-free), so its convergence/shear maps are self-consistent and it
+// has a closed-form potential (see lensPotential). b_Tessore = b*q matches Caustica's
+// SIE deflection scale at gamma=2. gamma is the 3D density slope (gamma=2 = SIE).
+//
+// Angular part Ω(φ) via the Tessore recurrence: Ω_0 = e^{iφ},
+//   Ω_n = Ω_{n-1} · [2n−(2−t)]/[2n+(2−t)] · (−f·e^{2iφ}),  f = (1−q)/(1+q), t = γ−1.
+vec2 eplOmega(float phi, float t, float q) {
+  float f    = (1.0 - q) / (1.0 + q);
+  vec2  fact = vec2(cos(2.0 * phi), sin(2.0 * phi)) * (-f);   // −f·e^{2iφ}
+  vec2  Om   = vec2(cos(phi), sin(phi));                       // Ω_0 = e^{iφ}
+  vec2  sum  = vec2(0.0);
+  for (int n = 1; n <= 200; n++) {
+    sum += Om;
+    float c = (2.0 * float(n) - (2.0 - t)) / (2.0 * float(n) + (2.0 - t));
+    Om = vec2(Om.x * fact.x - Om.y * fact.y, Om.x * fact.y + Om.y * fact.x) * c;
+    if (dot(Om, Om) < 1e-14) break;    // term negligible (float precision)
+  }
+  sum += Om;
+  return sum;
+}
+
 vec2 deflectEPL(vec2 u, float b, float q, float phi, float gamma) {
+  float qs = clamp(q, 0.05, 1.0);   // series converges within 200 terms for q≥0.05
+  float t  = gamma - 1.0;
+  float bT = b * qs;
   float cp = cos(phi), sp = sin(phi);
-  float xr =  cp * u.x + sp * u.y;
+  float xr =  cp * u.x + sp * u.y;   // rotate into the major-axis frame
   float yr = -sp * u.x + cp * u.y;
-  float qs  = max(q, 0.001);
-  float sqf = sqrt(max(1.0 - qs * qs, EPS));
-  float s   = SIE_SOFT;
-  float m   = sqrt(qs * qs * (xr * xr + s * s) + yr * yr);
-  float A   = b * qs / sqf;
-  float ax_sie = A * atan(sqf * xr / (m + s));
-  float ay_sie = A * atanh_approx(sqf * yr / (m + qs * qs * s));
-  // Power-law scale factor; equals 1 when gamma=2 (pure SIE).
-  float power = 2.0 - gamma;
-  float scale = pow(max(m / max(b, EPS), EPS), power);
-  return vec2(cp * scale*ax_sie - sp * scale*ay_sie,
-              sp * scale*ax_sie + cp * scale*ay_sie);
+  float R   = max(sqrt(qs * qs * xr * xr + yr * yr), SIE_SOFT);
+  float ang = atan(yr, qs * xr);
+  vec2  Om  = eplOmega(ang, t, qs);
+  float pref = (2.0 * bT) / (1.0 + qs) * pow(bT / R, t) * (R / bT);
+  vec2  a = pref * Om;
+  return vec2(cp * a.x - sp * a.y, sp * a.x + cp * a.y);   // rotate deflection back
 }
 
 vec2 deflectShear(vec2 u, float gamma, float phi) {
@@ -227,8 +243,15 @@ float lensPotential(int idx, vec2 pos) {
     return psi;
   }
 
-  // EPL: scaled-SIE deflections do not admit a closed-form potential.
-  if (m == 2) return 0.0;
+  // EPL: exact potential ψ = (u·α)/(2−t) (Euler's theorem; α = ∇ψ). Reduces to the
+  // SIE potential u·α at t=1 (γ=2). Singular only at γ=3 (t=2 → logarithmic), guarded.
+  if (m == 2) {
+    float t = p.w - 1.0;
+    vec2  a = deflectEPL(u, p.x, p.y, p.z, p.w);
+    float denom = 2.0 - t;
+    if (abs(denom) < 1e-3) denom = denom < 0.0 ? -1e-3 : 1e-3;
+    return dot(u, a) / denom;
+  }
 
   // External shear: ψ = γ/2 · [(x²−y²)·cos2φ + 2xy·sin2φ]  (absolute pos)
   if (m == 3) {

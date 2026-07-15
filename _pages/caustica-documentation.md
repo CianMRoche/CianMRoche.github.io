@@ -13,7 +13,7 @@ permalink: /caustica-documentation/
 </figure>
 
 <div class="doc-cyan" markdown="1">
-Caustica was built with heavy use of AI tools for code generation, and its calculations have not been peer-reviewed or independently validated. It is intended for education, intuition-building, visualization and media creation only, and should not be relied on for research.
+Caustica was built with heavy use of AI tools for code generation, and as a whole its calculations have not been peer-reviewed or independently validated. Where a component was cross-checked against an established reference it is noted in the relevant section (for example, the EPL lens was ported from and validated against [lenstronomy](https://github.com/lenstronomy/lenstronomy); see §5). It is intended for education, intuition-building, visualization and media creation only, and should not be relied on for research.
 </div>
 
 ## Quick start
@@ -322,9 +322,9 @@ The potential $\psi_k$ is computed analytically where a closed form exists:
 | External shear | $\tfrac{\gamma}{2}\left[(\theta_x^2-\theta_y^2)\cos 2\varphi + 2\theta_x\theta_y\sin 2\varphi\right]$ |
 | External convergence | $\tfrac{\kappa}{2}\lvert\boldsymbol{\theta}\rvert^2$ |
 | Constant deflection | $\alpha(\theta_x\cos\varphi + \theta_y\sin\varphi)$ |
-| EPL | 0 (no closed form for the scaled-SIE approximation used here) |
+| EPL | $\tfrac{1}{2-t}\,(\mathbf{u}\cdot\hat{\boldsymbol{\alpha}}_\text{EPL})$, with $t=\gamma'-1$ (see §5, EPL) |
 
-For EPL lenses $\psi_k = 0$ (no closed form for the scaled-SIE approximation), so only the geometric term contributes and the Fermat potential reduces to a simple paraboloid for EPL-only configurations. This is noted in the EPL control panel.
+The EPL now uses the exact Tessore & Metcalf (2015) potential $\psi = \tfrac{1}{2-t}(\mathbf{u}\cdot\hat{\boldsymbol{\alpha}})$, so its Fermat surface and image classification are correct (the earlier scaled-SIE approximation had no potential and produced a bare paraboloid). The expression is singular only at $\gamma'=3$ (where the profile's potential is logarithmic); this is guarded numerically.
 
 #### Gauge note
 
@@ -400,22 +400,26 @@ All four SIE steps apply unchanged. The NIE has no critical curve at the origin 
 
 ### EPL (Elliptical Power Law)
 
-A generalisation of the SIE in which the density slope is a free parameter.
-The projected surface density follows $\Sigma \propto r_e^{1-\gamma'}$, where $r_e$ is the elliptical radius and $\gamma'$ is the power-law slope (written with a prime to distinguish it from the external-shear strength $\gamma$); $\gamma' = 2$ recovers the SIE exactly.
+A generalisation of the SIE in which the density slope is a free parameter, using the **exact** elliptical-power-law deflection of Tessore & Metcalf (2015). The projected surface density follows $\kappa(r_e) \propto r_e^{1-\gamma'}$, where $r_e$ is the elliptical radius and $\gamma'$ is the radial mass-density slope (written with a prime to distinguish it from the external-shear strength $\gamma$); $\gamma' = 2$ recovers the SIE exactly.
 
-The deflection is the SIE result scaled by a radial factor:
+Unlike a naive "scaled SIE" (SIE deflection multiplied by a radial power), the Tessore form is a **true gradient field** for every axis ratio and slope, so its convergence and shear maps are self-consistent and it admits a closed-form potential (used by the Fermat surface). In the coordinate frame aligned with the major axis, writing $t = \gamma' - 1$ and the complex position $z = x_r + i\,y_r$, the deflection is
 
-$$\hat{\boldsymbol{\alpha}}_\text{EPL}(\mathbf{u}) = \left(\frac{r_e}{b}\right)^{2-\gamma'} \hat{\boldsymbol{\alpha}}_\text{SIE}(\mathbf{u})$$
+$$\alpha_x + i\,\alpha_y = \frac{2b'}{1+q}\left(\frac{b'}{R}\right)^{t-1}\Omega(\phi), \qquad R = \sqrt{q^2 x_r^2 + y_r^2}, \quad \phi = \arg(q\,x_r + i\,y_r)$$
 
-where $r_e$ is the elliptical radius from step 2 of the SIE and $\hat{\boldsymbol{\alpha}}_\text{SIE}$ is the SIE deflection at that position.
+where $b' = b\,q$ (chosen so the deflection matches Caustica's SIE scale $b$ at $\gamma'=2$) and the angular factor $\Omega(\phi)$ is summed from the Tessore recurrence
+
+$$\Omega_0 = e^{i\phi},\qquad \Omega_n = \Omega_{n-1}\,\frac{2n-(2-t)}{2n+(2-t)}\left(-\frac{1-q}{1+q}\,e^{2i\phi}\right),\qquad \Omega=\textstyle\sum_n \Omega_n.$$
+
+The series is truncated when a term falls below machine precision (up to 200 terms). The result is rotated back to the sky frame by the position angle. The closed-form potential is $\psi = \tfrac{1}{2-t}(\mathbf{u}\cdot\hat{\boldsymbol{\alpha}})$ (Euler's theorem, since $\psi$ is homogeneous of degree $2-t$), which reduces to the SIE potential $\mathbf{u}\cdot\hat{\boldsymbol{\alpha}}$ at $\gamma'=2$.
 
 | Symbol | Meaning |
 |---|---|
-| $b$ | Deflection scale (arcsec), same role as in SIE |
-| $q$ | Axis ratio $0 \lt q \leq 1$ |
+| $b$ | Deflection scale (arcsec), same role and normalisation as in the SIE |
+| $q$ | Axis ratio $0 \lt q \leq 1$ (clamped to $\geq 0.05$ so the series converges) |
 | $\varphi$ | Position angle of the major axis (radians) |
 | $\gamma'$ | Radial mass-density slope ($\rho \propto r^{-\gamma'}$): $\gamma' = 2$ isothermal, $\gamma' \lt 2$ shallower central density, $\gamma' \gt 2$ steeper. Observed galaxies typically have $\gamma' \approx 1.9$–$2.1$. |
-| $r_e$ | Elliptical radius from SIE step 2: $r_e = \sqrt{q^2(x_r^2+s^2)+y_r^2}$ |
+
+The implementation was ported from the [lenstronomy](https://github.com/lenstronomy/lenstronomy) `epl_numba` module and validated against Caustica's independent Kormann SIE at $\gamma'=2$ (agreement to the softening scale $\sim 10^{-3}$″), for vanishing curl of the deflection field ($\nabla\times\hat{\boldsymbol{\alpha}} \sim 10^{-8}$, confirming it is conservative), and for $\nabla\psi = \hat{\boldsymbol{\alpha}}$.
 
 ### External shear
 
@@ -693,7 +697,9 @@ Loaded lazily (only when GIF recording is requested) via a dynamic `<script>` ta
 
 - Schneider, Ehlers & Falco (1992), *Gravitational Lenses*, Springer. *(Multiplane lensing formalism.)*
 - Kormann, Schneider & Bartelmann (1994), Isothermal ellipsoidal mass distributions in gravitational lensing, A&A 284. *(SIE deflection angles.)*
+- [Tessore & Metcalf (2015)](https://ui.adsabs.harvard.edu/abs/2015A%26A...580A..79T/abstract), The elliptical power law profile lens, A&A 580, A79. *(Exact closed-form EPL deflection and potential via the angular recurrence used here.)*
 - Blandford & Narayan (1986), Fermat surface, caustics, and the time delay between images, ApJ 310. *(Fermat principle formulation of gravitational lensing; image types and time delays.)*
 - [Orban de Xivry & Marshall (2009)](https://ui.adsabs.harvard.edu/abs/2009MNRAS.399....2O/abstract), An atlas of predicted exotic gravitational lenses, MNRAS 399. *(Swallowtail and butterfly caustic metamorphoses in compound lenses; basis for the Butterfly Caustic preset.)*
 - Lupton, Blanton, Fekete et al. (2004), Preparing Red-Green-Blue Images from CCD Data, PASP 116. *(Asinh stretch for astronomical image display.)*
 - Smith & van der Walt (2015), matplotlib viridis/inferno/plasma colormaps; Mikhailov (2019), Turbo colormap. *(Perceptually uniform palettes; implemented here via compact polynomial fits.)*
+- [lenstronomy](https://github.com/lenstronomy/lenstronomy) (Birrer et al.), `LensModel/Profiles/epl_numba.py`. *(Reference implementation the EPL deflection and potential were ported from and validated against.)*

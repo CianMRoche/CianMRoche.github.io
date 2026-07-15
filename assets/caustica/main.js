@@ -5,6 +5,7 @@ import { precomputeDistances,
          computeCriticalCurves,
          angDiamDist,
          angDiamDistBetween,
+         deflectEPL,
          setCosmology,
          getCosmology,
          timeDelayDistance,
@@ -3650,7 +3651,7 @@ function lensParamRows(obj, showAttach) {
          + sliderRow   ('φ (rad)', 'phi',   0,   Math.PI, 0.05, p.phi   ?? 0)
          + sliderRow   ("γ'",      'gamma', 0.5, 3.0,     0.05, p.gamma ?? 2.0)
          + objFooter(obj, showAttach)
-         + '<p style="font-size:11px;color:var(--muted);margin-top:4px;grid-column:1/-1">Fermat potential (T) uses the geometric term only for EPL: the potential has no closed form for the scaled-SIE approximation.</p>';
+         + '<p style="font-size:11px;color:var(--muted);margin-top:4px;grid-column:1/-1">Reproduces the SIE at γ\'=2.</p>';
   return '';
 }
 
@@ -3909,7 +3910,15 @@ function _lensPotentialJS(obj, posX, posY) {
     return A * (xr * Math.atan2(sqf*xr, r + s) + yr * 0.5 * Math.log(n / d))
          - 0.5 * b * q * s * Math.log((r + s) * (r + s) + sqf * sqf * xr * xr);
   }
-  if (model === 'epl') return 0;
+  if (model === 'epl') {
+    // Exact EPL potential ψ = (u·α)/(2−t) (Euler's theorem: ψ is homogeneous of
+    // degree 2−t and α = ∇ψ). Reduces to the SIE potential u·α at t=1 (γ=2).
+    const t = (params.gamma ?? 2) - 1;
+    const [ax, ay] = deflectEPL(ux, uy, params.b ?? 1, params.q ?? 0.75, params.phi ?? 0, params.gamma ?? 2);
+    let denom = 2 - t;                                    // singular only at γ=3 (log potential)
+    if (Math.abs(denom) < 1e-3) denom = denom < 0 ? -1e-3 : 1e-3;
+    return (ux*ax + uy*ay) / denom;
+  }
   if (model === 'shear') {
     const c2 = Math.cos(2*(params.phi ?? 0)), s2 = Math.sin(2*(params.phi ?? 0));
     return 0.5 * (params.gamma ?? 0.05) * ((posX*posX - posY*posY)*c2 + 2*posX*posY*s2);

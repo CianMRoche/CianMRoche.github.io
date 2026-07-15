@@ -108,22 +108,44 @@ export function deflectNIE(ux, uy, b, q, phi, rc) {
   return [cp * ax - sp * ay, sp * ax + cp * ay];
 }
 
-// EPL — same formulation as the shader: SIE deflections scaled by (m/b)^(2-gamma).
+// EPL — exact Elliptical Power Law (Tessore & Metcalf 2015), ported from the
+// lenstronomy `epl_numba` reference implementation. Unlike the old scaled-SIE
+// approximation this is a true gradient field for all q and gamma (curl-free), so
+// its convergence/shear maps are self-consistent and it has a closed-form potential
+// (see lensPotential). `gamma` is the 3D density slope (gamma=2 = isothermal = SIE).
+//
+// Angular part Ω(φ) via the Tessore recurrence: Ω_0 = e^{iφ},
+//   Ω_n = Ω_{n-1} · [2n−(2−t)]/[2n+(2−t)] · (−f·e^{2iφ}),  f = (1−q)/(1+q),  t = γ−1.
+function _eplOmega(phi, t, q) {
+  const f  = (1 - q) / (1 + q);
+  const cf = -f * Math.cos(2*phi), sf = -f * Math.sin(2*phi);   // fact = −f·e^{2iφ}
+  let omR = Math.cos(phi), omI = Math.sin(phi);                 // Ω_0 = e^{iφ}
+  let sumR = 0, sumI = 0;
+  for (let n = 1; n <= 200; n++) {
+    sumR += omR; sumI += omI;
+    const c  = (2*n - (2 - t)) / (2*n + (2 - t));
+    const nr = (omR*cf - omI*sf) * c;
+    const ni = (omR*sf + omI*cf) * c;
+    omR = nr; omI = ni;
+    if (omR*omR + omI*omI < 1e-32) break;   // term negligible (double precision)
+  }
+  sumR += omR; sumI += omI;
+  return [sumR, sumI];
+}
+
 export function deflectEPL(ux, uy, b, q, phi, gamma) {
+  const qs = Math.min(Math.max(q, 0.05), 1.0);   // series converges within 200 terms for q≥0.05
+  const t  = gamma - 1;
+  const bT = b * qs;                             // b_Tessore = b·q matches Caustica's SIE b at γ=2
   const cp = Math.cos(phi), sp = Math.sin(phi);
-  const xr =  cp*ux + sp*uy;
+  const xr =  cp*ux + sp*uy;                     // rotate into the major-axis frame
   const yr = -sp*ux + cp*uy;
-  const qs  = Math.max(q, 0.001);
-  const sqf = Math.sqrt(Math.max(1 - qs*qs, EPS));
-  const s   = SIE_SOFT;
-  const m   = Math.sqrt(qs*qs*(xr*xr + s*s) + yr*yr);
-  const A   = b * qs / sqf;
-  const ax_sie = A * Math.atan2(sqf * xr, m + s);
-  const ay_sie = A * 0.5 * Math.log((1 + sqf*yr/(m + qs*qs*s)) /
-                                      Math.max(1 - sqf*yr/(m + qs*qs*s), EPS));
-  const scale = Math.pow(Math.max(m / Math.max(b, EPS), EPS), 2.0 - gamma);
-  const ax = scale * ax_sie, ay = scale * ay_sie;
-  return [cp*ax - sp*ay, sp*ax + cp*ay];
+  const R   = Math.max(Math.sqrt(qs*qs*xr*xr + yr*yr), SIE_SOFT);
+  const ang = Math.atan2(yr, qs*xr);
+  const [omR, omI] = _eplOmega(ang, t, qs);
+  const pref = (2*bT)/(1 + qs) * Math.pow(bT/R, t) * (R/bT);
+  const axr = pref*omR, ayr = pref*omI;
+  return [cp*axr - sp*ayr, sp*axr + cp*ayr];     // rotate deflection back
 }
 
 // ── Multiplane ray tracer ──────────────────────────────────────────────────
