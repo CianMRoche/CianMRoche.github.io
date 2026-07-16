@@ -25,13 +25,23 @@ body { margin: 0; }
 /* Selected elements */
 
 ::-moz-selection {
-  color: #fff;
-  background: #000;
+  color: #10233f;
+  background: #b9d7ff;
 }
 
 ::selection {
-  color: #fff;
-  background: #000;
+  color: #10233f;
+  background: #b9d7ff;
+}
+
+html[data-theme="dark"] ::-moz-selection {
+  color: #eaf6f9;
+  background: #2b5b66;
+}
+
+html[data-theme="dark"] ::selection {
+  color: #eaf6f9;
+  background: #2b5b66;
 }
 
 /* Display HTML5 elements in IE6-9 and FF3 */

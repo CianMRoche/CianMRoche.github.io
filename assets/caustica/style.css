@@ -405,13 +405,16 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
 }
 /* When the ruler tool is shown, lift the colorbar above it (both live bottom-left). */
 .sl-image-wrap.sl-ruler-visible .sl-colorbar { bottom: 44px; }
+/* The warnings also live bottom-left (just above the ruler); lift the colorbar clear
+   of them whenever one is shown (this wins over the ruler rule above when both apply). */
+.sl-image-wrap.sl-warn-visible .sl-colorbar { bottom: 104px; }
 
-/* Performance warning — orange badge, bottom-right (clear of the bottom-left
-   colorbar/ruler). Appears only while the overlay redraw is slow. */
+/* Performance warning — orange badge, bottom-left, just above the ruler. The colorbar
+   lifts above it (see .sl-warn-visible). Appears only while the overlay redraw is slow. */
 .sl-perf-warn {
   position: absolute;
-  bottom: 42px;   /* above the zoom cluster (bottom-right) */
-  right: 8px;
+  bottom: 42px;   /* just above the ruler cluster (bottom-left) */
+  left: 8px;
   z-index: 12;
   width: 26px;
   height: 26px;
@@ -436,7 +439,7 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
 .sl-perf-pop {
   position: absolute;
   bottom: 76px;
-  right: 8px;
+  left: 8px;
   z-index: 13;
   width: 260px;
   max-width: calc(100% - 16px);
@@ -471,12 +474,12 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
 }
 .sl-perf-pop-close:hover { opacity: 1; color: var(--fg); background: var(--bg-soft); }
 
-/* Object display-limit warning — orange pill, top-left (clear of the top-right
-   viz chip and the bottom perf badge / colorbar). Shown while the visible lens
-   or source count exceeds what the shader can render. */
+/* Object display-limit warning — orange pill, bottom-left, stacked just above the
+   performance badge and the ruler. Shown while the visible lens/source/plane count
+   exceeds what the shader can render. */
 .sl-cap-warn {
   position: absolute;
-  top: 8px;
+  bottom: 76px;
   left: 8px;
   z-index: 12;
   display: flex;
@@ -527,7 +530,7 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
 
 .sl-cap-pop {
   position: absolute;
-  top: 40px;
+  bottom: 102px;
   left: 8px;
   z-index: 13;
   width: 260px;

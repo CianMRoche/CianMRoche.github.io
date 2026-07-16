@@ -24,7 +24,7 @@ Caustica was built with heavy use of AI tools for code generation, and as a whol
 4. **Adjust parameters** in the Scene tab on the right. For hybrid objects, separate collapsible sections appear for the lens and source halves, each with its own show/hide (eye) and delete buttons, so a single half can be toggled or removed while the other stays. The eye button excludes an object from the computation without deleting it. Copy the selected object with **Cmd/Ctrl+C** and paste a duplicate in the same place with **Cmd/Ctrl+V**. Scene edits — adding, moving, deleting, and adjusting objects and planes — can be reversed with the **undo/redo arrows** to the right of the title (or **Cmd/Ctrl+Z** and **Cmd/Ctrl+Shift+Z**); view settings such as field of view and colour mapping are not part of the undo history.
 5. **The image panel** updates in real time. Press C to overlay critical curves and caustics (the chips beside the view dropdown toggle the same overlays). **Zoom** with the mouse wheel or a two-finger pinch; the **scale bar** at the bottom right of the image tracks the angular scale as you zoom (1″, 2″, 5″, or 10″ depending on the field of view), and the View tab accepts an exact FOV value. The View tab's **Hide all overlays** switch blanks every annotation and the on-canvas controls (view dropdown, overlay chips, ruler buttons) for a clean plot until switched back. Use the **Export** tab to save a PNG, WebM, or GIF.
 6. **Measure angular distances** with the ruler. The ruler is off by default: enable it with the **Ruler** toggle in the View tab, or just press **L** (which enables and arms it in one step). Its button sits at the bottom-left of the image panel; click it or press **L** to arm it, then click-and-drag on the image between two points: a line appears with its separation in arcseconds and position angle (e.g. `1.42″ · 34°`). Each new measurement becomes the selected item, and measurements are editable: click one to select it, drag its line to move it, or drag an endpoint to reshape it. Delete the selected measurement with its **trash** button or **Backspace**; clear all of them with the **×** button. Measurements persist when you toggle the ruler off. The measurement lines are captured in saved PNGs and recordings; the ruler buttons themselves are not.
-7. **Save and load configurations** using the Save / Load buttons in the top bar, next to the preset dropdown (on phones they move into the top bar's **⋯** overflow menu, which also holds Docs, Tour, the shortcut reference, and the theme toggle, keeping undo / redo and presets on a single row). The file stores all planes, objects, and parameters along with the full view state, so a loaded config reproduces the same picture: field of view, active quantity, per-quantity color mapping, contour spacing, the critical-curve resolution, point-source grid density, and render scale, and the overlay and ruler toggles. Any setting absent from a file (for instance one saved by an older version) loads at its default value.
+7. **Save and load configurations** using the Save / Load buttons in the top bar, next to the preset dropdown (on phones they move into the top bar's **⋯** overflow menu, which also holds Docs, Tour, the shortcut reference, and the theme toggle, keeping undo / redo and presets on a single row). The file stores all planes, objects, and parameters along with the full view state, so a loaded config reproduces the same picture: field of view, active quantity, per-quantity color mapping, contour spacing, the critical-curve resolution, point-source grid density, and render scale, and the overlay and ruler toggles. Any setting absent from a file loads at its default value.
 
 ## Keyboard shortcuts
 
@@ -74,7 +74,7 @@ The simulation uses a spatially flat ΛCDM cosmology. $H_0$ and $\Omega_m$ are a
 | $\Omega_\Lambda$ | $1 - \Omega_m$ | Dark-energy density parameter (flat universe) |
 | $c$ | $2.998\times10^5$ km s⁻¹ | Speed of light |
 
-Because the lensed image, the $\kappa/\gamma/\mu$ maps, and the critical curves depend only on ratios of angular-diameter distances, $H_0$ leaves them unchanged and only $\Omega_m$ shifts them. $H_0$ does set the absolute distance scale, so it rescales the physical time delays (§ below): the delays scale as $1/H_0$, which is the basis of time-delay cosmography.
+Because the lensed image, the $\kappa/\gamma/\mu$ maps, and the critical curves depend only on ratios of angular-diameter distances, $H_0$ leaves them unchanged and only $\Omega_m$ shifts them. $H_0$ does set the absolute distance scale, so it rescales the physical time delays (§4): the delays scale as $1/H_0$, which is the basis of time-delay cosmography.
 
 ### Dimensionless Hubble parameter
 
@@ -324,7 +324,7 @@ The potential $\psi_k$ is computed analytically where a closed form exists:
 | Constant deflection | $\alpha(\theta_x\cos\varphi + \theta_y\sin\varphi)$ |
 | EPL | $\tfrac{1}{2-t}\,(\mathbf{u}\cdot\hat{\boldsymbol{\alpha}}_\text{EPL})$, with $t=\gamma'-1$ (see §5, EPL) |
 
-The EPL now uses the exact Tessore & Metcalf (2015) potential $\psi = \tfrac{1}{2-t}(\mathbf{u}\cdot\hat{\boldsymbol{\alpha}})$, so its Fermat surface and image classification are correct (the earlier scaled-SIE approximation had no potential and produced a bare paraboloid). The expression is singular only at $\gamma'=3$ (where the profile's potential is logarithmic); this is guarded numerically.
+The EPL potential is the exact Tessore & Metcalf (2015) form $\psi = \tfrac{1}{2-t}(\mathbf{u}\cdot\hat{\boldsymbol{\alpha}})$, a true gradient field, so the Fermat surface and image classification derived from it are self-consistent. It is singular only at $\gamma'=3$ (where the profile's potential is logarithmic), which is guarded numerically.
 
 #### Gauge note
 
@@ -332,13 +332,15 @@ The zero level of $\varphi$ has no absolute physical meaning; it depends on the 
 
 #### Time delays (days)
 
-The **Time delays** toggle in the View tab annotates each point-source image with its light-travel-time delay in days, measured relative to the first-arriving image (the global minimum of the arrival-time surface). The delay between two images is
+The **Time delays** toggle in the View tab labels each point-source image with its arrival time in days, relative to the first-arriving image (the global minimum of the arrival-time surface). The delay between two images is their difference in arrival time:
 
-$$\Delta t_{ij} = \frac{D_{\Delta t}}{c}\,\big(\varphi_i - \varphi_j\big),\qquad D_{\Delta t} = (1+z_L)\,\frac{D_L D_S}{D_{LS}}$$
+$$\Delta t_{ij} = \frac{K}{c}\,\big(\varphi_i - \varphi_j\big),\qquad K = \frac{\chi_L\,\chi_S}{\chi_S - \chi_L}$$
 
-where $\varphi$ is the reduced Fermat potential (arcsec², converted to radians² in the code) and $D_{\Delta t}$ is the **time-delay distance**. Because $D_{\Delta t}\propto 1/H_0$, the delays scale inversely with the Hubble constant, and they also depend on $\Omega_m$ through the distances, so both cosmology sliders move them. This is exactly the dependence exploited by time-delay cosmography to measure $H_0$.
+where $\varphi$ is the reduced Fermat potential from the box above (arcsec², converted to radians² in the code) and $K$ is its normalisation ($\chi_L$ is the first lens plane). For a single lens plane $K$ reduces to the **time-delay distance** $D_{\Delta t} = (1+z_L)\,D_L D_S / D_{LS}$, and the expression becomes the textbook single-plane result $\Delta t = (D_{\Delta t}/c)\,\Delta\varphi$.
 
-The single–lens-plane identity $D_{\Delta t} = \chi_L\chi_S/(\chi_S-\chi_L)$ (the Fermat normalisation $K$ above) makes the conversion exact for one lens plane only. Genuine multiplane arrival times require the generalised time-delay expression, so the toggle is **disabled when more than one plane contains a lens**, and it applies only to point sources that produce two or more images.
+The same formula holds for any number of lens planes, because the normalisation cancels: multiplying $\varphi$ back by $K$ recovers the raw comoving arrival time, so the delay depends only on the physical surface, not on the display scaling. Working in comoving coordinates is what keeps this simple, each $(1+z)$ factor is absorbed into the distances $\chi = (1+z)D$, since an excess comoving path length converts to observed time as length$/c$ (the proper-length contraction and cosmological dilation cancel).
+
+Because $K \propto 1/H_0$, every delay scales inversely with the Hubble constant, while $\Omega_m$ shifts it through the distance ratios, and this sensitivity is exactly what time-delay cosmography exploits to measure $H_0$. The toggle needs at least one lens plane in front of the source and a point source with two or more images.
 
 ## 5. Lens deflection models
 

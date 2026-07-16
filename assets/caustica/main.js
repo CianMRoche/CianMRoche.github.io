@@ -8,7 +8,6 @@ import { precomputeDistances,
          deflectEPL,
          setCosmology,
          getCosmology,
-         timeDelayDistance,
          fermatDiffToDays,
          traceRay }                            from './lens.js';
 
@@ -77,10 +76,19 @@ const PS_GRID_OPTIONS = [150, 300, 600, 1200];
 const PERF_WARN_MS = 120;
 let _perfWarnOn = false;
 let _perfWarnDismissed = false;  // user closed the warning; stay hidden for the rest of the session
+// Both warning badges live bottom-left, just above the ruler. Toggle a class on the
+// image wrap whenever either is visible so the colorbar lifts clear of them (CSS).
+function _syncWarnLift() {
+  const wrap = document.getElementById('sl-image-wrap');
+  if (!wrap) return;
+  const shown = id => { const el = document.getElementById(id); return el && el.style.display !== 'none'; };
+  wrap.classList.toggle('sl-warn-visible', shown('sl-perf-warn') || shown('sl-cap-warn'));
+}
+
 function reportPerf(ms) {
   const badge = document.getElementById('sl-perf-warn');
   if (!badge) return;
-  if (_perfWarnDismissed) { badge.style.display = 'none'; return; }
+  if (_perfWarnDismissed) { badge.style.display = 'none'; _syncWarnLift(); return; }
   if      (!_perfWarnOn && ms > PERF_WARN_MS)       _perfWarnOn = true;
   else if ( _perfWarnOn && ms < PERF_WARN_MS * 0.6) _perfWarnOn = false;
   if (_perfWarnOn) {
@@ -90,6 +98,7 @@ function reportPerf(ms) {
     const pop = document.getElementById('sl-perf-pop');
     if (pop) pop.style.display = 'none';
   }
+  _syncWarnLift();
 }
 
 // Objects beyond the shader's per-type cap (some number of lenses and the same
@@ -107,6 +116,7 @@ function reportObjectCap() {
   if (_capWarnDismissed) {
     badge.style.display = 'none';
     if (pop) pop.style.display = 'none';
+    _syncWarnLift();
     return;
   }
   const cap = renderer?.maxObjects ?? MAX_OBJECTS;
@@ -124,6 +134,7 @@ function reportObjectCap() {
   if (over === 0) {
     badge.style.display = 'none';
     if (pop) pop.style.display = 'none';
+    _syncWarnLift();
     return;
   }
   const label = document.getElementById('sl-cap-warn-label');
@@ -156,6 +167,7 @@ function reportObjectCap() {
     detail.innerHTML = html;
   }
   badge.style.display = '';
+  _syncWarnLift();
 }
 
 // ── App state ─────────────────────────────────────────────────────────────────
@@ -823,20 +835,23 @@ function removePlane(id) {
 function invalidateDistances() { state.dist = precomputeDistances(state.planes); }
 
 // ── Time-delay eligibility ──────────────────────────────────────────────────
-// Relative image time delays are annotated only for a SINGLE lens plane, where the
-// Fermat normalisation K equals the time-delay distance D_Δt = (1+z_L)D_L D_S/D_LS.
-// Genuine multiplane arrival times need the generalized formula, so the toggle is
-// disabled (with an explanatory tooltip) whenever more than one plane holds a lens.
-// Counts distinct lens REDSHIFTS, so lenses stacked on separate UI planes at the same
-// z (which lens as a single plane) count once and keep time delays available.
+// Relative image time delays are annotated whenever there is at least one lens plane.
+// They are computed from the full multiplane arrival-time surface (_computeFullFermat),
+// so they are correct for one OR several lens planes: the physical delay is
+// Δt = Δφ_raw/c and the normalisation constant K cancels (see _fermatDtDist). For a
+// single lens plane K equals the time-delay distance D_Δt = (1+z_L)D_L D_S/D_LS exactly.
+// Counts distinct lens REDSHIFTS so lenses stacked on separate UI planes at the same z
+// count once; this drives display copy but availability only needs one lens plane.
 function lensPlaneCount() {
   const zs = new Set();
   for (const p of state.planes)
     if (p.objects.some(o => !o.hidden && o.type === 'lens')) zs.add(Math.round(p.z / 1e-4));
   return zs.size;
 }
-function timeDelaysAvailable() { return lensPlaneCount() === 1; }
-function singleLensPlaneZ() {
+function timeDelaysAvailable() { return lensPlaneCount() >= 1; }
+// Redshift of the first (lowest-z) plane holding a visible lens; null if none. state.planes
+// is kept sorted by z, so find() returns the nearest lens plane to the observer.
+function firstLensPlaneZ() {
   const p = state.planes.find(pl => pl.objects.some(o => !o.hidden && o.type === 'lens'));
   return p ? p.z : null;
 }
@@ -3140,8 +3155,8 @@ function renderViewPanel() {
   const auto = state.critZs === null;
   const tdAvail = timeDelaysAvailable();
   const tdTitle = tdAvail
-    ? 'Annotate each point-source image with its arrival-time delay in days, relative to the first-arriving image (needs a point source with 2+ images). Scales with H₀ and Ω_m in the Settings tab.'
-    : 'Time delays are shown only for a single lens plane, where the time-delay distance is well defined. Multiple lens planes need the generalized multiplane formula.';
+    ? 'Annotate each point-source image with its arrival-time delay in days, relative to the first-arriving image (needs a point source with 2+ images). Uses the full multiplane arrival-time surface, so it works for one or several lens planes. Scales with H₀ and Ω_m in the Settings tab.'
+    : 'Time delays need at least one lens plane in front of the source.';
 
   el.innerHTML = `
     <div class="sl-panel">
@@ -4004,6 +4019,31 @@ function _computeFullFermat(tx, ty, planes, dist, srcIdx, betaX, betaY) {
   return phi;
 }
 
+// Time-delay normalisation constant K (Mpc) that _computeFullFermat divides φ by:
+// K = χ_L·χ_s/(χ_s − χ_L), with χ_L the first lens plane in front of the source and
+// χ = (1+z)·D_ang the comoving distance. Feeding this same K into fermatDiffToDays turns
+// a normalised Fermat difference back into a physical delay, because the K cancels:
+//   Δt = (K/c)·(Δφ_raw/K) = Δφ_raw/c.
+// So the choice of K is immaterial to the physical delay — it only rescales the surface
+// for display — and this works unchanged for one OR many lens planes. For a single lens
+// plane it equals the time-delay distance D_Δt = (1+z_L)D_L D_S/D_LS exactly, so the
+// single-plane delays are byte-identical to the previous timeDelayDistance() path.
+// MUST mirror _computeFullFermat's internal K selection exactly.
+function _fermatDtDist(planes, dist, srcIdx) {
+  const { D_obs } = dist;
+  const chi   = j => (1 + planes[j].z) * D_obs[j];
+  const chi_s = chi(srcIdx);
+  if (chi_s < 1e-9) return 0;
+  for (let j = 0; j < srcIdx; j++) {
+    if (!planes[j].objects.some(o => !o.hidden && o.type === 'lens')) continue;
+    const chi_L = chi(j);
+    if (chi_L < 1e-9) continue;                 // lens at the observer: skip (as in _computeFullFermat)
+    if (chi_s - chi_L > 1e-9) return chi_L * chi_s / (chi_s - chi_L);
+    break;                                      // first lens coincides with source: fall through
+  }
+  return chi_s;                                 // no usable lens in front: matches the else-branch
+}
+
 // Find stationary points of the Fermat potential φ(θ; β_s) = ½|θ−β_s|² − ψ_eff(θ).
 // These are the images of a source at β_s: ∇φ = β(θ) − β_s = 0.
 // betaS defaults to [0,0] (source at origin).
@@ -4093,6 +4133,32 @@ function findStationaryPoints(planes, dist, srcIdx, fov, betaS = [0, 0], gridN =
   return results;
 }
 
+// Rounded background-rectangle text label ("pill"), centred at (cx, cy). Shared by the
+// ruler measurements and the point-source time-delay labels so they stay identical.
+// Colours track the theme (dark/light); caller positions and clamps the centre.
+function _pillLabel(ctx, text, cx, cy, fsize, dark) {
+  const pillBg  = dark ? 'rgba(0,0,0,0.7)'        : 'rgba(255,255,255,0.82)';
+  const textCol = dark ? 'rgba(255,255,255,0.92)' : 'rgba(0,0,0,0.82)';
+  ctx.font = `${fsize}px system-ui, -apple-system, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const tw = ctx.measureText(text).width;
+  const padX = 6, padY = 4, boxW = tw + padX * 2, boxH = fsize + padY * 2, rr = 4;
+  const bx = cx - boxW / 2, by = cy - boxH / 2;
+  ctx.fillStyle = pillBg;
+  ctx.beginPath();
+  ctx.moveTo(bx + rr, by);
+  ctx.arcTo(bx + boxW, by,        bx + boxW, by + boxH, rr);
+  ctx.arcTo(bx + boxW, by + boxH, bx,        by + boxH, rr);
+  ctx.arcTo(bx,        by + boxH, bx,        by,        rr);
+  ctx.arcTo(bx,        by,        bx + boxW, by,        rr);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = textCol;
+  ctx.fillText(text, cx, cy + 0.5);
+  return { boxW, boxH };
+}
+
 function drawOverlay() {
   const overlay = document.getElementById('sl-overlay');
   const r   = overlay.getBoundingClientRect();
@@ -4125,10 +4191,10 @@ function drawOverlay() {
 
   // ── Point source image circles ─────────────────────────────────────────────────────
   const _psAll = [];  // collected for the Data tab's CSV export
-  // Relative time-delay annotations (days): single lens plane only, source behind it,
-  // ≥2 images. Reference = first-arriving image (Fermat minimum); others show +Δt.
+  // Relative time-delay annotations (days): any number of lens planes, source behind the
+  // first lens, ≥2 images. Reference = first-arriving image (Fermat minimum); others +Δt.
   const _tdOn = state.showTimeDelays && !hideOv && timeDelaysAvailable();
-  const _tdZL = _tdOn ? singleLensPlaneZ() : null;
+  const _tdFirstLensZ = _tdOn ? firstLensPlaneZ() : null;
   for (const plane of state.planes) {
     for (const obj of plane.objects) {
       if (obj.type !== 'source' || obj.model !== 'pointsource' || obj.hidden) continue;
@@ -4149,29 +4215,28 @@ function drawOverlay() {
       overlayCtx.globalAlpha = 1;
 
       // Time-delay labels beside each image of this source.
-      if (_tdOn && _tdZL != null && plane.z > _tdZL && imagePositions.length >= 2) {
+      if (_tdOn && _tdFirstLensZ != null && plane.z > _tdFirstLensZ && imagePositions.length >= 2) {
         const srcIdx = state.planes.indexOf(plane);
-        const dtDist = timeDelayDistance(_tdZL, plane.z);
+        const dtDist = _fermatDtDist(state.planes, state.dist, srcIdx);
         const phis = imagePositions.map(([tx, ty]) =>
           _computeFullFermat(tx, ty, state.planes, state.dist, srcIdx, obj.cx, obj.cy));
         let refI = 0;
         for (let i = 1; i < phis.length; i++) if (phis[i] < phis[refI]) refI = i;
+        const fsize = (window.innerWidth <= 640) ? 12 : 14;
         overlayCtx.save();
-        overlayCtx.font = '11px system-ui, -apple-system, sans-serif';
-        overlayCtx.textAlign = 'left';
-        overlayCtx.textBaseline = 'middle';
-        overlayCtx.lineWidth = 3;
-        overlayCtx.lineJoin = 'round';
+        overlayCtx.font = `${fsize}px system-ui, -apple-system, sans-serif`;
         imagePositions.forEach(([tx, ty], i) => {
           const [px, py] = toPixel(tx, ty);
           const days = fermatDiffToDays(dtDist, phis[i] - phis[refI]);
           const label = (i === refI) ? '0 d (ref)'
                       : `+${days >= 10 ? days.toFixed(0) : days.toFixed(1)} d`;
-          const lx = px + r_px + 4, ly = py;
-          overlayCtx.strokeStyle = dark ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.92)';
-          overlayCtx.strokeText(label, lx, ly);
-          overlayCtx.fillStyle = dark ? '#ffffff' : '#111111';
-          overlayCtx.fillText(label, lx, ly);
+          // Pill just to the right of the image circle, clamped on-screen (same style as ruler).
+          const tw = overlayCtx.measureText(label).width;
+          const boxW = tw + 12, boxH = fsize + 8;
+          let cx = px + r_px + 4 + boxW / 2, cy = py;
+          cx = Math.min(Wl - boxW / 2 - 2, Math.max(boxW / 2 + 2, cx));
+          cy = Math.min(Hl - boxH / 2 - 2, Math.max(boxH / 2 + 2, cy));
+          _pillLabel(overlayCtx, label, cx, cy, fsize, dark);
         });
         overlayCtx.restore();
       }
@@ -4554,7 +4619,6 @@ function drawOverlay() {
     const dark    = document.documentElement.getAttribute('data-theme') === 'dark';
     const mainCol = dark ? 'rgba(255,255,255,0.92)' : 'rgba(0,0,0,0.82)';
     const haloCol = dark ? 'rgba(0,0,0,0.55)'       : 'rgba(255,255,255,0.7)';
-    const pillBg  = dark ? 'rgba(0,0,0,0.7)'        : 'rgba(255,255,255,0.82)';
     const _mob    = window.innerWidth <= 640;
     const fsize   = _mob ? 12 : 14;
     const accent  = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#4da3ff';
@@ -4592,10 +4656,7 @@ function drawOverlay() {
 
       // Label pill near the midpoint, nudged perpendicular to the line, clamped on-screen.
       overlayCtx.font = `${fsize}px system-ui, -apple-system, sans-serif`;
-      overlayCtx.textAlign = 'center';
-      overlayCtx.textBaseline = 'middle';
-      const tw = overlayCtx.measureText(label).width;
-      const padX = 6, padY = 4, boxW = tw + padX * 2, boxH = fsize + padY * 2;
+      const boxW = overlayCtx.measureText(label).width + 12, boxH = fsize + 8;
       const midX = (x0 + x1) / 2, midY = (y0 + y1) / 2;
       const segLen = Math.hypot(x1 - x0, y1 - y0) || 1;
       const nx = -(y1 - y0) / segLen, ny = (x1 - x0) / segLen; // unit normal
@@ -4603,19 +4664,7 @@ function drawOverlay() {
       let cx = midX + nx * off, cy = midY + ny * off;
       cx = Math.min(Wl - boxW / 2 - 2, Math.max(boxW / 2 + 2, cx));
       cy = Math.min(Hl - boxH / 2 - 2, Math.max(boxH / 2 + 2, cy));
-
-      overlayCtx.fillStyle = pillBg;
-      const bx = cx - boxW / 2, by = cy - boxH / 2, rr = 4;
-      overlayCtx.beginPath();
-      overlayCtx.moveTo(bx + rr, by);
-      overlayCtx.arcTo(bx + boxW, by,        bx + boxW, by + boxH, rr);
-      overlayCtx.arcTo(bx + boxW, by + boxH,  bx,        by + boxH, rr);
-      overlayCtx.arcTo(bx,        by + boxH,  bx,        by,        rr);
-      overlayCtx.arcTo(bx,        by,         bx + boxW, by,        rr);
-      overlayCtx.closePath();
-      overlayCtx.fill();
-      overlayCtx.fillStyle = mainCol;
-      overlayCtx.fillText(label, cx, cy + 0.5);
+      _pillLabel(overlayCtx, label, cx, cy, fsize, dark);
     }
   }
 

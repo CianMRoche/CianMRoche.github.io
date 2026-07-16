@@ -1,4 +1,4 @@
-fov: 4
+fov: 6
 zMax: 3
 vizMode: 0
 vizScale0: 1 0.5 0 1 0
@@ -8,19 +8,24 @@ vizScale3: 4 0.5 1 30 0
 vizScale5: 0 0.5 0 2 0
 showCritCurves: false
 showCaustics: true
-showMarkers: true
+showMarkers: false
 showLegend: true
 showColorbar: true
+showScaleBar: true
 showRuler: false
 critGridN: 512
-psGridN: 300
+psGridN: 150
+renderScale: 1x
 critZs: null
 contourSpacing: 1
 contourScale: linear
+H0: 70
+Omega_m: 0.3
+showTimeDelays: false
 fermatUseSourcePos: true
-fermatBetaX: 0.178296
-fermatBetaY: 0.002522
-fermatSrcPlaneZ: 1.9900
+fermatBetaX: 0.004981
+fermatBetaY: 0.004539
+fermatSrcPlaneZ: 2.0000
 planes:
   - z: 0.500
     objects:
@@ -31,11 +36,11 @@ planes:
         hidden: false
         showShape: true
         params:
-          b: 1.458814
+          b: 2.93765
           q: 0.35
           phi: 0.029
           rc: 0.026265
-  - z: 0.510
+  - z: 0.500
     objects:
       - type: lens
         model: nie
@@ -48,12 +53,12 @@ planes:
           q: 0.35
           phi: 1.6
           rc: 0.017206
-  - z: 1.990
+  - z: 2.000
     objects:
       - type: source
         model: pointsource
-        cx: 0.1783
-        cy: 0.00252
+        cx: 0.00498
+        cy: 0.00454
         hidden: false
         showShape: false
         params:
