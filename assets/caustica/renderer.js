@@ -366,13 +366,18 @@ float fermatPotential(vec2 theta, int targetIdx) {
     if (j >= targetIdx) break;
     if (u_planeType[j] != 0) continue;        // skip empty planes
     float chi_j = u_chi[j];
-    if (chi_j - prevChi < EPS) continue;
-    if (chi_L < 0.0) chi_L = chi_j;
-    vec2 eta_j = chi_j * pos[j];
-    vec2 de    = eta_j - prevEta;
-    geoDelay  += 0.5 * dot(de, de) / (chi_j - prevChi);
-    prevChi    = chi_j;
-    prevEta    = eta_j;
+    if (chi_j < EPS) continue;                // lens at the observer: degenerate
+    // A lens plane sharing the previous node's redshift (same χ) adds no new drift
+    // segment, but its potential still contributes at that node — so accumulate it
+    // regardless. Only advance the node (geometric term) for a genuinely new χ.
+    if (chi_j - prevChi >= EPS) {
+      if (chi_L < 0.0) chi_L = chi_j;
+      vec2 eta_j = chi_j * pos[j];
+      vec2 de    = eta_j - prevEta;
+      geoDelay  += 0.5 * dot(de, de) / (chi_j - prevChi);
+      prevChi    = chi_j;
+      prevEta    = eta_j;
+    }
     for (int li = 0; li < MAX_OBJECTS; li++) {
       if (li >= u_numLenses) break;
       if (u_lensPlaneIdx[li] != j) continue;

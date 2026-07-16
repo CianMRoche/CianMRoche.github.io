@@ -827,8 +827,13 @@ function invalidateDistances() { state.dist = precomputeDistances(state.planes);
 // Fermat normalisation K equals the time-delay distance D_Δt = (1+z_L)D_L D_S/D_LS.
 // Genuine multiplane arrival times need the generalized formula, so the toggle is
 // disabled (with an explanatory tooltip) whenever more than one plane holds a lens.
+// Counts distinct lens REDSHIFTS, so lenses stacked on separate UI planes at the same
+// z (which lens as a single plane) count once and keep time delays available.
 function lensPlaneCount() {
-  return state.planes.filter(p => p.objects.some(o => !o.hidden && o.type === 'lens')).length;
+  const zs = new Set();
+  for (const p of state.planes)
+    if (p.objects.some(o => !o.hidden && o.type === 'lens')) zs.add(Math.round(p.z / 1e-4));
+  return zs.size;
 }
 function timeDelaysAvailable() { return lensPlaneCount() === 1; }
 function singleLensPlaneZ() {
@@ -997,11 +1002,12 @@ function copySelectedObject() {
   return true;
 }
 
-// Paste the copied object(s) into the same plane at the same position, with fresh
-// ids (and a fresh shared hybridId if it was a hybrid). Selects the new object.
+// Paste the copied object(s) into the currently selected plane (falling back to the
+// plane they were copied from) at the same position, with fresh ids (and a fresh
+// shared hybridId if it was a hybrid). Selects the new object.
 function pasteCopiedObject() {
   if (!_objClipboard) return false;
-  const pl = state.planes.find(p => p.id === _objClipboard.planeId) ?? selectedPlane();
+  const pl = selectedPlane() ?? state.planes.find(p => p.id === _objClipboard.planeId);
   if (!pl) return false;
   record();
   const newHybridId = _objClipboard.isHybrid ? uid() : null;
@@ -3970,13 +3976,18 @@ function _computeFullFermat(tx, ty, planes, dist, srcIdx, betaX, betaY) {
   for (let j = 0; j < srcIdx; j++) {
     if (!isLens(j)) continue;                       // skip empty planes
     const chi_j = chi(j);
-    if (chi_j - prevChi < 1e-9) continue;
-    if (chi_L < 0) chi_L = chi_j;
+    if (chi_j < 1e-9) continue;                     // lens at the observer: degenerate
     const [px, py] = traceRay(tx, ty, planes, dist, j); // x_j (x_0 = θ since no prior deflection)
-    const ex = chi_j * px, ey = chi_j * py;
-    const dx = ex - prevEx, dy = ey - prevEy;
-    geoDelay += 0.5 * (dx * dx + dy * dy) / (chi_j - prevChi);
-    prevChi = chi_j; prevEx = ex; prevEy = ey;
+    // A lens plane sharing the previous node's redshift (same χ) adds no new drift
+    // segment, but its potential still contributes at that node — so accumulate it
+    // regardless. Only advance the node (geometric term) for a genuinely new χ.
+    if (chi_j - prevChi >= 1e-9) {
+      if (chi_L < 0) chi_L = chi_j;
+      const ex = chi_j * px, ey = chi_j * py;
+      const dx = ex - prevEx, dy = ey - prevEy;
+      geoDelay += 0.5 * (dx * dx + dy * dy) / (chi_j - prevChi);
+      prevChi = chi_j; prevEx = ex; prevEy = ey;
+    }
     for (const obj of planes[j].objects) {
       if (obj.hidden || obj.type !== 'lens') continue;
       psiEff += chi_j * _lensPotentialJS(obj, px, py);
