@@ -292,6 +292,12 @@ function _attachScrub(inp, { lo = -Infinity, hi = Infinity, onChange }) {
     const t = e.touches[0];
     if (moved || (t && Math.abs(t.clientX - startX) >= Math.abs(t.clientY - startY))) e.preventDefault();
   }, { passive: false });
+  // A drag that starts on selected text (e.g. after a double-click highlighted
+  // the number) becomes a native text drag-and-drop, which pointercancels the
+  // scrub and leaves the selection in place, so every retry dies the same way.
+  // Blocking dragstart keeps the pointer stream alive; the first value write
+  // then collapses the selection.
+  inp.addEventListener('dragstart', e => e.preventDefault());
   const end = (e) => {
     if (!dragging) return;
     dragging = false;
