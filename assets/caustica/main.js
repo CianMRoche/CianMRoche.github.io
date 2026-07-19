@@ -665,6 +665,12 @@ function loadConfigFromYaml(yaml) {
           else if (typeof v === 'number' && isFinite(v)) params[k] = v;
           else if (typeof v === 'boolean') params[k] = v;
         }
+        // Legacy configs stored the point-mass strength as thetaE; it is a
+        // deflection scale, not an Einstein radius, so it is now called b.
+        if (model === 'pointmass' && params.thetaE !== undefined) {
+          if (params.b === undefined) params.b = params.thetaE;
+          delete params.thetaE;
+        }
         return {
           id: uid(), type, model,
           cx:       isFinite(o.cx) ? Math.max(-50, Math.min(50, +o.cx)) : 0,
@@ -766,7 +772,7 @@ function loadConfigFromYaml(yaml) {
 }
 
 function defaultParams(model) {
-  if (model === 'pointmass')   return { thetaE: 1.0 };
+  if (model === 'pointmass')   return { b: 1.0 };
   if (model === 'sie')         return { b: 1.0, q: 0.75, phi: 0 };
   if (model === 'nie')         return { b: 1.0, q: 0.75, phi: 0, rc: 0.2 };
   if (model === 'epl')         return { b: 1.0, q: 0.75, phi: 0, gamma: 2.0 };
@@ -1486,6 +1492,7 @@ function attachHandlers() {
     drawAxisCanvas(); renderPlaneCard(); redraw();
     const zEl = document.querySelector('#sl-obj-panel .sl-params-z');
     if (zEl && selectedPlane()) zEl.textContent = `z: ${selectedPlane().z.toFixed(2)}`;
+    updateThetaEReadout();
   };
   _zIn.addEventListener('change', e => { record(); _applyPlaneZ(parseFloat(e.target.value)); });
   _attachScrub(_zIn, { lo: 0.01, hi: 15, onChange: _applyPlaneZ });
@@ -2002,6 +2009,7 @@ function renderQualityPanel() {
 function applyCosmology() {
   setCosmology({ H0: state.H0, Omega_m: state.Omega_m });
   invalidateDistances();
+  updateThetaEReadout();
   redraw();
 }
 
@@ -2143,14 +2151,14 @@ function toggleKbdOverlay() {
   document.addEventListener('keydown', onEsc, true);
 }
 
-// ── Einstein-radius helper ────────────────────────────────────────────────────
-// θE for a lens object against the reference source redshift. Point mass:
-// θE = b·√(D_ls/D_s). Isothermal family (SIE/NIE/EPL): θE = b·(D_ls/D_s) — the
-// circular (q = 1) value; a modest overestimate of the effective radius for
-// flattened lenses. External shear/convergence/deflection have no Einstein radius.
-// Not currently surfaced in the UI: retained for the upcoming physics-readout
-// pass (per-object θE display, magnifications, time delays).
-// eslint-disable-next-line no-unused-vars
+// ── Einstein-radius readout ───────────────────────────────────────────────────
+// θE for a lens object against the reference source redshift, with w = D_ls/D_s:
+// point mass θE = b·√w; SIE/NIE (and EPL at γ' = 2) θE = b·w; EPL at general
+// slope θE = b·w^{1/(γ'−1)} (from the circular deflection |α̂| = b^{γ'−1}R^{2−γ'}).
+// All are the circular (q = 1) values; a modest overestimate of the effective
+// radius for flattened lenses. External shear/convergence/deflection have no
+// Einstein radius (returns null). Returns 0 when the reference source is not
+// behind the lens (or at the γ' = 1 degeneracy, a uniform-κ sheet with no ring).
 function computeThetaE(obj, plane, zs) {
   if (obj.type !== 'lens') return null;
   const model = obj.model;
@@ -2160,8 +2168,48 @@ function computeThetaE(obj, plane, zs) {
   const Dls = angDiamDistBetween(plane.z, zs);
   if (!(Ds > 0) || !(Dls > 0)) return 0;
   const ratio = Dls / Ds;
-  if (model === 'pointmass') return (obj.params.thetaE ?? 1) * Math.sqrt(ratio);
-  return (obj.params.b ?? 1) * ratio;
+  const b = obj.params.b ?? 1;
+  if (model === 'pointmass') return b * Math.sqrt(ratio);
+  if (model === 'epl') {
+    const g = obj.params.gamma ?? 2;
+    if (Math.abs(g - 1) < 1e-6) return 0;
+    return b * Math.pow(ratio, 1 / (g - 1));
+  }
+  return b * ratio;
+}
+
+// Inner HTML for the θE readout line, or null for lens models with no Einstein
+// radius. Uses the same reference source redshift as the critical curves and
+// quantity maps (View tab z_s ref; auto = highest-z source plane).
+function _thetaEHtml(lensObj, pl) {
+  const zs = effectiveCritZs();
+  const th = computeThetaE(lensObj, pl, zs);
+  if (th === null) return null;
+  const val = th > 0 ? `${+th.toPrecision(3)}″` : '—';
+  return `θ<sub>E</sub> = ${val} &nbsp;at&nbsp; z<sub>s</sub> = ${zs.toFixed(2)}${state.critZs === null ? ' (auto)' : ''}`;
+}
+
+// Read-only Einstein-radius line at the bottom of the lens parameter rows (below
+// the Show shape / Attach footer), styled like the z / Pos meta text.
+function thetaERow(obj) {
+  const pl = selectedPlane();
+  if (!pl) return '';
+  const html = _thetaEHtml(obj, pl);
+  if (html === null) return '';
+  return `<div class="sl-thetae-row" id="sl-thetae-row" title="Einstein radius this lens alone would have for a source at the reference redshift (View tab). Circular-equivalent value derived from b and the lens-source distance ratio; — means the reference source is not behind the lens.">${html}</div>`;
+}
+
+// Refresh the θE readout in place (no panel rebuild), so it stays live during
+// slider drags, plane-z scrubs, z_s-ref scrubs, and cosmology changes.
+function updateThetaEReadout() {
+  const el = document.getElementById('sl-thetae-row');
+  if (!el) return;
+  const pl = selectedPlane(), obj = selectedObj();
+  if (!pl || !obj) return;
+  const lens = obj.type === 'lens' ? obj : hybridPartner(pl, obj);
+  if (!lens || lens.type !== 'lens') return;
+  const html = _thetaEHtml(lens, pl);
+  if (html !== null) el.innerHTML = html;
 }
 
 // ── Axis interaction ───────────────────────────────────────────────────────────
@@ -2518,10 +2566,11 @@ function attachAxisHandlers() {
       state.planes.sort((a, b) => a.z - b.z);
       invalidateDistances();
       renderPlaneCard(); drawAxisCanvas(); redraw();
-      // Update z in the params panel without a full sidebar rebuild.
+      // Update z and θE in the params panel without a full sidebar rebuild.
       if (dragPlane.id === state.selectedPlaneId) {
         const zEl = document.querySelector('#sl-obj-panel .sl-params-z');
         if (zEl) zEl.textContent = `z: ${z.toFixed(2)}`;
+        updateThetaEReadout();
       }
     } else {
       axisCanvas.style.cursor = nearestMarker(e.clientX, e.clientY) ? 'grab' : 'crosshair';
@@ -3114,6 +3163,7 @@ function renderScenePanel() {
           const _v = readSliderValue(inp);
           lensObj.params[inp.dataset.param] = _v;
           if (valEl) valEl.textContent = fmtP(_v);
+          updateThetaEReadout();
           redraw();
         });
       });
@@ -3159,6 +3209,7 @@ function renderScenePanel() {
           const _v = readSliderValue(inp);
           obj.params[inp.dataset.param] = _v;
           if (valEl) valEl.textContent = fmtP(_v);
+          updateThetaEReadout();
           redraw();
         });
       });
@@ -3322,8 +3373,8 @@ function renderViewPanel() {
     renderSidebar(); redraw();
   });
   const _zsEl = document.getElementById('sl-crit-zs-gen');
-  _zsEl?.addEventListener('change', e => { const v = parseFloat(e.target.value); if (v > 0) { state.critZs = v; redraw(); } });
-  _attachScrub(_zsEl, { lo: 0.1, hi: 15, onChange: v => { state.critZs = v; redraw(); } });
+  _zsEl?.addEventListener('change', e => { const v = parseFloat(e.target.value); if (v > 0) { state.critZs = v; updateZsChip(); updateThetaEReadout(); redraw(); } });
+  _attachScrub(_zsEl, { lo: 0.1, hi: 15, onChange: v => { state.critZs = v; updateZsChip(); updateThetaEReadout(); redraw(); } });
   document.getElementById('sl-hide-overlays')?.addEventListener('change', e => {
     state.hideOverlays = e.target.checked;
     document.querySelector('.sl-body')?.classList.toggle('sl-hide-ov', state.hideOverlays);
@@ -3672,26 +3723,29 @@ function lensParamRows(obj, showAttach) {
          + objFooter(obj, showAttach)
          + '<p style="font-size:11px;color:var(--muted);margin-top:4px;grid-column:1/-1">Deflection is always computed relative to the coordinate origin regardless of object position. Moving the marker only repositions the direction arrow.</p>';
   if (obj.model === 'pointmass')
-    return sliderRowLog('Strength (")', 'thetaE', 0.01, 100, p.thetaE ?? 1)
-         + objFooter(obj, showAttach);
+    return sliderRowLog('Strength (")', 'b', 0.01, 100, p.b ?? 1)
+         + objFooter(obj, showAttach)
+         + thetaERow(obj);
   if (obj.model === 'sie')
     return sliderRowLog('b (")',   'b',   0.01, 100,   p.b   ?? 1)
          + sliderRow   ('q',       'q',   0.05, 1.0,   0.05, p.q   ?? 0.75)
          + sliderRow   ('φ (rad)', 'phi', 0,   Math.PI, 0.05, p.phi ?? 0)
-         + objFooter(obj, showAttach);
+         + objFooter(obj, showAttach)
+         + thetaERow(obj);
   if (obj.model === 'nie')
     return sliderRowLog('b (")',    'b',   0.01, 100,   p.b   ?? 1)
          + sliderRow   ('q',        'q',   0.05, 1.0,   0.05, p.q   ?? 0.75)
          + sliderRow   ('φ (rad)',  'phi', 0,   Math.PI, 0.05, p.phi ?? 0)
          + sliderRowLog('r<sub>c</sub> (")', 'rc', 0.005, 20, p.rc ?? 0.2)
-         + objFooter(obj, showAttach);
+         + objFooter(obj, showAttach)
+         + thetaERow(obj);
   if (obj.model === 'epl')
     return sliderRowLog('b (")',   'b',     0.01, 100,   p.b     ?? 1)
          + sliderRow   ('q',       'q',     0.05, 1.0,   0.05, p.q     ?? 0.75)
          + sliderRow   ('φ (rad)', 'phi',   0,   Math.PI, 0.05, p.phi   ?? 0)
          + sliderRow   ("γ'",      'gamma', 0.5, 3.0,     0.05, p.gamma ?? 2.0)
          + objFooter(obj, showAttach)
-         + '<p style="font-size:11px;color:var(--muted);margin-top:4px;grid-column:1/-1">Reproduces the SIE at γ\'=2.</p>';
+         + thetaERow(obj);
   return '';
 }
 
@@ -3934,7 +3988,7 @@ function _lensPotentialJS(obj, posX, posY) {
   const { model, params } = obj;
   const ux = posX - obj.cx, uy = posY - obj.cy;
   if (model === 'pointmass') {
-    return (params.thetaE ?? 1) ** 2 * Math.log(Math.max(Math.sqrt(ux*ux + uy*uy), SOFT));
+    return (params.b ?? 1) ** 2 * Math.log(Math.max(Math.sqrt(ux*ux + uy*uy), SOFT));
   }
   if (model === 'sie' || model === 'nie') {
     const b = params.b ?? 1, q = Math.max(params.q ?? 0.8, 0.001);
@@ -4363,7 +4417,7 @@ function drawOverlay() {
           if      (obj.model === 'sie')       { a_arc = p.b ?? 1;      q = p.q ?? 0.75; phi = p.phi ?? 0; }
           else if (obj.model === 'nie')       { a_arc = p.b ?? 1;      q = p.q ?? 0.75; phi = p.phi ?? 0; }
           else if (obj.model === 'epl')       { a_arc = p.b ?? 1;      q = p.q ?? 0.75; phi = p.phi ?? 0; }
-          else if (obj.model === 'pointmass') { a_arc = p.thetaE ?? 1; }
+          else if (obj.model === 'pointmass') { a_arc = p.b ?? 1; }
         } else if (obj.model === 'point') {
           a_arc = p.sigma ?? 0.08; q = 1; phi = 0;  // hard edge: draw at exact radius
         } else if (obj.model !== 'pastedimage' && obj.model !== 'pointsource') {

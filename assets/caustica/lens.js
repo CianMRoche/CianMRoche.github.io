@@ -72,9 +72,9 @@ export function fermatDiffToDays(dtDistMpc, dPhiArcsec2) {
 const EPS      = 1e-12;
 const SIE_SOFT = 0.001;
 
-export function deflectPointMass(ux, uy, thetaE) {
+export function deflectPointMass(ux, uy, b) {
   const r2 = Math.max(ux*ux + uy*uy, SIE_SOFT * SIE_SOFT);
-  return [thetaE * thetaE / r2 * ux, thetaE * thetaE / r2 * uy];
+  return [b * b / r2 * ux, b * b / r2 * uy];
 }
 
 export function deflectSIE(ux, uy, b, q, phi) {
@@ -170,7 +170,7 @@ function deflectShear(ux, uy, gamma, phi) {
 
 function lensDeflection(obj, ux, uy) {
   const { model, params } = obj;
-  if (model === 'pointmass') return deflectPointMass(ux, uy, params.thetaE);
+  if (model === 'pointmass') return deflectPointMass(ux, uy, params.b);
   if (model === 'sie')       return deflectSIE(ux, uy, params.b, params.q, params.phi);
   if (model === 'nie')       return deflectNIE(ux, uy, params.b, params.q, params.phi, params.rc ?? 0.2);
   if (model === 'epl')       return deflectEPL(ux, uy, params.b, params.q, params.phi, params.gamma ?? 2);

@@ -109,11 +109,11 @@ float atanh_approx(float x) {
   return 0.5 * log((1.0 + x) / (1.0 - x));
 }
 
-vec2 deflectPointMass(vec2 u, float thetaE) {
+vec2 deflectPointMass(vec2 u, float b) {
   // Softened point mass: same core radius as SIE to prevent singularity.
   // Physically negligible at the scales typical in Caustica.
   float r2 = max(dot(u, u), SIE_SOFT * SIE_SOFT);
-  return (thetaE * thetaE / r2) * u;
+  return (b * b / r2) * u;
 }
 
 vec2 deflectSIE(vec2 u, float b, float q, float phi) {
@@ -1098,7 +1098,7 @@ export class Renderer {
 
 function _modelParams(obj) {
   const { model, params } = obj;
-  if (model === 'pointmass') return { model:0, p0: params.thetaE??1, p1:0, p2:0, p3:0 };
+  if (model === 'pointmass') return { model:0, p0: params.b??1, p1:0, p2:0, p3:0 };
   if (model === 'sie')       return { model:1, p0: params.b??1, p1: params.q??0.8, p2: params.phi??0, p3:0 };
   if (model === 'epl')       return { model:2, p0: params.b??1, p1: params.q??0.75, p2: params.phi??0, p3: params.gamma??2 };
   if (model === 'shear')       return { model:3, p0: params.gamma??0.05, p1: params.phi??0, p2:0, p3:0 };
