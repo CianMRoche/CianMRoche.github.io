@@ -332,7 +332,11 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   cursor: pointer;
 }
 
-/* Colorbar — bottom-left of image */
+/* Colorbar — pinned to the bottom-left corner of the image. The ruler cluster
+   and warning badges share that corner; when the colorbar is visible (JS toggles
+   .sl-colorbar-visible on the wrap) they all lift above it by --sl-bl-lift. */
+.sl-image-wrap { --sl-bl-lift: 0px; }
+.sl-image-wrap.sl-colorbar-visible { --sl-bl-lift: 38px; }
 .sl-colorbar {
   position: absolute;
   bottom: 12px;
@@ -362,10 +366,11 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   color: var(--fg-soft);
 }
 
-/* Ruler tool — bottom-left of image (clear of the top-left legend). */
+/* Ruler tool — bottom-left of image (clear of the top-left legend), lifted
+   above the colorbar when that is shown. */
 .sl-ruler-tools {
   position: absolute;
-  bottom: 8px;
+  bottom: calc(8px + var(--sl-bl-lift));
   left: 8px;
   z-index: 11;
   display: flex;
@@ -403,17 +408,12 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   border-color: var(--accent);
   background: var(--accent-soft);
 }
-/* When the ruler tool is shown, lift the colorbar above it (both live bottom-left). */
-.sl-image-wrap.sl-ruler-visible .sl-colorbar { bottom: 44px; }
-/* The warnings also live bottom-left (just above the ruler); lift the colorbar clear
-   of them whenever one is shown (this wins over the ruler rule above when both apply). */
-.sl-image-wrap.sl-warn-visible .sl-colorbar { bottom: 104px; }
-
-/* Performance warning — orange badge, bottom-left, just above the ruler. The colorbar
-   lifts above it (see .sl-warn-visible). Appears only while the overlay redraw is slow. */
+/* Performance warning — orange badge, bottom-left, just above the ruler cluster
+   (and, like it, lifted above the colorbar when that is shown). Appears only
+   while the overlay redraw is slow. */
 .sl-perf-warn {
   position: absolute;
-  bottom: 42px;   /* just above the ruler cluster (bottom-left) */
+  bottom: calc(42px + var(--sl-bl-lift));   /* just above the ruler cluster (bottom-left) */
   left: 8px;
   z-index: 12;
   width: 26px;
@@ -438,7 +438,7 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
 
 .sl-perf-pop {
   position: absolute;
-  bottom: 76px;
+  bottom: calc(76px + var(--sl-bl-lift));
   left: 8px;
   z-index: 13;
   width: 260px;
@@ -479,7 +479,7 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
    exceeds what the shader can render. */
 .sl-cap-warn {
   position: absolute;
-  bottom: 76px;
+  bottom: calc(76px + var(--sl-bl-lift));
   left: 8px;
   z-index: 12;
   display: flex;
@@ -530,7 +530,7 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
 
 .sl-cap-pop {
   position: absolute;
-  bottom: 102px;
+  bottom: calc(102px + var(--sl-bl-lift));
   left: 8px;
   z-index: 13;
   width: 260px;
@@ -1237,9 +1237,12 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   font-size: 12.5px;
 }
 .sl-global-input input[type="range"] { flex: 1; min-width: 0; }
-/* Drag horizontally to scrub the value (also typeable / spinner-adjustable). */
+/* Drag horizontally to scrub the value (also typeable / spinner-adjustable).
+   touch-action: pan-y keeps a horizontal touch drag delivering pointer events
+   (instead of being claimed as a scroll and pointercancelled) while a vertical
+   drag on the input can still scroll the page. */
 .sl-global-input input.sl-scrub,
-input.sl-scrub { cursor: col-resize; }
+input.sl-scrub { cursor: col-resize; touch-action: pan-y; }
 .sl-tone-param-val {
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;

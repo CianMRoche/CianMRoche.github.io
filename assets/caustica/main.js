@@ -76,19 +76,11 @@ const PS_GRID_OPTIONS = [150, 300, 600, 1200];
 const PERF_WARN_MS = 120;
 let _perfWarnOn = false;
 let _perfWarnDismissed = false;  // user closed the warning; stay hidden for the rest of the session
-// Both warning badges live bottom-left, just above the ruler. Toggle a class on the
-// image wrap whenever either is visible so the colorbar lifts clear of them (CSS).
-function _syncWarnLift() {
-  const wrap = document.getElementById('sl-image-wrap');
-  if (!wrap) return;
-  const shown = id => { const el = document.getElementById(id); return el && el.style.display !== 'none'; };
-  wrap.classList.toggle('sl-warn-visible', shown('sl-perf-warn') || shown('sl-cap-warn'));
-}
 
 function reportPerf(ms) {
   const badge = document.getElementById('sl-perf-warn');
   if (!badge) return;
-  if (_perfWarnDismissed) { badge.style.display = 'none'; _syncWarnLift(); return; }
+  if (_perfWarnDismissed) { badge.style.display = 'none'; return; }
   if      (!_perfWarnOn && ms > PERF_WARN_MS)       _perfWarnOn = true;
   else if ( _perfWarnOn && ms < PERF_WARN_MS * 0.6) _perfWarnOn = false;
   if (_perfWarnOn) {
@@ -98,7 +90,6 @@ function reportPerf(ms) {
     const pop = document.getElementById('sl-perf-pop');
     if (pop) pop.style.display = 'none';
   }
-  _syncWarnLift();
 }
 
 // Objects beyond the shader's per-type cap (some number of lenses and the same
@@ -116,7 +107,6 @@ function reportObjectCap() {
   if (_capWarnDismissed) {
     badge.style.display = 'none';
     if (pop) pop.style.display = 'none';
-    _syncWarnLift();
     return;
   }
   const cap = renderer?.maxObjects ?? MAX_OBJECTS;
@@ -134,7 +124,6 @@ function reportObjectCap() {
   if (over === 0) {
     badge.style.display = 'none';
     if (pop) pop.style.display = 'none';
-    _syncWarnLift();
     return;
   }
   const label = document.getElementById('sl-cap-warn-label');
@@ -167,7 +156,6 @@ function reportObjectCap() {
     detail.innerHTML = html;
   }
   badge.style.display = '';
-  _syncWarnLift();
 }
 
 // ── App state ─────────────────────────────────────────────────────────────────
@@ -263,25 +251,47 @@ function _numStep(v) {
 function _attachScrub(inp, { lo = -Infinity, hi = Infinity, onChange }) {
   if (!inp) return;
   inp.classList.add('sl-scrub');
-  let dragging = false, moved = false, startX = 0, startVal = 0, step = 0.01, startSig = null;
+  let dragging = false, moved = false, startX = 0, startY = 0, startVal = 0, step = 0.01, startSig = null;
   inp.addEventListener('pointerdown', e => {
     if (e.button !== 0) return;
     startVal = parseFloat(inp.value) || 0;
     step = _numStep(startVal || 1);
     startSig = _sceneSig();
-    startX = e.clientX; dragging = true; moved = false;
+    startX = e.clientX; startY = e.clientY; dragging = true; moved = false;
     beginAction();
     inp.setPointerCapture(e.pointerId);
   });
   inp.addEventListener('pointermove', e => {
     if (!dragging) return;
-    if (Math.abs(e.clientX - startX) > 2) moved = true;
-    if (!moved) return;
+    if (!moved) {
+      const dx = Math.abs(e.clientX - startX), dy = Math.abs(e.clientY - startY);
+      // On touch, a mostly-vertical start means the user is scrolling, not
+      // scrubbing: abandon the drag so the browser can pan (touch-action:
+      // pan-y on .sl-scrub permits vertical panning only).
+      if (e.pointerType !== 'mouse' && dy > dx && dy > 2) {
+        dragging = false;
+        _history.pending = null; _history.pendingSig = null;
+        startSig = null;
+        try { inp.releasePointerCapture(e.pointerId); } catch (_) {}
+        return;
+      }
+      if (dx <= 2) return;
+      moved = true;
+    }
     const dec = Math.max(0, -Math.floor(Math.log10(step)) + 1);
     const v = parseFloat(Math.min(hi, Math.max(lo, startVal + (e.clientX - startX) * step)).toFixed(dec));
     inp.value = v;
     onChange(v);
   });
+  // Some browsers ignore touch-action on form controls and claim any touch drag
+  // as a scroll, firing pointercancel and killing the scrub. Consuming touchmove
+  // for horizontally-dominant drags keeps the pointer stream alive; vertical
+  // drags are left alone so scrolling still works.
+  inp.addEventListener('touchmove', e => {
+    if (!dragging) return;
+    const t = e.touches[0];
+    if (moved || (t && Math.abs(t.clientX - startX) >= Math.abs(t.clientY - startY))) e.preventDefault();
+  }, { passive: false });
   const end = (e) => {
     if (!dragging) return;
     dragging = false;
@@ -1784,6 +1794,10 @@ function attachHandlers() {
       removePlane(pl.id); renderPlaneCard(); renderSidebar(); redraw();
       return;
     }
+    if ((e.key === '[' || e.key === ']') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      selectPlaneOffset(e.key === '[' ? -1 : 1);  // previous / next plane along the z-sorted list
+      return;
+    }
     if (e.key === 'r' || e.key === 'R') {
       recState.active ? stopRecording() : startRecording();
       return;
@@ -1866,8 +1880,8 @@ function updateCanvasTools() {
   });
 }
 
-// Select the previous/next plane along the z-sorted list (plane-viewer arrows
-// and the mobile swipe gesture).
+// Select the previous/next plane along the z-sorted list (plane-viewer arrows,
+// the [ / ] keyboard shortcuts, and the mobile swipe gesture).
 function selectPlaneOffset(dir) {
   if (!state.planes.length) return;
   const idx = state.planes.findIndex(p => p.id === state.selectedPlaneId);
@@ -2082,6 +2096,7 @@ const SHORTCUTS = [
   ['H', 'Hide / show the selected object'],
   ['O', 'Clear all objects from the selected plane'],
   ['X', 'Delete the selected plane'],
+  ['[ / ]', 'Select the previous / next plane'],
   ['R', 'Start / stop live recording'],
   ['L', 'Toggle ruler mode'],
   ['D', 'Toggle dark / light theme'],
@@ -2198,7 +2213,6 @@ function updateRulerUI() {
   const btn   = document.getElementById('sl-ruler-btn');
   const clr   = document.getElementById('sl-ruler-clear');
   const del   = document.getElementById('sl-ruler-del');
-  const wrap  = document.getElementById('sl-image-wrap');
   // Drop a stale selection if that ruler no longer exists.
   if (state.selectedRulerId && !state.rulers.some(r => r.id === state.selectedRulerId))
     state.selectedRulerId = null;
@@ -2206,7 +2220,6 @@ function updateRulerUI() {
   if (btn)   btn.classList.toggle('active', state.rulerActive);
   if (del)   del.style.display = (state.showRuler && state.selectedRulerId) ? '' : 'none';
   if (clr)   clr.style.display = (state.showRuler && state.rulers.length > 0) ? '' : 'none';
-  if (wrap)  wrap.classList.toggle('sl-ruler-visible', state.showRuler);
 }
 
 // Delete the currently selected ruler measurement. Returns true if one was removed.
@@ -4725,7 +4738,11 @@ function _updateColorbar() {
   const ttl   = document.getElementById('sl-colorbar-title');
   if (!bar) return;
   const info = _VIZ_COLORBAR[state.vizMode];
-  if (!info || !state.showColorbar || state.hideOverlays) { bar.style.display = 'none'; return; }
+  const on = !!info && state.showColorbar && !state.hideOverlays;
+  // The colorbar keeps the bottom-left corner; this class lifts the ruler
+  // cluster and warning badges clear of it (see --sl-bl-lift in the CSS).
+  document.getElementById('sl-image-wrap')?.classList.toggle('sl-colorbar-visible', on);
+  if (!on) { bar.style.display = 'none'; return; }
   const dark = document.documentElement.getAttribute('data-theme') === 'dark';
   const vs   = vizScaleFor(state.vizMode);
   const pal  = vs.palette ?? 0;
