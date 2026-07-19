@@ -1373,7 +1373,7 @@ function buildDOM() {
                   <button class="sl-ctool-del" id="sl-card-del-obj" title="Delete selected object" aria-label="Delete selected object"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="1.5" y1="4" x2="12.5" y2="4"/><path d="M4 4l.5 7h5l.5-7"/><path d="M5 4V3h4v1"/></svg></button>
                 </div>
                 <div class="sl-plane-spacer" aria-hidden="true"></div>
-                <div class="sl-plane-viewgroup">
+                <div class="sl-plane-viewgroup" id="sl-plane-viewgroup">
                   <button class="sl-plane-arrow" id="sl-plane-prev" title="Select the previous plane (lower z)" aria-label="Select previous plane">‹</button>
                   <canvas class="sl-plane-canvas" id="sl-plane-canvas"></canvas>
                   <button class="sl-plane-arrow" id="sl-plane-next" title="Select the next plane (higher z)" aria-label="Select next plane">›</button>
@@ -1555,9 +1555,7 @@ function attachHandlers() {
   document.getElementById('sl-viz-mode')?.addEventListener('change', e => {
     _setVizOptionLabels(false);
     e.target.blur();  // keep letter shortcuts (K/G/M/A/I/T) from hitting the select's type-ahead
-    state.vizMode = parseInt(e.target.value, 10);
-    glCanvas?.classList.toggle('sl-viz-active', state.vizMode !== 0);
-    _updateColorbar(); renderSidebar(); redraw();
+    setVizMode(parseInt(e.target.value, 10));
   });
   document.getElementById('sl-viz-mode')?.addEventListener('blur', () => _setVizOptionLabels(false));
 
@@ -1837,12 +1835,7 @@ function attachHandlers() {
     // Visualization mode shortcuts: toggle on/off; pressing the same key again returns to image.
     const VIZ_KEYS = { k: 1, K: 1, g: 2, G: 2, m: 3, M: 3, a: 5, A: 5, i: 0, I: 0, t: 6, T: 6 };
     if (e.key in VIZ_KEYS) {
-      const mode = VIZ_KEYS[e.key];
-      state.vizMode = mode;
-      const sel = document.getElementById('sl-viz-mode');
-      if (sel) sel.value = state.vizMode;
-      glCanvas?.classList.toggle('sl-viz-active', state.vizMode !== 0);
-      _updateColorbar(); renderSidebar(); redraw();
+      setVizMode(VIZ_KEYS[e.key]);
       return;
     }
     if (e.key === 'Escape') {
@@ -2048,6 +2041,25 @@ function updateZsChip() {
   const auto = state.critZs === null;
   chip.style.display = '';
   chip.textContent = `zₛ = ${effectiveCritZs().toFixed(2)}${auto ? ' (auto)' : ''}`;
+}
+
+// Set the visualization mode and sync the dropdown, colorbar, and canvas class.
+// Single entry point shared by the dropdown, the I/K/G/M/A/T keys, the tour,
+// and the mobile image swipe.
+function setVizMode(mode) {
+  state.vizMode = mode;
+  const sel = document.getElementById('sl-viz-mode');
+  if (sel) sel.value = mode;
+  glCanvas?.classList.toggle('sl-viz-active', mode !== 0);
+  _updateColorbar(); renderSidebar(); redraw();
+}
+
+// Step to the previous/next visualization mode, wrapping around. The order
+// matches the on-canvas dropdown (image, κ, γ, |μ|, |α|, Fermat φ).
+const VIZ_CYCLE = [0, 1, 2, 3, 5, 6];
+function cycleVizMode(dir) {
+  const i = VIZ_CYCLE.indexOf(state.vizMode);
+  setVizMode(VIZ_CYCLE[((i < 0 ? 0 : i) + dir + VIZ_CYCLE.length) % VIZ_CYCLE.length]);
 }
 
 // ── Zoom: cluster buttons, wheel, and two-finger pinch ───────────────────────
@@ -2357,6 +2369,14 @@ function attachImageHandlers(wrap) {
   let imgDrag   = null; // { obj, plane, startCx, startCy, startMx, startMy }
   let rulerDrag = null; // { x0, y0, x1, y1 } while dragging a NEW ruler measurement
   let rulerEdit = null; // { ruler, mode, end, sx0.. , px, py } while editing an existing one
+  // Touch swipe on empty image space cycles the visualization mode (mirrors the
+  // plane viewer's swipe-to-switch-planes). { id, x0, y0, dir } from pointerdown;
+  // dir is set to 'x' once horizontal movement dominates, and the whole gesture
+  // is abandoned on a vertical start so the page scroll (touch-action: pan-y)
+  // stays free. Same thresholds as the plane-viewer swipe.
+  let vizSwipe = null;
+  const SWIPE_SLOP = 10; // px — movement beyond this decides swipe vs scroll
+  const SWIPE_MIN  = 36; // px — horizontal travel needed to switch modes
 
   // On narrow screens the wrap uses touch-action: pan-y so a vertical swipe on
   // the image scrolls the page. Gestures the app owns must opt out of that
@@ -2388,6 +2408,7 @@ function attachImageHandlers(wrap) {
       imgDrag = null;
       rulerDrag = state.rulerDraft = null;
       rulerEdit = null;
+      vizSwipe = null;
       return;
     }
 
@@ -2426,7 +2447,14 @@ function attachImageHandlers(wrap) {
     //    empty-space presses and pinches are always safe here.
     if (state.selectedRulerId) { state.selectedRulerId = null; updateRulerUI(); drawOverlay(); }
     const hit = hitTestImage(wrap, e);
-    if (!hit) return;
+    if (!hit) {
+      // Empty space: on touch this may become a horizontal swipe that cycles the
+      // visualization mode (committed on release). No preventDefault, so a
+      // vertical drag still scrolls the page.
+      if (e.pointerType === 'touch' || e.pointerType === 'pen')
+        vizSwipe = { id: e.pointerId, x0: e.clientX, y0: e.clientY, dir: null };
+      return;
+    }
     e.preventDefault();
     wrap.setPointerCapture(e.pointerId);
     const pos = imageWrapToArcsec(wrap, e);
@@ -2440,7 +2468,12 @@ function attachImageHandlers(wrap) {
   });
 
   wrap.addEventListener('pointermove', e => {
-    if (_pinch) return;  // two-finger zoom in progress — suppress drags
+    if (_pinch) { vizSwipe = null; return; }  // two-finger zoom in progress — suppress drags
+    if (vizSwipe && vizSwipe.dir === null && e.pointerId === vizSwipe.id) {
+      const dx = Math.abs(e.clientX - vizSwipe.x0), dy = Math.abs(e.clientY - vizSwipe.y0);
+      if      (dx > SWIPE_SLOP && dx > dy)  vizSwipe.dir = 'x';
+      else if (dy > SWIPE_SLOP && dy >= dx) vizSwipe = null;  // vertical: it's a page scroll
+    }
     if (rulerEdit) {
       e.preventDefault();
       const p = imageWrapToArcsec(wrap, e), r = rulerEdit.ruler;
@@ -2490,6 +2523,13 @@ function attachImageHandlers(wrap) {
   });
 
   wrap.addEventListener('pointerup', e => {
+    if (vizSwipe && e.pointerId === vizSwipe.id) {
+      const dx = e.clientX - vizSwipe.x0, dy = e.clientY - vizSwipe.y0;
+      const commit = vizSwipe.dir === 'x' && Math.abs(dx) >= SWIPE_MIN && Math.abs(dx) > Math.abs(dy);
+      vizSwipe = null;
+      // Swipe left → next mode, right → previous (same sense as the plane swipe).
+      if (commit) { cycleVizMode(dx < 0 ? 1 : -1); return; }
+    }
     if (rulerEdit) {
       rulerEdit = null;
       wrap.style.cursor = (state.rulerActive && state.showRuler) ? 'crosshair' : '';
@@ -2517,6 +2557,7 @@ function attachImageHandlers(wrap) {
   });
 
   wrap.addEventListener('pointercancel', () => {
+    vizSwipe = null;  // browser claimed the gesture (e.g. a vertical page scroll)
     if (rulerEdit) { rulerEdit = null; drawOverlay(); }
     if (rulerDrag) { rulerDrag = state.rulerDraft = null; updateRulerUI(); drawOverlay(); }
   });
@@ -5384,15 +5425,6 @@ function _tourShowImage() {
     document.getElementById('sl-image-wrap')?.scrollIntoView({ block: 'start' });
 }
 
-// Set the visualization mode and sync the dropdown, colorbar, and canvas class.
-function _tourSetViz(mode) {
-  state.vizMode = mode;
-  const sel = document.getElementById('sl-viz-mode');
-  if (sel) sel.value = mode;
-  glCanvas?.classList.toggle('sl-viz-active', mode !== 0);
-  _updateColorbar(); renderSidebar(); redraw();
-}
-
 const TOUR_STEPS = [
   {
     target: '.sl-axis-wrap',
@@ -5428,7 +5460,7 @@ const TOUR_STEPS = [
       _tourClosePlaneSetup();
       state.showCritCurves = true;
       state.showCaustics   = true;
-      _tourSetViz(0);
+      setVizMode(0);
       _tourShowImage();
     },
     arrow: 'right',
@@ -5441,7 +5473,7 @@ const TOUR_STEPS = [
       _tourClosePlaneSetup();
       state.showCritCurves = false;
       state.showCaustics   = false;
-      _tourSetViz(6);
+      setVizMode(6);
       _tourShowImage();
     },
     arrow: 'below',
@@ -5449,8 +5481,28 @@ const TOUR_STEPS = [
     text: 'This dropdown maps a lensing quantity across the field: convergence κ, shear γ, magnification |μ|, deflection |α|, or the <b>Fermat potential φ</b> shown here. Its contours trace light arrival time, and the marked points are the images of the source (a minimum, saddle, or maximum of that surface). Press <kbd>I</kbd> to return to the lensed image.',
   },
   {
+    target: '#sl-image-wrap',
+    mobileOnly: true,
+    onEnter: () => { _tourShowImage(); _tourShowSwipeHint('sl-image-wrap'); },
+    arrow: 'below',
+    label: 'Swipe to switch views',
+    text: 'On touch screens you can also <b>swipe the image left or right</b> to cycle through these views, from the lensed image through each quantity map.',
+  },
+  {
+    target: '#sl-plane-card',
+    mobileOnly: true,
+    onEnter: () => {
+      _tourOpenPlaneSetup();
+      document.getElementById('sl-plane-card')?.scrollIntoView({ block: 'nearest' });
+      _tourShowSwipeHint('sl-plane-viewgroup', true);
+    },
+    arrow: 'above',
+    label: 'Swipe to switch planes',
+    text: 'The plane viewer works the same way: <b>swipe left or right</b> across its canvas to step through the planes.',
+  },
+  {
     target: '.sl-rail-tab-btn[data-tab="view"]',
-    onEnter: () => { _tourSetTab('view'); _tourSetViz(0); },
+    onEnter: () => { _tourSetTab('view'); setVizMode(0); },
     arrow: 'left',
     label: 'View tab',
     text: 'View holds everything about how the scene is displayed: the field of view, the reference source redshift z<sub>s</sub> used by the quantity maps and critical curves, overlay toggles, and the color mapping / brightness stretch.',
@@ -5471,7 +5523,7 @@ const TOUR_STEPS = [
   },
   {
     target: '.sl-topbar',
-    onEnter: () => { _tourSetTab('scene'); _tourSetViz(0); },
+    onEnter: () => { _tourSetTab('scene'); setVizMode(0); },
     arrow: 'below',
     label: 'Ready to explore',
     text: 'That is the tour. Everything else lives in this top bar: <b>undo / redo</b> for scene edits, the <b>preset</b> dropdown for ready-made scenes, <b>Save / Load</b> for YAML configurations, <b>Docs</b> for all the physics, <b>Tour</b> to replay this walkthrough, <kbd>?</kbd> for every keyboard shortcut, and the <b>theme</b> toggle. Now build a scene: add planes and objects, and watch the lensed image respond.',
@@ -5511,8 +5563,33 @@ function _positionSpotlight(targetRect) {
 
 const tour = {
   active: false, step: 0,
+  steps: [],      // TOUR_STEPS filtered for this run (mobileOnly steps drop out on desktop)
+  cleanup: null,  // per-step teardown (e.g. the swipe hint), run on step change / tour end
   backdrop: null, spotlight: null, tooltip: null, quitBtn: null,
 };
+
+// Remove the current step's artifact (if any) before entering another step or
+// ending the tour.
+function _tourStepCleanup() {
+  if (!tour.cleanup) return;
+  try { tour.cleanup(); } catch (_) {}
+  tour.cleanup = null;
+}
+
+// Animated ‹ • › hint overlaid on a container during the mobile swipe tour
+// steps: the dot slides left and right to suggest the gesture. compact is the
+// smaller variant sized for the plane viewer's canvas.
+function _tourShowSwipeHint(containerId, compact) {
+  const host = document.getElementById(containerId);
+  if (!host || document.getElementById('sl-swipe-hint')) return;
+  const hint = document.createElement('div');
+  hint.id = 'sl-swipe-hint';
+  hint.className = 'sl-swipe-hint' + (compact ? ' sl-swipe-hint-compact' : '');
+  hint.setAttribute('aria-hidden', 'true');
+  hint.innerHTML = '<span class="sl-swipe-hint-chevron">‹</span><span class="sl-swipe-hint-dot"></span><span class="sl-swipe-hint-chevron">›</span>';
+  host.appendChild(hint);
+  tour.cleanup = () => hint.remove();
+}
 
 // ── First-visit tour nudge ────────────────────────────────────────────────────
 // One-time callout for new visitors: the Tour button takes accent styling and a
@@ -5569,6 +5646,8 @@ function startTour() {
   }
   tour.active = true;
   tour.step   = 0;
+  // Mobile-only steps (touch gestures) drop out of the sequence on desktop.
+  tour.steps  = TOUR_STEPS.filter(s => !s.mobileOnly || window.innerWidth <= 640);
 
   tour.backdrop  = document.createElement('div');
   tour.backdrop.className = 'tutorial-backdrop';
@@ -5591,8 +5670,9 @@ function _tourTargetSel(s) {
 }
 
 function showTourStep() {
-  const s = TOUR_STEPS[tour.step];
+  const s = tour.steps[tour.step];
   if (!s) { endTour(); return; }
+  _tourStepCleanup();
   tour.tooltip.style.visibility = 'hidden'; // hide until positioned
   if (s.onEnter) {
     s.onEnter();
@@ -5603,7 +5683,7 @@ function showTourStep() {
 }
 
 function _renderTourStep() {
-  const s = TOUR_STEPS[tour.step];
+  const s = tour.steps[tour.step];
   if (!s || !tour.active) return;
 
   const sel = _tourTargetSel(s);
@@ -5618,7 +5698,7 @@ function _renderTourStep() {
   const isFinal = !!s.final;
   tour.tooltip.innerHTML = `
     <div class="tt-arrow"></div>
-    <div class="tt-step">Step ${tour.step + 1} / ${TOUR_STEPS.length} · ${s.label || ''}</div>
+    <div class="tt-step">Step ${tour.step + 1} / ${tour.steps.length} · ${s.label || ''}</div>
     <div class="tt-body">${s.text}</div>
     <div class="tt-actions">
       <button class="tt-skip" id="tt-skip">${isFinal ? 'Close' : 'Skip'}</button>
@@ -5633,7 +5713,7 @@ function _renderTourStep() {
 
 function repositionTour() {
   if (!tour.active) return;
-  const s = TOUR_STEPS[tour.step];
+  const s = tour.steps[tour.step];
   if (!s) return;
   const sel = _tourTargetSel(s);
   let targetRect = null;
@@ -5708,13 +5788,14 @@ function positionTourTooltip(targetRect, preferred) {
 
 function tourNext() {
   tour.step++;
-  if (tour.step >= TOUR_STEPS.length) { endTour(); return; }
+  if (tour.step >= tour.steps.length) { endTour(); return; }
   showTourStep();
 }
 
 function endTour() {
   if (!tour.active) return;
   tour.active = false;
+  _tourStepCleanup();
   _tourClosePlaneSetup();
   window.removeEventListener('resize', repositionTour);
   document.removeEventListener('keydown', _tourKeyHandler);

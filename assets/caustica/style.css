@@ -1516,6 +1516,7 @@ input.sl-scrub { cursor: col-resize; touch-action: pan-y; }
     gap: 3px;              /* tight, equal ‹↔canvas and canvas↔› gaps */
     min-width: 0;
     flex: 0 1 auto;
+    position: relative;    /* anchors the tour's swipe hint (mobile-only step) */
   }
   /* Canvas is kept a bit smaller than desktop so its (square) height leaves room
      for the redshift timeline on screen without scrolling; the wider arrow strips
@@ -1606,6 +1607,53 @@ input.sl-scrub { cursor: col-resize; touch-action: pan-y; }
 }
 
 /* ── Tour overlay (mirrors chi-by-eye tutorial styles) ───────────────────── */
+/* Animated ‹ • › swipe hint overlaid on the image panel during the mobile tour
+   step: the dot slides left and right to suggest the horizontal swipe gesture. */
+.sl-swipe-hint {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 10px 20px;
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  pointer-events: none;
+}
+.sl-swipe-hint-chevron {
+  font-size: 26px;
+  line-height: 1;
+  color: var(--fg-soft);
+}
+.sl-swipe-hint-dot {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  /* Neutral grey: an accent-coloured dot reads as a lens/source marker. */
+  background: var(--fg-soft);
+  animation: sl-swipe-hint-slide 1.6s ease-in-out infinite;
+}
+@keyframes sl-swipe-hint-slide {
+  0%, 100% { transform: translateX(-20px); }
+  50%      { transform: translateX(20px); }
+}
+/* Smaller variant that fits the plane viewer's canvas. */
+.sl-swipe-hint-compact { gap: 12px; padding: 6px 12px; }
+.sl-swipe-hint-compact .sl-swipe-hint-chevron { font-size: 18px; }
+.sl-swipe-hint-compact .sl-swipe-hint-dot {
+  width: 9px;
+  height: 9px;
+  animation-name: sl-swipe-hint-slide-sm;
+}
+@keyframes sl-swipe-hint-slide-sm {
+  0%, 100% { transform: translateX(-11px); }
+  50%      { transform: translateX(11px); }
+}
+
 .tutorial-backdrop {
   position: fixed; inset: 0; background: transparent;
   z-index: 200; pointer-events: auto;
