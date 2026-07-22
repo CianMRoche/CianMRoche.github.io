@@ -71,17 +71,42 @@ const CAUS_COLOR = 'rgba(134, 239, 172, 0.95)';
 
 // ── Line-art mode palettes ────────────────────────────────────────────────────
 // Flat, minimal schemes for the vector "Line art" View mode. Each maps the scene's
-// roles to colors: background, the lensed-image fill/stroke (uniform-disc outlines
-// and point-source dots), critical curves, caustics, source outline, and markers.
-// These colors are drawn on the (non-CSS-inverted) overlay canvas, so they render
-// as-is in both light and dark site themes.
+// roles to colors: background, the lensed-image fill/stroke (uniform-disc outlines),
+// critical curves, caustics, and point-source dots. These are fixed looks chosen for
+// their own sake (NOT tied to the site's light/dark theme); the dropdown order below
+// is the order shown to the user. Colors are drawn on the (non-CSS-inverted) overlay,
+// so they render as authored in either site theme.
 const LINE_ART_PALETTES = {
-  ink:       { name: 'Ink (black on white)',  bg: '#ffffff', imageFill: '#141414', imageStroke: '#000000', critical: '#000000', caustic: '#9aa0a6', pointImage: '#000000', source: '#c4c4c4', marker: '#000000' },
-  crimson:   { name: 'Crimson (red on white)',bg: '#ffffff', imageFill: '#e11d3c', imageStroke: '#8a0f22', critical: '#1a1a1a', caustic: '#f2a6b0', pointImage: '#c8142f', source: '#eebcc2', marker: '#8a0f22' },
-  noir:      { name: 'Noir (white on black)', bg: '#0a0a0a', imageFill: '#f5f5f5', imageStroke: '#ffffff', critical: '#ff5ca8', caustic: '#57c7ff', pointImage: '#ffffff', source: '#4a4a4a', marker: '#ffffff' },
-  blueprint: { name: 'Blueprint',             bg: '#0d2847', imageFill: '#cbe8ff', imageStroke: '#ffffff', critical: '#8fd0ff', caustic: '#b8ecc9', pointImage: '#eaf6ff', source: '#39598a', marker: '#d6ecff' },
+  ink:           { name: 'Ink',             bg: '#0a0a0a', imageFill: '#ebebeb', imageStroke: '#ffffff', critical: '#ffffff', caustic: '#9aa0a6', pointImage: '#ffffff' },
+  ink_inv:       { name: 'Ink (inv.)',      bg: '#ffffff', imageFill: '#141414', imageStroke: '#000000', critical: '#000000', caustic: '#9aa0a6', pointImage: '#000000' },
+  crimson:       { name: 'Crimson',         bg: '#ffffff', imageFill: '#e11d3c', imageStroke: '#8a0f22', critical: '#1a1a1a', caustic: '#f2a6b0', pointImage: '#c8142f' },
+  crimson_inv:   { name: 'Crimson (inv.)',  bg: '#c8102e', imageFill: '#ffffff', imageStroke: '#ffffff', critical: '#ffffff', caustic: '#141414', pointImage: '#ffffff' },
+  blueprint:     { name: 'Blueprint',       bg: '#0d2847', imageFill: '#cbe8ff', imageStroke: '#ffffff', critical: '#8fd0ff', caustic: '#b8ecc9', pointImage: '#eaf6ff' },
+  blueprint_inv: { name: 'Blueprint (inv.)',bg: '#dcecfb', imageFill: '#2461a6', imageStroke: '#123f74', critical: '#0f3a68', caustic: '#2f7d57', pointImage: '#2461a6' },
+  espresso:      { name: 'Espresso',        bg: '#f2d7b8', imageFill: '#3a1c05', imageStroke: '#1e0e00', critical: '#6b2e00', caustic: '#5b2036', pointImage: '#1e0e00' },
+  mint:          { name: 'Mint',            bg: '#ffffff', imageFill: '#22c9ad', imageStroke: '#0e8f79', critical: '#141414', caustic: '#8a9199', pointImage: '#0e8f79' },
+  noir:          { name: 'Noir',            bg: '#0a0a0a', imageFill: '#f5f5f5', imageStroke: '#ffffff', critical: '#ff5ca8', caustic: '#57c7ff', pointImage: '#ffffff' },
 };
-function lineArtPalette() { return LINE_ART_PALETTES[state.lineArtPalette] ?? LINE_ART_PALETTES.ink; }
+// The customisable color roles (order = the picker layout + config serialisation order).
+const LINE_ART_ROLES = [
+  ['bg',          'Background'],
+  ['imageFill',   'Image fill'],
+  ['imageStroke', 'Image line'],
+  ['critical',    'Critical'],
+  ['caustic',     'Caustic'],
+  ['pointImage',  'Point img'],
+];
+// Copy just the color fields of a named palette (dropping the display name).
+function paletteColors(key) {
+  const p = LINE_ART_PALETTES[key] ?? LINE_ART_PALETTES.ink;
+  const out = {};
+  for (const [role] of LINE_ART_ROLES) out[role] = p[role];
+  return out;
+}
+// Resolved line-art colors: the live set the user sees, seeded from the chosen palette
+// (state.lineArtPalette) and then editable per-role via the View-tab color pickers
+// (stored in state.lineArtColors).
+function lineArtPalette() { return state.lineArtColors ?? paletteColors(state.lineArtPalette); }
 
 // Point-source image grid: number of sample points across the field. This is a
 // fixed count (not an absolute arcsec spacing) so the cost stays bounded as the
@@ -224,6 +249,9 @@ const state = {
   dist:            null,
   lastFermatSource:null,     // { cx, cy, planeId } of last selected source object
   saddlePhis:      [],       // φ values at Type-II saddle points; kept in sync for restore calls
+  // Live line-art colors: seeded from the chosen palette, editable per-role via the
+  // View-tab color pickers. Picking a palette resets these to that palette's colors.
+  lineArtColors:   paletteColors(CONFIG_DEFAULTS.lineArtPalette),
 };
 
 // Default colour-mapping per viz mode (chosen to reproduce the original hardcoded look).
@@ -544,6 +572,7 @@ function configToYaml() {
   y += `showTimeDelays: ${state.showTimeDelays}\n`;
   y += `lineArt: ${state.lineArt}\n`;
   y += `lineArtPalette: ${state.lineArtPalette}\n`;
+  y += `lineArtColors: ${LINE_ART_ROLES.map(([r]) => state.lineArtColors[r]).join(' ')}\n`;
   y += `lineArtFill: ${state.lineArtFill}\n`;
   y += `lineArtSmooth: ${state.lineArtSmooth}\n`;
   y += `fermatUseSourcePos: ${state.fermatUseSourcePos}\n`;
@@ -776,6 +805,13 @@ function loadConfigFromYaml(yaml) {
     state.showTimeDelays = _bool(cfg.showTimeDelays, CONFIG_DEFAULTS.showTimeDelays);
     state.lineArt        = _bool(cfg.lineArt,        CONFIG_DEFAULTS.lineArt);
     state.lineArtPalette = LINE_ART_PALETTES[cfg.lineArtPalette] ? cfg.lineArtPalette : CONFIG_DEFAULTS.lineArtPalette;
+    // Per-role color overrides: seed from the chosen palette, then apply any saved
+    // custom colors (space-separated hex in LINE_ART_ROLES order; bad/missing → palette).
+    state.lineArtColors  = paletteColors(state.lineArtPalette);
+    if (typeof cfg.lineArtColors === 'string') {
+      const cols = cfg.lineArtColors.trim().split(/\s+/);
+      LINE_ART_ROLES.forEach(([role], i) => { if (COLOR_RE.test(cols[i])) state.lineArtColors[role] = cols[i]; });
+    }
     state.lineArtFill    = _bool(cfg.lineArtFill,    CONFIG_DEFAULTS.lineArtFill);
     state.lineArtSmooth  = _bool(cfg.lineArtSmooth,  CONFIG_DEFAULTS.lineArtSmooth);
     if (isFinite(cfg.fermatBetaX) && isFinite(cfg.fermatBetaY) && isFinite(cfg.fermatSrcPlaneZ)) {
@@ -3309,15 +3345,15 @@ function renderViewPanel() {
         Hide all overlays
       </label>
 
-      <div class="sl-hybrid-section">
-        <div class="sl-view-hdr">
+      <div class="sl-hybrid-section" style="padding:3px 0 5px">
+        <div class="sl-view-hdr" style="padding:0">
           <span class="sl-panel-title" style="flex:1">Line art</span>
-          <label style="display:flex;align-items:center;cursor:pointer" title="Render the scene as flat vector line-art (lensed-image outlines, critical curves, caustics) in a minimal palette. Only uniform-disc and point sources produce clean lines.">
-            <input type="checkbox" id="sl-lineart" ${state.lineArt?'checked':''}>
+          <label style="display:flex;align-items:center;cursor:pointer;margin:0" title="Render the scene as flat vector line-art (lensed-image outlines, critical curves, caustics) in a minimal palette. Only uniform-disc and point sources produce clean lines.">
+            <input type="checkbox" id="sl-lineart" ${state.lineArt?'checked':''} style="margin:0">
           </label>
         </div>
         ${ state.lineArt ? `
-        <div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
+        <div class="sl-hybrid-body" style="display:block;padding:8px 2px 2px">
           <div class="sl-global-input">
             <label>Palette</label>
             <select id="sl-lineart-palette" style="flex:1 1 auto;min-width:0">
@@ -3329,7 +3365,11 @@ function renderViewPanel() {
             <label><input type="checkbox" id="sl-lineart-fill" ${state.lineArtFill?'checked':''}> Fill images</label>
             <label title="Curvature-aware smoothing: rounds off sampling staircase while preserving genuine cusps"><input type="checkbox" id="sl-lineart-smooth" ${state.lineArtSmooth?'checked':''}> Smooth</label>
           </div>
-          <p class="sl-perf-note" style="margin:4px 0 0">Vector line-art of the lensing structure. Grid density follows the critical-curve setting (Settings). Gaussian / exponential / pasted sources are ignored in this mode.</p>
+          <div class="sl-lineart-colors" title="Override any color from the chosen palette; re-selecting a palette resets them">
+            ${LINE_ART_ROLES.map(([role, label]) =>
+              `<label class="sl-la-color"><span>${label}</span><input type="color" data-la-color="${role}" value="${lineArtPalette()[role]}"></label>`).join('')}
+          </div>
+          <p class="sl-perf-note" style="margin:6px 0 0">Vector line-art of the lensing structure. Grid density follows the critical-curve setting (Settings). Gaussian / exponential / pasted sources are ignored in this mode.</p>
         </div>` : '' }
       </div>
 
@@ -3495,9 +3535,16 @@ function renderViewPanel() {
     _updateColorbar();          // line art suppresses the colorbar
     redraw();
   });
-  document.getElementById('sl-lineart-palette')?.addEventListener('change', e => { state.lineArtPalette = e.target.value; redraw(); });
+  document.getElementById('sl-lineart-palette')?.addEventListener('change', e => {
+    state.lineArtPalette = e.target.value;
+    state.lineArtColors  = paletteColors(e.target.value);   // picking a palette resets the per-role overrides
+    renderSidebar();                                        // refresh the color pickers to the new palette
+    redraw();
+  });
   document.getElementById('sl-lineart-fill')?.addEventListener('change', e => { state.lineArtFill = e.target.checked; redraw(); });
   document.getElementById('sl-lineart-smooth')?.addEventListener('change', e => { state.lineArtSmooth = e.target.checked; redraw(); });
+  document.querySelectorAll('[data-la-color]').forEach(inp =>
+    inp.addEventListener('input', e => { state.lineArtColors[e.target.dataset.laColor] = e.target.value; redraw(); }));
   document.getElementById('sl-viz-scale')?.addEventListener('change', e => {
     const vs = vizScaleFor(state.vizMode);
     vs.scale = parseInt(e.target.value, 10);
@@ -3625,6 +3672,10 @@ function renderExportPanel() {
         <button class="sl-capture-btn ${recState.active ? 'recording' : ''}" id="sl-rec-btn"
                 title="Shortcut: R">${recState.active ? '■ Stop [R]' : '● Record [R]'}</button>
       </div>
+      <div class="sl-capture-row" style="margin-top:6px">
+        <button class="sl-capture-btn" id="sl-svg-btn" ${state.lineArt ? '' : 'disabled'}
+                title="${state.lineArt ? 'Export the Line art view as a scalable vector SVG' : 'Enable Line art (View tab) to export a vector SVG'}">Save SVG (line art)</button>
+      </div>
 
       <div class="sl-hybrid-section" style="margin-top:8px">
         <button class="sl-hybrid-hdr" id="sl-prog-section-hdr">
@@ -3711,6 +3762,7 @@ function renderExportPanel() {
 
   document.getElementById('sl-prog-section-hdr')?.addEventListener('click', () => { _progExpanded = !_progExpanded; renderSidebar(); });
   document.getElementById('sl-snapshot-btn')?.addEventListener('click', captureSnapshot);
+  document.getElementById('sl-svg-btn')?.addEventListener('click', exportLineArtSVG);
   document.getElementById('sl-rec-btn')?.addEventListener('click', () => { recState.active ? stopRecording() : startRecording(); });
   document.getElementById('sl-rec-fps')?.addEventListener('change', e => { recState.fps = parseInt(e.target.value, 10); });
   document.getElementById('sl-rec-format')?.addEventListener('change', e => { recState.useGif = e.target.value === 'gif'; });
@@ -4357,12 +4409,15 @@ function discEllipsePoly(disc, M = 96) {
   return pts;
 }
 
-// ── Line-art (vector) render path ───────────────────────────────────────────
-// Draws the lensing STRUCTURE as flat vector shapes on the overlay canvas in a
-// minimal palette: filled/stroked uniform-disc lensed-image outlines, point-source
-// image dots, and (per their View-tab toggles) critical curves and caustics. The
-// raster GL layer is skipped in _doRedraw and hidden behind this opaque background.
-function drawLineArt(W, H, dpr) {
+// ── Line-art base layer ─────────────────────────────────────────────────────
+// Line-art mode is a RESTYLE of the normal overlay, not a separate view: this
+// function paints the opaque palette background (covering the skipped GL canvas)
+// and the uniform-disc lensed-image outlines, then drawOverlay() draws the usual
+// annotations (point-source dots, critical curves, markers, ruler, scale bar,
+// legend) on top, recolored to the palette. So nothing that was visible before
+// disappears when line art is switched on. The lensed-image outlines are computed
+// with adaptive secant refinement + smoothing (see computeDiscImageOutlines).
+function drawLineArtBase(W, H, dpr) {
   const pal = lineArtPalette();
   const Wl  = W / dpr, Hl = H / dpr;
 
@@ -4373,91 +4428,53 @@ function drawLineArt(W, H, dpr) {
   overlayCtx.fillRect(0, 0, W, H);
   overlayCtx.restore();
 
+  if (!state.dist) return;
+
   overlayCtx.save();
   overlayCtx.scale(dpr, dpr);
   overlayCtx.lineJoin = 'round';
   overlayCtx.lineCap  = 'round';
 
-  const toPixel  = (ax, ay) => [(ax / state.fov + 0.5) * Wl, (-ay / state.fov + 0.5) * Hl];
-  const strokeW  = Math.max(1.1, Math.min(Wl, Hl) / 400);
+  const toPixel = (ax, ay) => [(ax / state.fov + 0.5) * Wl, (-ay / state.fov + 0.5) * Hl];
+  const strokeW = Math.max(1.1, Math.min(Wl, Hl) / 400);
+  const planes  = state.planes;                    // kept sorted by z; matches state.dist
+  // Base grid only needs to CAPTURE arcs; per-vertex secant refinement supplies the
+  // smoothness, so a moderate cap keeps live dragging responsive. Follows critGridN.
+  const laGridN     = Math.min(state.critGridN, 384);
+  const samplingFov = state.fov * 1.3;             // sample wider so edge arcs aren't clipped
+  const lensesInFront = (idx) => planes.slice(0, idx).some(p => p.objects.some(o => o.type === 'lens' && !o.hidden));
 
-  const drawPolys = (polys, { fill = false, stroke = true, fillStyle, strokeStyle, lw = strokeW }) => {
-    overlayCtx.beginPath();
-    for (const poly of polys) {
-      if (!poly || poly.length < 2) continue;
-      const [x0, y0] = toPixel(poly[0][0], poly[0][1]);
-      overlayCtx.moveTo(x0, y0);
-      for (let i = 1; i < poly.length; i++) { const [px, py] = toPixel(poly[i][0], poly[i][1]); overlayCtx.lineTo(px, py); }
-    }
-    if (fill)   { overlayCtx.fillStyle = fillStyle; overlayCtx.globalAlpha = 0.9; overlayCtx.fill('evenodd'); overlayCtx.globalAlpha = 1; }
-    if (stroke) { overlayCtx.strokeStyle = strokeStyle; overlayCtx.lineWidth = lw; overlayCtx.stroke(); }
-  };
-
-  if (state.dist) {
-    const planes      = state.planes;                    // kept sorted by z; matches state.dist
-    // Base grid only needs to CAPTURE arcs; per-vertex secant refinement supplies the
-    // smoothness, so a moderate cap keeps live dragging responsive. Follows critGridN.
-    const laGridN     = Math.min(state.critGridN, 384);
-    const samplingFov = state.fov * 1.3;                 // sample wider so edge arcs aren't clipped
-    const lensesInFront = (idx) => planes.slice(0, idx).some(p => p.objects.some(o => o.type === 'lens' && !o.hidden));
-
-    // ── Uniform-disc lensed-image outlines, grouped per source plane (one trace each) ──
-    const discPlanes = new Map();
-    planes.forEach((plane, idx) => {
-      for (const o of plane.objects)
-        if (o.type === 'source' && o.model === 'point' && !o.hidden) {
-          if (!discPlanes.has(idx)) discPlanes.set(idx, []);
-          discPlanes.get(idx).push(o);
-        }
-    });
-    for (const [idx, discs] of discPlanes) {
-      const grid = lensesInFront(idx) ? traceSourceGrid(planes, state.dist, idx, samplingFov, laGridN) : null;
-      for (const disc of discs) {
-        let polys;
-        if (grid) {
-          const segs = computeDiscImageOutlines(planes, state.dist, idx,
-            { cx: disc.cx, cy: disc.cy, sigma: disc.params.sigma, q: disc.params.q, phi: disc.params.phi },
-            samplingFov, laGridN, grid);
-          polys = chainSegments(segs);
-        } else {
-          polys = [discEllipsePoly(disc)];   // no foreground lens: image is the source ellipse
-        }
-        if (state.lineArtSmooth) polys = smoothPolylines(polys);
-        drawPolys(polys, { fill: state.lineArtFill, stroke: true, fillStyle: pal.imageFill, strokeStyle: pal.imageStroke });
+  // Uniform-disc lensed-image outlines, grouped per source plane (one trace each).
+  const discPlanes = new Map();
+  planes.forEach((plane, idx) => {
+    for (const o of plane.objects)
+      if (o.type === 'source' && o.model === 'point' && !o.hidden) {
+        if (!discPlanes.has(idx)) discPlanes.set(idx, []);
+        discPlanes.get(idx).push(o);
       }
-    }
-
-    // ── Critical curves / caustics (follow the View-tab toggles) ──
-    if ((state.showCritCurves || state.showCaustics) && !state.hideOverlays) {
-      const res = computeCritCurvesForZs(planes, state.dist, effectiveCritZs(), samplingFov, laGridN);
-      const _h  = state.fov / 2;
-      const clip = (segs, m) => segs.filter(([[x0,y0],[x1,y1]]) =>
-        (Math.abs(x0)<=_h*m && Math.abs(y0)<=_h*m) || (Math.abs(x1)<=_h*m && Math.abs(y1)<=_h*m));
-      if (res.critSegments.length >= 50) {
-        if (state.showCaustics) {
-          let cp = chainSegments(clip(res.causticSegments, 2.5));
-          if (state.lineArtSmooth) cp = smoothPolylines(cp);
-          drawPolys(cp, { strokeStyle: pal.caustic });
-        }
-        if (state.showCritCurves) {
-          let cc = chainSegments(clip(res.critSegments, 1));
-          if (state.lineArtSmooth) cc = smoothPolylines(cc);
-          drawPolys(cc, { strokeStyle: pal.critical });
-        }
+  });
+  for (const [idx, discs] of discPlanes) {
+    const grid = lensesInFront(idx) ? traceSourceGrid(planes, state.dist, idx, samplingFov, laGridN) : null;
+    for (const disc of discs) {
+      let polys;
+      if (grid) {
+        const segs = computeDiscImageOutlines(planes, state.dist, idx,
+          { cx: disc.cx, cy: disc.cy, sigma: disc.params.sigma, q: disc.params.q, phi: disc.params.phi },
+          samplingFov, laGridN, grid);
+        polys = chainSegments(segs);
+      } else {
+        polys = [discEllipsePoly(disc)];   // no foreground lens: image is the source ellipse
       }
-    }
-  }
-
-  // ── Point-source images as filled dots ──
-  overlayCtx.fillStyle = pal.pointImage;
-  for (const plane of state.planes) {
-    for (const obj of plane.objects) {
-      if (obj.type !== 'source' || obj.model !== 'pointsource' || obj.hidden) continue;
-      const r_px = Math.max((obj.params.sigma ?? 0.05) / state.fov * Wl, 2.5);
-      for (const [tx, ty] of findPointSourceImages(obj, plane)) {
-        const [px, py] = toPixel(tx, ty);
-        overlayCtx.beginPath(); overlayCtx.arc(px, py, r_px, 0, Math.PI * 2); overlayCtx.fill();
+      if (state.lineArtSmooth) polys = smoothPolylines(polys);
+      overlayCtx.beginPath();
+      for (const poly of polys) {
+        if (!poly || poly.length < 2) continue;
+        const [x0, y0] = toPixel(poly[0][0], poly[0][1]);
+        overlayCtx.moveTo(x0, y0);
+        for (let i = 1; i < poly.length; i++) { const [px, py] = toPixel(poly[i][0], poly[i][1]); overlayCtx.lineTo(px, py); }
       }
+      if (state.lineArtFill) { overlayCtx.fillStyle = pal.imageFill; overlayCtx.globalAlpha = 0.9; overlayCtx.fill('evenodd'); overlayCtx.globalAlpha = 1; }
+      overlayCtx.strokeStyle = pal.imageStroke; overlayCtx.lineWidth = strokeW; overlayCtx.stroke();
     }
   }
 
@@ -4473,16 +4490,19 @@ function drawOverlay() {
   if (overlay.width !== W || overlay.height !== H) { overlay.width = W; overlay.height = H; }
   overlayCtx.clearRect(0, 0, W, H);
 
-  // Line-art mode paints the whole scene as flat vectors on this (opaque) overlay,
-  // covering the raster GL canvas underneath. Its own routine, then bail out.
-  if (state.lineArt) { drawLineArt(W, H, dpr); return; }
+  // Line-art mode: paint the opaque palette background + disc-image outlines as a
+  // base layer, then fall through so the usual annotations draw on top (recolored to
+  // the palette below via _pal). Switching to line art therefore hides nothing.
+  const _pal = state.lineArt ? lineArtPalette() : null;
+  if (state.lineArt) drawLineArtBase(W, H, dpr);
 
   const hasLens     = state.planes.some(p => p.objects.some(o => o.type === 'lens'));
-  // The hide-overlays master switch (View tab) suppresses every annotation for
-  // a clean plot; point-source image circles stay, since they ARE the lensed light.
+  // The hide-overlays master switch (View tab) suppresses annotations for a clean
+  // plot; point-source image circles stay (they ARE the lensed light), and critical
+  // curves / caustics stay too (they are structure, not a labelling annotation).
   const hideOv = state.hideOverlays;
   const showMk = state.showMarkers && !hideOv;
-  const needCurve   = (state.showCritCurves || state.showCaustics) && state.dist && hasLens && !hideOv;
+  const needCurve   = (state.showCritCurves || state.showCaustics) && state.dist && hasLens;
   const needEllipse      = !hideOv && state.planes.some(pl => pl.objects.some(o => o.showShape));
   const needPointSources = state.planes.some(pl => pl.objects.some(o => o.type === 'source' && o.model === 'pointsource' && !o.hidden));
   const needFermatPts = !hideOv && state.fermatPoints && state.fermatPoints.length > 0;
@@ -4513,8 +4533,8 @@ function drawOverlay() {
       const dark = document.documentElement.getAttribute('data-theme') === 'dark';
       const storedColor = obj.params.color ?? '#ffffff';
       const col = dark ? storedColor : invertHexColor(storedColor);
-      overlayCtx.fillStyle = col;
-      overlayCtx.globalAlpha = obj.params.amplitude ?? 1.0;
+      overlayCtx.fillStyle = _pal ? _pal.pointImage : col;
+      overlayCtx.globalAlpha = _pal ? 1 : (obj.params.amplitude ?? 1.0);
       for (const [tx, ty] of imagePositions) {
         const [px, py] = toPixel(tx, ty);
         overlayCtx.beginPath();
@@ -4717,7 +4737,8 @@ function drawOverlay() {
     causSegs = res.causticSegments;
     state._lastCurves = { zs: effectiveCritZs(), crit: critSegs, caus: causSegs };
 
-    overlayCtx.lineWidth = 1.3;
+    overlayCtx.lineWidth = _pal ? Math.max(1.3, Math.min(Wl, Hl) / 450) : 1.3;
+    if (_pal) { overlayCtx.lineJoin = 'round'; overlayCtx.lineCap = 'round'; }
     function drawSegs(segs, color) {
       overlayCtx.strokeStyle = color;
       for (const [[x0,y0],[x1,y1]] of segs) {
@@ -4745,15 +4766,15 @@ function drawOverlay() {
       Math.abs(x1) < _h*2.5 && Math.abs(y1) < _h*2.5);
 
     if (isRealCurve) {
-      if (state.showCritCurves) drawSegs(critFiltered, CRIT_COLOR);
-      if (state.showCaustics)   drawSegs(causFiltered, CAUS_COLOR);
+      if (state.showCritCurves) drawSegs(critFiltered, _pal ? _pal.critical : CRIT_COLOR);
+      if (state.showCaustics)   drawSegs(causFiltered, _pal ? _pal.caustic : CAUS_COLOR);
     }
   }
 
   // ── 3. Legend (top-left) ─────────────────────────────────────────────────────
   const legendItems = [];
-  if (state.showCritCurves && hasLens) legendItems.push({ color: CRIT_COLOR, label: 'Critical curves', isLine: true });
-  if (state.showCaustics   && hasLens) legendItems.push({ color: CAUS_COLOR, label: 'Caustics',        isLine: true });
+  if (state.showCritCurves && hasLens) legendItems.push({ color: _pal ? _pal.critical : CRIT_COLOR, label: 'Critical curves', isLine: true });
+  if (state.showCaustics   && hasLens) legendItems.push({ color: _pal ? _pal.caustic : CAUS_COLOR, label: 'Caustics',        isLine: true });
   if (showMk) {
     const hasLensObj   = state.planes.some(p => p.objects.some(o => o.type === 'lens'   && !o.hybridId));
     const hasSrcObj    = state.planes.some(p => p.objects.some(o => o.type === 'source' && !o.hybridId));
@@ -5288,6 +5309,88 @@ function captureSnapshot() {
     drawOverlay();
   }
   buildCompositeCanvas().toBlob(blob => downloadBlob(blob, 'caustica.png'), 'image/png');
+}
+
+// Scalable-vector serialisation of the Line-art view. Recomputes the same geometry
+// as the on-screen line art (disc-image outlines, critical curves / caustics,
+// point-source dots) via the shared lens.js extractors and returns an SVG document
+// string, so the output is resolution-independent and editable in vector tools.
+function buildLineArtSVGString() {
+  if (!state.lineArt || !state.dist) return null;
+  const pal = lineArtPalette();
+  const S   = 1000;                 // SVG user units (square viewBox)
+  const fov = state.fov;
+  const sw  = (S / 400).toFixed(2);
+  const map = (ax, ay) => [ +((ax / fov + 0.5) * S).toFixed(2), +((-ay / fov + 0.5) * S).toFixed(2) ];
+  const pathD = (poly) => {
+    if (!poly || poly.length < 2) return '';
+    let d = 'M' + map(poly[0][0], poly[0][1]).join(',');
+    for (let i = 1; i < poly.length; i++) d += 'L' + map(poly[i][0], poly[i][1]).join(',');
+    return d;
+  };
+
+  const planes      = state.planes;
+  const laGridN     = Math.min(state.critGridN, 384);
+  const samplingFov = fov * 1.3;
+  const lensesInFront = (idx) => planes.slice(0, idx).some(p => p.objects.some(o => o.type === 'lens' && !o.hidden));
+
+  const parts = [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${S}" height="${S}" viewBox="0 0 ${S} ${S}">`,
+    `<rect width="${S}" height="${S}" fill="${pal.bg}"/>`,
+  ];
+
+  // Uniform-disc lensed-image outlines.
+  planes.forEach((plane, idx) => {
+    const discs = plane.objects.filter(o => o.type === 'source' && o.model === 'point' && !o.hidden);
+    if (!discs.length) return;
+    const grid = lensesInFront(idx) ? traceSourceGrid(planes, state.dist, idx, samplingFov, laGridN) : null;
+    for (const disc of discs) {
+      let polys = grid
+        ? chainSegments(computeDiscImageOutlines(planes, state.dist, idx,
+            { cx: disc.cx, cy: disc.cy, sigma: disc.params.sigma, q: disc.params.q, phi: disc.params.phi }, samplingFov, laGridN, grid))
+        : [discEllipsePoly(disc)];
+      if (state.lineArtSmooth) polys = smoothPolylines(polys);
+      const d = polys.map(pathD).join(' ');
+      if (!d) continue;
+      const fill = state.lineArtFill ? `fill="${pal.imageFill}" fill-opacity="0.9" fill-rule="evenodd"` : 'fill="none"';
+      parts.push(`<path d="${d}" ${fill} stroke="${pal.imageStroke}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>`);
+    }
+  });
+
+  // Critical curves / caustics (chained + smoothed for clean vector paths).
+  if ((state.showCritCurves || state.showCaustics) && planes.some(p => p.objects.some(o => o.type === 'lens'))) {
+    const res = computeCritCurvesForZs(planes, state.dist, effectiveCritZs(), samplingFov, state.critGridN);
+    const _h  = fov / 2;
+    const clip = (segs, m) => segs.filter(([[x0,y0],[x1,y1]]) =>
+      (Math.abs(x0)<=_h*m && Math.abs(y0)<=_h*m) || (Math.abs(x1)<=_h*m && Math.abs(y1)<=_h*m));
+    if (res.critSegments.length >= 50) {
+      const emit = (segs, color) => {
+        let ps = chainSegments(segs); if (state.lineArtSmooth) ps = smoothPolylines(ps);
+        const d = ps.map(pathD).join(' ');
+        if (d) parts.push(`<path d="${d}" fill="none" stroke="${color}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>`);
+      };
+      if (state.showCaustics)   emit(clip(res.causticSegments, 2.5), pal.caustic);
+      if (state.showCritCurves) emit(clip(res.critSegments, 1),   pal.critical);
+    }
+  }
+
+  // Point-source image dots.
+  for (const plane of planes) for (const obj of plane.objects) {
+    if (obj.type !== 'source' || obj.model !== 'pointsource' || obj.hidden) continue;
+    const r = Math.max((obj.params.sigma ?? 0.05) / fov * S, 2.5).toFixed(2);
+    for (const [tx, ty] of findPointSourceImages(obj, plane)) {
+      const [cx, cy] = map(tx, ty);
+      parts.push(`<circle cx="${cx}" cy="${cy}" r="${r}" fill="${pal.pointImage}"/>`);
+    }
+  }
+
+  parts.push('</svg>');
+  return parts.join('\n');
+}
+
+function exportLineArtSVG() {
+  const svg = buildLineArtSVGString();
+  if (svg) downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), 'caustica-lineart.svg');
 }
 
 function setProgInitialPosition() {
