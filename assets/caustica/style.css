@@ -1,6 +1,12 @@
 /* Caustica — styles */
 
 :root {
+  /* Tell the browser to paint native controls (the preset <select>'s dropdown
+     popup, scrollbars) in the matching mode. Without this, Chrome/Edge on
+     Windows render the option list in light mode even under our dark theme,
+     leaving the muted text hard to read. Overridden in the dark block below. */
+  color-scheme: light;
+
   --bg:          #ffffff;
   --bg-soft:     #f9fafb;
   --bg-soft2:    #f3f4f6;
@@ -21,6 +27,8 @@
 }
 
 html[data-theme="dark"] {
+  color-scheme: dark;
+
   --bg:          #0d1117;
   --bg-soft:     #161b22;
   --bg-soft2:    #1c2128;
