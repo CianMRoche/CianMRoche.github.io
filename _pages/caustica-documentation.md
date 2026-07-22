@@ -289,12 +289,12 @@ By default $\boldsymbol{\beta}_s = 0$ (source at the coordinate origin). When th
     <figcaption>Arrival-time surface: iso-φ contours with the image markers (I, II, III) at its stationary points.</figcaption>
   </figure>
   <figure>
-    <img class="img-light" src="/images/caustica-docs/fermat-images-light.png" alt="The same lens with a uniform circle source, showing the lensed images.">
-    <img class="img-dark"  src="/images/caustica-docs/fermat-images-dark.png"  alt="The same lens with a uniform circle source, showing the lensed images.">
-    <figcaption>The same lens with a uniform circle source: each lensed image lands exactly on a stationary point at left.</figcaption>
+    <img class="img-light" src="/images/caustica-docs/fermat-images-light.png" alt="The same lens with a uniform disc source, showing the lensed images.">
+    <img class="img-dark"  src="/images/caustica-docs/fermat-images-dark.png"  alt="The same lens with a uniform disc source, showing the lensed images.">
+    <figcaption>The same lens with a uniform disc source: each lensed image lands exactly on a stationary point at left.</figcaption>
   </figure>
 </div>
-<figcaption style="text-align:center">Images form at stationary points of the arrival-time surface. Left: the surface and its markers. Right: the actual lensed light of a uniform circle source at the same positions.</figcaption>
+<figcaption style="text-align:center">Images form at stationary points of the arrival-time surface. Left: the surface and its markers. Right: the actual lensed light of a uniform disc source at the same positions.</figcaption>
 
 #### Image type classification
 
@@ -525,11 +525,11 @@ $$I = A\exp\left(-\frac{r_\text{ell}}{\sigma}\right)$$
 
 More extended than Gaussian; $\sigma$ is the exponential scale length. This is a Sérsic profile with $n=1$.
 
-### Uniform circle
+### Uniform disc
 
 $$I = \begin{cases} A & r_\text{ell} \leq \sigma \\ 0 & \text{otherwise} \end{cases}$$
 
-A filled disc of constant brightness with radius $\sigma$. The axis ratio $q$ is fixed at 1 (always circular), so $r_\text{ell}$ reduces to the ordinary Euclidean radius.
+A filled ellipse of constant brightness with a sharp edge, using the same elliptical radius $r_\text{ell}$ as the other analytic sources. $\sigma$ is the semi-major-axis radius, $q$ the axis ratio ($q = 1$ gives a circle), and $\varphi$ the position angle of the major axis.
 
 ### Point source
 
@@ -538,7 +538,7 @@ A mathematically point-like source for simulating quasars or other compact objec
 Image positions are found via a two-stage algorithm: a coarse grid search using sign-change topology to locate starting guesses, followed by Newton–Raphson refinement with backtracking line search until $\lvert F(\theta)\rvert^2 \lt 10^{-14}$ arcsec². Each converged solution is deduplicated. Because the circles are drawn in the image plane with fixed size, they are not stretched or sheared by lensing; this is appropriate for modelling the PSF-limited appearance of a quasar image.
 
 <div class="doc-warning" markdown="1">
-**Heads up.** Einstein rings and arc-shaped images do not appear in this mode. Use a Gaussian or uniform circle source for extended-emission lensing. Highly demagnified images (such as the central odd image of an SIE lens) may be missed by the grid search.
+**Heads up.** Einstein rings and arc-shaped images do not appear in this mode. Use a Gaussian or uniform disc source for extended-emission lensing. Highly demagnified images (such as the central odd image of an SIE lens) may be missed by the grid search.
 </div>
 
 The grid density used for image finding is set in the **Settings** tab (the gear icon) as **Point source**, the number of sample points across the field of view (Coarse 150, Medium 300, Fine 600, or Very fine 1200). Denser grids find images more reliably near caustics but are slower; the default is Medium (300). Because the count is fixed rather than an absolute angular spacing, the cost stays bounded as the field of view grows to cluster scale.

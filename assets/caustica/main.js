@@ -781,7 +781,7 @@ function defaultParams(model) {
   if (model === 'deflection')  return { alpha: 0.1, phi: 0 };
   if (model === 'gaussian')    return { sigma: 0.06, q: 1.0,  phi: 0, amplitude: 1.0,  color: '#ffffff' };
   if (model === 'exponential') return { sigma: 0.05, q: 0.40, phi: 0, amplitude: 2.20, color: '#ffffff' };
-  if (model === 'point')       return { sigma: 0.08, amplitude: 1.0, color: '#ffffff' };
+  if (model === 'point')       return { sigma: 0.08, q: 1.0, phi: 0, amplitude: 1.0, color: '#ffffff' };
   if (model === 'pointsource') return { sigma: 0.05, amplitude: 1.0, color: '#ffffff' };
   if (model === 'pastedimage') return { sigma: 1.0, amplitude: 1.0, angSize: 0 };
   return {};
@@ -3007,7 +3007,9 @@ const SOURCE_INFO = {
                 <b>q</b>: axis ratio (1 = circular, lower = more elliptical).<br>
                 <b>φ</b>: position angle of the major axis (radians).<br>
                 <b>A</b>: peak surface brightness.`,
-  point: `<b>r</b>: radius of the uniform disc (arcsec). The edge is sharp.<br>
+  point: `<b>r</b>: semi-major-axis radius of the uniform disc (arcsec). The edge is sharp.<br>
+          <b>q</b>: axis ratio (1 = circular, lower = more elliptical).<br>
+          <b>φ</b>: position angle of the major axis (radians).<br>
           <b>A</b>: surface brightness inside the disc.`,
   pointsource: `Idealised point source for quasar lensing. Image positions are found by solving the lens equation numerically; each is drawn as a circle of fixed angular size, unaffected by magnification or shear.<br><br>
                 <b>Size</b>: angular radius of each image circle (arcsec).<br>
@@ -3070,7 +3072,7 @@ function renderScenePanel() {
         <option value="pointsource" ${srcObj.model==='pointsource' ?'selected':''}>Point source</option>
         <option value="gaussian"    ${srcObj.model==='gaussian'    ?'selected':''}>Gaussian</option>
         <option value="exponential" ${srcObj.model==='exponential' ?'selected':''}>Exponential</option>
-        <option value="point"       ${srcObj.model==='point'       ?'selected':''}>Uniform circle</option>
+        <option value="point"       ${srcObj.model==='point'       ?'selected':''}>Uniform disc</option>
         <option value="pastedimage" ${srcObj.model==='pastedimage' ?'selected':''}>Pasted image</option>`;
 
       paramsPanel = `
@@ -3120,7 +3122,7 @@ function renderScenePanel() {
         : `<option value="pointsource" ${obj.model==='pointsource' ?'selected':''}>Point source</option>
            <option value="gaussian"    ${obj.model==='gaussian'    ?'selected':''}>Gaussian</option>
            <option value="exponential" ${obj.model==='exponential' ?'selected':''}>Exponential</option>
-           <option value="point"       ${obj.model==='point'       ?'selected':''}>Uniform circle</option>
+           <option value="point"       ${obj.model==='point'       ?'selected':''}>Uniform disc</option>
            <option value="pastedimage" ${obj.model==='pastedimage' ?'selected':''}>Pasted image</option>`;
       const infoHtml = isLens
         ? infoSection('sl-param-info', LENS_INFO[obj.model] ?? '')
@@ -3802,13 +3804,15 @@ function sourceParamRows(obj, showAttach) {
               <input type="color" data-param-color="1" value="${displayColor}" class="sl-color-input">
             </div>`
          + objFooter(obj, showAttach)
-         + '<p style="font-size:11px;color:var(--muted);margin-top:4px;grid-column:1/-1">Image positions are computed with a numerical refinement algorithm. Einstein rings do not appear for point sources: use a uniform circle source instead. Some highly demagnified images may not appear.</p>';
+         + '<p style="font-size:11px;color:var(--muted);margin-top:4px;grid-column:1/-1">Image positions are computed with a numerical refinement algorithm. Einstein rings do not appear for point sources: use a uniform disc source instead. Some highly demagnified images may not appear.</p>';
   }
   if (obj.model === 'point') {
     const isLight    = document.documentElement.getAttribute('data-theme') !== 'dark';
     const storedColor = p.color ?? '#ffffff';
     const displayColor = isLight ? invertHexColor(storedColor) : storedColor;
     return sliderRowLog('r (")', 'sigma', 0.002, 4.0, p.sigma ?? 0.08)
+         + sliderRow   ('q',      'q',    0.05, 1.0, 0.05, p.q   ?? 1.0)
+         + sliderRow   ('φ (rad)','phi',  0, Math.PI, 0.05, p.phi ?? 0)
          + `<div class="sl-param-row">
               <span class="sl-param-label">Color</span>
               <input type="color" data-param-color="1" value="${displayColor}" class="sl-color-input">
@@ -4460,7 +4464,7 @@ function drawOverlay() {
           else if (obj.model === 'epl')       { a_arc = p.b ?? 1;      q = p.q ?? 0.75; phi = p.phi ?? 0; }
           else if (obj.model === 'pointmass') { a_arc = p.b ?? 1; }
         } else if (obj.model === 'point') {
-          a_arc = p.sigma ?? 0.08; q = 1; phi = 0;  // hard edge: draw at exact radius
+          a_arc = p.sigma ?? 0.08; q = p.q ?? 1; phi = p.phi ?? 0;  // hard edge: draw at exact radius
         } else if (obj.model !== 'pastedimage' && obj.model !== 'pointsource') {
           a_arc = 2 * (p.sigma ?? 0.1); q = p.q ?? 1; phi = p.phi ?? 0;
         }

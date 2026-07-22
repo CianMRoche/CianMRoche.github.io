@@ -446,7 +446,7 @@ float analyticalBrightness(int idx, vec2 beta) {
   float amp = p.w;
   if (u_srcModel[idx] == 1) return amp * exp(-sqrt(r2) / sig);
   if (u_srcModel[idx] == 4) {
-    // Uniform circle: constant brightness inside radius sig, zero outside.
+    // Uniform disc: constant brightness inside the elliptical radius sig, zero outside.
     return (sqrt(r2) <= sig) ? amp : 0.0;
   }
   if (u_srcModel[idx] == 5) {
