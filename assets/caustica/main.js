@@ -3,6 +3,10 @@
 import { Renderer, MAX_OBJECTS, MAX_PLANES }   from './renderer.js';
 import { precomputeDistances,
          computeCriticalCurves,
+         computeDiscImageOutlines,
+         traceSourceGrid,
+         chainSegments,
+         smoothPolylines,
          angDiamDist,
          angDiamDistBetween,
          deflectEPL,
@@ -64,6 +68,20 @@ function invertHexColor(hex) {
 // Critical curves: hot pink; Caustics: lime green.
 const CRIT_COLOR = 'rgba(248, 113, 196, 0.95)';
 const CAUS_COLOR = 'rgba(134, 239, 172, 0.95)';
+
+// ── Line-art mode palettes ────────────────────────────────────────────────────
+// Flat, minimal schemes for the vector "Line art" View mode. Each maps the scene's
+// roles to colors: background, the lensed-image fill/stroke (uniform-disc outlines
+// and point-source dots), critical curves, caustics, source outline, and markers.
+// These colors are drawn on the (non-CSS-inverted) overlay canvas, so they render
+// as-is in both light and dark site themes.
+const LINE_ART_PALETTES = {
+  ink:       { name: 'Ink (black on white)',  bg: '#ffffff', imageFill: '#141414', imageStroke: '#000000', critical: '#000000', caustic: '#9aa0a6', pointImage: '#000000', source: '#c4c4c4', marker: '#000000' },
+  crimson:   { name: 'Crimson (red on white)',bg: '#ffffff', imageFill: '#e11d3c', imageStroke: '#8a0f22', critical: '#1a1a1a', caustic: '#f2a6b0', pointImage: '#c8142f', source: '#eebcc2', marker: '#8a0f22' },
+  noir:      { name: 'Noir (white on black)', bg: '#0a0a0a', imageFill: '#f5f5f5', imageStroke: '#ffffff', critical: '#ff5ca8', caustic: '#57c7ff', pointImage: '#ffffff', source: '#4a4a4a', marker: '#ffffff' },
+  blueprint: { name: 'Blueprint',             bg: '#0d2847', imageFill: '#cbe8ff', imageStroke: '#ffffff', critical: '#8fd0ff', caustic: '#b8ecc9', pointImage: '#eaf6ff', source: '#39598a', marker: '#d6ecff' },
+};
+function lineArtPalette() { return LINE_ART_PALETTES[state.lineArtPalette] ?? LINE_ART_PALETTES.ink; }
 
 // Point-source image grid: number of sample points across the field. This is a
 // fixed count (not an absolute arcsec spacing) so the cost stays bounded as the
@@ -183,6 +201,10 @@ const CONFIG_DEFAULTS = {
   H0:                 70,     // Hubble constant (km/s/Mpc); flat ΛCDM
   Omega_m:            0.3,    // matter density; Omega_L = 1 − Omega_m
   showTimeDelays:     false,  // annotate point-source images with relative time delays (days)
+  lineArt:            false,  // vector "Line art" render mode (flat palette, no raster)
+  lineArtPalette:     'ink',  // key into LINE_ART_PALETTES
+  lineArtFill:        true,   // fill lensed-image outlines (vs stroke only)
+  lineArtSmooth:      true,   // curvature-aware Chaikin smoothing of the vector curves
 };
 
 const state = {
@@ -520,6 +542,10 @@ function configToYaml() {
   y += `contourScale: ${state.contourScale === 1 ? 'asinh' : 'linear'}\n`;
   y += `H0: ${state.H0}\nOmega_m: ${state.Omega_m}\n`;
   y += `showTimeDelays: ${state.showTimeDelays}\n`;
+  y += `lineArt: ${state.lineArt}\n`;
+  y += `lineArtPalette: ${state.lineArtPalette}\n`;
+  y += `lineArtFill: ${state.lineArtFill}\n`;
+  y += `lineArtSmooth: ${state.lineArtSmooth}\n`;
   y += `fermatUseSourcePos: ${state.fermatUseSourcePos}\n`;
   if (state.lastFermatSource) {
     const fsp = state.planes.find(p => p.id === state.lastFermatSource.planeId);
@@ -748,6 +774,10 @@ function loadConfigFromYaml(yaml) {
     state.Omega_m = (isFinite(cfg.Omega_m) && cfg.Omega_m >= 0 && cfg.Omega_m <= 1) ? cfg.Omega_m : CONFIG_DEFAULTS.Omega_m;
     setCosmology({ H0: state.H0, Omega_m: state.Omega_m });
     state.showTimeDelays = _bool(cfg.showTimeDelays, CONFIG_DEFAULTS.showTimeDelays);
+    state.lineArt        = _bool(cfg.lineArt,        CONFIG_DEFAULTS.lineArt);
+    state.lineArtPalette = LINE_ART_PALETTES[cfg.lineArtPalette] ? cfg.lineArtPalette : CONFIG_DEFAULTS.lineArtPalette;
+    state.lineArtFill    = _bool(cfg.lineArtFill,    CONFIG_DEFAULTS.lineArtFill);
+    state.lineArtSmooth  = _bool(cfg.lineArtSmooth,  CONFIG_DEFAULTS.lineArtSmooth);
     if (isFinite(cfg.fermatBetaX) && isFinite(cfg.fermatBetaY) && isFinite(cfg.fermatSrcPlaneZ)) {
       const fsp = state.planes.find(p => Math.abs(p.z - cfg.fermatSrcPlaneZ) < 1e-4);
       state.lastFermatSource = fsp ? { cx: cfg.fermatBetaX, cy: cfg.fermatBetaY, planeId: fsp.id } : null;
@@ -3281,6 +3311,30 @@ function renderViewPanel() {
 
       <div class="sl-hybrid-section">
         <div class="sl-view-hdr">
+          <span class="sl-panel-title" style="flex:1">Line art</span>
+          <label style="display:flex;align-items:center;cursor:pointer" title="Render the scene as flat vector line-art (lensed-image outlines, critical curves, caustics) in a minimal palette. Only uniform-disc and point sources produce clean lines.">
+            <input type="checkbox" id="sl-lineart" ${state.lineArt?'checked':''}>
+          </label>
+        </div>
+        ${ state.lineArt ? `
+        <div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
+          <div class="sl-global-input">
+            <label>Palette</label>
+            <select id="sl-lineart-palette" style="flex:1 1 auto;min-width:0">
+              ${Object.entries(LINE_ART_PALETTES).map(([k, v]) =>
+                `<option value="${k}" ${state.lineArtPalette===k?'selected':''}>${v.name}</option>`).join('')}
+            </select>
+          </div>
+          <div class="sl-checkbox-row">
+            <label><input type="checkbox" id="sl-lineart-fill" ${state.lineArtFill?'checked':''}> Fill images</label>
+            <label title="Curvature-aware smoothing: rounds off sampling staircase while preserving genuine cusps"><input type="checkbox" id="sl-lineart-smooth" ${state.lineArtSmooth?'checked':''}> Smooth</label>
+          </div>
+          <p class="sl-perf-note" style="margin:4px 0 0">Vector line-art of the lensing structure. Grid density follows the critical-curve setting (Settings). Gaussian / exponential / pasted sources are ignored in this mode.</p>
+        </div>` : '' }
+      </div>
+
+      <div class="sl-hybrid-section">
+        <div class="sl-view-hdr">
           <span class="sl-panel-title" style="flex:1">Display</span>
         </div>
         <div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
@@ -3435,6 +3489,15 @@ function renderViewPanel() {
   document.getElementById('sl-show-crit')?.addEventListener('change', e => { state.showCritCurves = e.target.checked; redraw(); });
   document.getElementById('sl-show-caus')?.addEventListener('change', e => { state.showCaustics   = e.target.checked; redraw(); });
   document.getElementById('sl-show-td')?.addEventListener('change', e => { state.showTimeDelays = e.target.checked; redraw(); });
+  document.getElementById('sl-lineart')?.addEventListener('change', e => {
+    state.lineArt = e.target.checked;
+    renderSidebar();            // reveal / hide the palette sub-panel
+    _updateColorbar();          // line art suppresses the colorbar
+    redraw();
+  });
+  document.getElementById('sl-lineart-palette')?.addEventListener('change', e => { state.lineArtPalette = e.target.value; redraw(); });
+  document.getElementById('sl-lineart-fill')?.addEventListener('change', e => { state.lineArtFill = e.target.checked; redraw(); });
+  document.getElementById('sl-lineart-smooth')?.addEventListener('change', e => { state.lineArtSmooth = e.target.checked; redraw(); });
   document.getElementById('sl-viz-scale')?.addEventListener('change', e => {
     const vs = vizScaleFor(state.vizMode);
     vs.scale = parseInt(e.target.value, 10);
@@ -4277,6 +4340,130 @@ function _pillLabel(ctx, text, cx, cy, fsize, dark) {
   return { boxW, boxH };
 }
 
+// Polyline (arcsec) tracing the edge of a uniform-disc source ellipse, used when
+// no lens sits in front of the disc (image == source, no marching squares needed).
+// σ is the semi-major-axis radius, minor axis σ·q, rotated by φ (matches the shader).
+function discEllipsePoly(disc, M = 96) {
+  const r  = disc.params.sigma ?? 0.08;
+  const q  = Math.max(disc.params.q ?? 1, 0.05);
+  const ph = disc.params.phi ?? 0;
+  const cp = Math.cos(ph), sp = Math.sin(ph);
+  const pts = [];
+  for (let i = 0; i <= M; i++) {
+    const t  = i / M * 2 * Math.PI;
+    const xr = r * Math.cos(t), yr = r * q * Math.sin(t);
+    pts.push([disc.cx + cp*xr - sp*yr, disc.cy + sp*xr + cp*yr]);
+  }
+  return pts;
+}
+
+// ── Line-art (vector) render path ───────────────────────────────────────────
+// Draws the lensing STRUCTURE as flat vector shapes on the overlay canvas in a
+// minimal palette: filled/stroked uniform-disc lensed-image outlines, point-source
+// image dots, and (per their View-tab toggles) critical curves and caustics. The
+// raster GL layer is skipped in _doRedraw and hidden behind this opaque background.
+function drawLineArt(W, H, dpr) {
+  const pal = lineArtPalette();
+  const Wl  = W / dpr, Hl = H / dpr;
+
+  // Opaque background covers the (skipped) GL canvas underneath.
+  overlayCtx.save();
+  overlayCtx.setTransform(1, 0, 0, 1, 0, 0);
+  overlayCtx.fillStyle = pal.bg;
+  overlayCtx.fillRect(0, 0, W, H);
+  overlayCtx.restore();
+
+  overlayCtx.save();
+  overlayCtx.scale(dpr, dpr);
+  overlayCtx.lineJoin = 'round';
+  overlayCtx.lineCap  = 'round';
+
+  const toPixel  = (ax, ay) => [(ax / state.fov + 0.5) * Wl, (-ay / state.fov + 0.5) * Hl];
+  const strokeW  = Math.max(1.1, Math.min(Wl, Hl) / 400);
+
+  const drawPolys = (polys, { fill = false, stroke = true, fillStyle, strokeStyle, lw = strokeW }) => {
+    overlayCtx.beginPath();
+    for (const poly of polys) {
+      if (!poly || poly.length < 2) continue;
+      const [x0, y0] = toPixel(poly[0][0], poly[0][1]);
+      overlayCtx.moveTo(x0, y0);
+      for (let i = 1; i < poly.length; i++) { const [px, py] = toPixel(poly[i][0], poly[i][1]); overlayCtx.lineTo(px, py); }
+    }
+    if (fill)   { overlayCtx.fillStyle = fillStyle; overlayCtx.globalAlpha = 0.9; overlayCtx.fill('evenodd'); overlayCtx.globalAlpha = 1; }
+    if (stroke) { overlayCtx.strokeStyle = strokeStyle; overlayCtx.lineWidth = lw; overlayCtx.stroke(); }
+  };
+
+  if (state.dist) {
+    const planes      = state.planes;                    // kept sorted by z; matches state.dist
+    // Base grid only needs to CAPTURE arcs; per-vertex secant refinement supplies the
+    // smoothness, so a moderate cap keeps live dragging responsive. Follows critGridN.
+    const laGridN     = Math.min(state.critGridN, 384);
+    const samplingFov = state.fov * 1.3;                 // sample wider so edge arcs aren't clipped
+    const lensesInFront = (idx) => planes.slice(0, idx).some(p => p.objects.some(o => o.type === 'lens' && !o.hidden));
+
+    // ── Uniform-disc lensed-image outlines, grouped per source plane (one trace each) ──
+    const discPlanes = new Map();
+    planes.forEach((plane, idx) => {
+      for (const o of plane.objects)
+        if (o.type === 'source' && o.model === 'point' && !o.hidden) {
+          if (!discPlanes.has(idx)) discPlanes.set(idx, []);
+          discPlanes.get(idx).push(o);
+        }
+    });
+    for (const [idx, discs] of discPlanes) {
+      const grid = lensesInFront(idx) ? traceSourceGrid(planes, state.dist, idx, samplingFov, laGridN) : null;
+      for (const disc of discs) {
+        let polys;
+        if (grid) {
+          const segs = computeDiscImageOutlines(planes, state.dist, idx,
+            { cx: disc.cx, cy: disc.cy, sigma: disc.params.sigma, q: disc.params.q, phi: disc.params.phi },
+            samplingFov, laGridN, grid);
+          polys = chainSegments(segs);
+        } else {
+          polys = [discEllipsePoly(disc)];   // no foreground lens: image is the source ellipse
+        }
+        if (state.lineArtSmooth) polys = smoothPolylines(polys);
+        drawPolys(polys, { fill: state.lineArtFill, stroke: true, fillStyle: pal.imageFill, strokeStyle: pal.imageStroke });
+      }
+    }
+
+    // ── Critical curves / caustics (follow the View-tab toggles) ──
+    if ((state.showCritCurves || state.showCaustics) && !state.hideOverlays) {
+      const res = computeCritCurvesForZs(planes, state.dist, effectiveCritZs(), samplingFov, laGridN);
+      const _h  = state.fov / 2;
+      const clip = (segs, m) => segs.filter(([[x0,y0],[x1,y1]]) =>
+        (Math.abs(x0)<=_h*m && Math.abs(y0)<=_h*m) || (Math.abs(x1)<=_h*m && Math.abs(y1)<=_h*m));
+      if (res.critSegments.length >= 50) {
+        if (state.showCaustics) {
+          let cp = chainSegments(clip(res.causticSegments, 2.5));
+          if (state.lineArtSmooth) cp = smoothPolylines(cp);
+          drawPolys(cp, { strokeStyle: pal.caustic });
+        }
+        if (state.showCritCurves) {
+          let cc = chainSegments(clip(res.critSegments, 1));
+          if (state.lineArtSmooth) cc = smoothPolylines(cc);
+          drawPolys(cc, { strokeStyle: pal.critical });
+        }
+      }
+    }
+  }
+
+  // ── Point-source images as filled dots ──
+  overlayCtx.fillStyle = pal.pointImage;
+  for (const plane of state.planes) {
+    for (const obj of plane.objects) {
+      if (obj.type !== 'source' || obj.model !== 'pointsource' || obj.hidden) continue;
+      const r_px = Math.max((obj.params.sigma ?? 0.05) / state.fov * Wl, 2.5);
+      for (const [tx, ty] of findPointSourceImages(obj, plane)) {
+        const [px, py] = toPixel(tx, ty);
+        overlayCtx.beginPath(); overlayCtx.arc(px, py, r_px, 0, Math.PI * 2); overlayCtx.fill();
+      }
+    }
+  }
+
+  overlayCtx.restore();
+}
+
 function drawOverlay() {
   const overlay = document.getElementById('sl-overlay');
   const r   = overlay.getBoundingClientRect();
@@ -4285,6 +4472,10 @@ function drawOverlay() {
   const H   = Math.max(1, Math.round(r.height * dpr));
   if (overlay.width !== W || overlay.height !== H) { overlay.width = W; overlay.height = H; }
   overlayCtx.clearRect(0, 0, W, H);
+
+  // Line-art mode paints the whole scene as flat vectors on this (opaque) overlay,
+  // covering the raster GL canvas underneath. Its own routine, then bail out.
+  if (state.lineArt) { drawLineArt(W, H, dpr); return; }
 
   const hasLens     = state.planes.some(p => p.objects.some(o => o.type === 'lens'));
   // The hide-overlays master switch (View tab) suppresses every annotation for
@@ -4843,7 +5034,7 @@ function _updateColorbar() {
   const ttl   = document.getElementById('sl-colorbar-title');
   if (!bar) return;
   const info = _VIZ_COLORBAR[state.vizMode];
-  const on = !!info && state.showColorbar && !state.hideOverlays;
+  const on = !!info && state.showColorbar && !state.hideOverlays && !state.lineArt;
   // The colorbar keeps the bottom-left corner; this class lifts the ruler
   // cluster and warning badges clear of it (see --sl-bl-lift in the CSS).
   document.getElementById('sl-image-wrap')?.classList.toggle('sl-colorbar-visible', on);
@@ -5005,7 +5196,12 @@ function _doRedraw() {
     if (_fso) { state.lastFermatSource.cx = _fso.cx; state.lastFermatSource.cy = _fso.cy; }
   }
 
-  if (state.vizMode !== 0) {
+  if (state.lineArt) {
+    // Line-art mode draws everything as vectors on the overlay; skip the raster GL
+    // pass entirely (the opaque overlay background covers the GL canvas).
+    state.fermatPoints = null;
+    state.saddlePhis = [];
+  } else if (state.vizMode !== 0) {
     const { planes, dist, vizSrcIdx, fermatBeta } = vizArgs(sorted);
     let saddlePhis = [];
     if (state.vizMode === 6) {
@@ -5041,6 +5237,15 @@ function _doRedraw() {
 function buildCompositeCanvas() {
   const gl  = glCanvas;
   const ov  = document.getElementById('sl-overlay');
+  // Line-art mode: the overlay already holds the opaque background + all vectors,
+  // so it IS the finished image. Skip the (skipped/stale) GL layer and colorbar.
+  if (state.lineArt) {
+    const off = document.createElement('canvas');
+    off.width  = ov.width;
+    off.height = ov.height;
+    off.getContext('2d').drawImage(ov, 0, 0);
+    return off;
+  }
   const off = document.createElement('canvas');
   off.width  = gl.width;
   off.height = gl.height;
