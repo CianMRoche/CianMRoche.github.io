@@ -1,0 +1,71 @@
+fov: 3
+zMax: 3
+vizMode: 0
+vizScale0: 1 0.5 0 1 0
+vizScale1: 4 0.5 0.3 10 0
+vizScale2: 4 0.5 0.3 1 0
+vizScale3: 4 0.5 3 100 4
+vizScale5: 0 8 0 2 0
+showCritCurves: false
+showCaustics: false
+showMarkers: false
+showLegend: true
+showColorbar: true
+showScaleBar: true
+showRuler: false
+critGridN: 512
+psGridN: 300
+renderScale: auto
+critZs: null
+contourSpacing: 1
+contourScale: linear
+H0: 70
+Omega_m: 0.3
+showTimeDelays: false
+lineArt: true
+lineArtPalette: crimson_inv
+lineArtColors: #c8102e #ffffff #ffffff #ffffff #141414 #ffffff #000000 #f9fbff #e0b7f0
+lineArtFill: true
+lineArtSmooth: true
+fermatUseSourcePos: true
+fermatBetaX: -0.019683
+fermatBetaY: -0.082998
+fermatSrcPlaneZ: 1.5000
+planes:
+  - z: 0.500
+    objects:
+      - type: lens
+        model: nie
+        cx: -0.12203
+        cy: -0.10101
+        hidden: false
+        showShape: false
+        params:
+          b: 2.128139
+          q: 0.75
+          phi: 0
+          rc: 0.2
+      - type: lens
+        model: sie
+        cx: 0.45733
+        cy: 0.32666
+        hidden: false
+        showShape: false
+        params:
+          b: 0.409261
+          q: 0.75
+          phi: 0
+  - z: 1.500
+    objects:
+      - type: source
+        model: point
+        cx: -0.01968
+        cy: -0.083
+        hidden: false
+        showShape: false
+        params:
+          sigma: 0.086107
+          amplitude: 1
+          color: '#ffffff'
+          q: 0.5
+          phi: 0.7

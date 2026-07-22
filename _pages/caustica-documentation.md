@@ -589,7 +589,7 @@ The computation proceeds in four steps:
 
 ### Line art (vector render mode)
 
-The **Line art** toggle in the View tab replaces the raster (WebGL) image with a flat, minimal **vector** rendering of the lensing structure, drawn entirely on the 2D overlay canvas. It is meant for clean, poster-style figures: filled and stroked lensed-image outlines, point-source image dots, and (following their own View-tab toggles) critical curves and caustics, in a chosen **palette**. The palettes are fixed looks (independent of the site's light/dark theme): **Ink**, **Ink (inv.)**, **Crimson**, **Crimson (inv.)**, **Blueprint**, **Blueprint (inv.)**, **Espresso**, **Mint**, and **Noir**. Below the palette dropdown, a **color picker for each role** (background, image fill, image line, critical, caustic, point image) lets you fine-tune any color after choosing a palette; re-selecting a palette resets them. A **Fill** toggle switches between filled shapes and outline-only, and a **Smooth** toggle controls curve smoothing. The palette choice and any per-role overrides are saved in the config file.
+The **Line art** toggle in the View tab replaces the raster (WebGL) image with a flat, minimal **vector** rendering of the lensing structure, drawn entirely on the 2D overlay canvas. It is meant for clean, poster-style figures: filled and stroked lensed-image outlines, point-source image dots, and (following their own View-tab toggles) critical curves and caustics, in a chosen **palette**. The palettes are fixed looks (independent of the site's light/dark theme): **Ink**, **Ink (inv.)**, **Crimson**, **Crimson (inv.)**, **Blueprint**, **Blueprint (inv.)**, **Espresso**, **Mint**, and **Noir**. Below the palette dropdown, a **color picker for each role** (background, image fill, image line, critical, caustic, point image, and the lens / source / hybrid markers) lets you fine-tune any color after choosing a palette; re-selecting a palette resets them. The marker colors also drive the matching "show shape" outlines. A **Fill** toggle switches between filled shapes and outline-only, and a **Smooth** toggle controls curve smoothing. The palette choice and any per-role overrides are saved in the config file. The section's **i** button explains what is drawn.
 
 Line art is a **restyle** of the normal overlay, not a stripped-down separate view: the position markers, ruler, scale bar, and legend all remain visible exactly as before (per their own toggles), so switching line art on hides nothing. The raster image layer is simply replaced by the flat palette background plus the vector structure.
 
@@ -656,15 +656,16 @@ The **Data** section at the bottom of the Export tab writes the most recently co
 
 ## 9. Preset Configurations
 
-The *Presets…* dropdown in the top bar loads ready-made scenes:
+The *Presets…* dropdown in the top bar loads ready-made scenes; selecting the **Presets…** entry itself reloads the page's default scene:
 
-- **SIE lens + Point Source**: one SIE lens at $z = 0.5$ with a point source at $z = 1.5$. Critical curves, caustics, and the numerically solved image positions are shown.
-- **Double Lens + Uniform Source**: two SIE lenses at $z = 0.5$, a main galaxy and an off-centre companion, lensing a uniform disc source at $z = 1.5$.
-- **Two lens planes (multiplane)**: SIE lenses at $z = 0.4$ and $z = 0.8$ deflecting a Gaussian source at $z = 1.6$ in sequence.
+- **Multiplane**: SIE lenses at $z = 0.4$ and $z = 0.8$ deflecting a Gaussian source at $z = 1.6$ in sequence.
+- **Uniform Source**: two SIE lenses at $z = 0.5$, a main galaxy and an off-centre companion, lensing a uniform disc source at $z = 1.5$.
+- **Point Source**: one SIE lens at $z = 0.5$ with a point source at $z = 1.5$. Critical curves, caustics, and the numerically solved image positions are shown.
 - **Fermat surface demo**: an SIE and NIE lens pair at $z = 0.5$ with a uniform disc source at $z = 1.0$. Opens in the Fermat potential view with contours pinned to the source position.
 - **ZigZag Lens**: a point source at $z = 2.38$ lensed twice, by a galaxy at $z = 1.89$ and again by one at $z = 0.18$, so the light path zigzags between planes.
 - **Butterfly Caustic**: two flattened NIE lenses at $z = 0.5$ and with nearly perpendicular position angles. The caustic folds into butterfly metamorphoses at its cusps; [Orban de Xivry & Marshall (2009)](https://ui.adsabs.harvard.edu/abs/2009MNRAS.399....2O/abstract) give an atlas of such exotic lens configurations. Lenses split into two planes for ease of editing, but are effectively coplanar.
-- **Galaxy group (wide field)**: six SIE galaxies with external shear at $z = 0.5$ in a 40 arcsec field, with background sources at $z = 1.15$, $2.0$, and $3.0$.
+- **Galaxy group**: six SIE galaxies with external shear at $z = 0.5$ in a 40 arcsec field, with background sources at $z = 1.15$, $2.0$, and $3.0$.
+- **Line art**: a lensing scene shown in the vector Line art render mode (§7).
 
 ## 10. Code structure
 

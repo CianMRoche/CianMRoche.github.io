@@ -77,15 +77,15 @@ const CAUS_COLOR = 'rgba(134, 239, 172, 0.95)';
 // is the order shown to the user. Colors are drawn on the (non-CSS-inverted) overlay,
 // so they render as authored in either site theme.
 const LINE_ART_PALETTES = {
-  ink:           { name: 'Ink',             bg: '#0a0a0a', imageFill: '#ebebeb', imageStroke: '#ffffff', critical: '#ffffff', caustic: '#9aa0a6', pointImage: '#ffffff' },
-  ink_inv:       { name: 'Ink (inv.)',      bg: '#ffffff', imageFill: '#141414', imageStroke: '#000000', critical: '#000000', caustic: '#9aa0a6', pointImage: '#000000' },
-  crimson:       { name: 'Crimson',         bg: '#ffffff', imageFill: '#e11d3c', imageStroke: '#8a0f22', critical: '#1a1a1a', caustic: '#f2a6b0', pointImage: '#c8142f' },
-  crimson_inv:   { name: 'Crimson (inv.)',  bg: '#c8102e', imageFill: '#ffffff', imageStroke: '#ffffff', critical: '#ffffff', caustic: '#141414', pointImage: '#ffffff' },
-  blueprint:     { name: 'Blueprint',       bg: '#0d2847', imageFill: '#cbe8ff', imageStroke: '#ffffff', critical: '#8fd0ff', caustic: '#b8ecc9', pointImage: '#eaf6ff' },
-  blueprint_inv: { name: 'Blueprint (inv.)',bg: '#dcecfb', imageFill: '#2461a6', imageStroke: '#123f74', critical: '#0f3a68', caustic: '#2f7d57', pointImage: '#2461a6' },
-  espresso:      { name: 'Espresso',        bg: '#f2d7b8', imageFill: '#3a1c05', imageStroke: '#1e0e00', critical: '#6b2e00', caustic: '#5b2036', pointImage: '#1e0e00' },
-  mint:          { name: 'Mint',            bg: '#ffffff', imageFill: '#22c9ad', imageStroke: '#0e8f79', critical: '#141414', caustic: '#8a9199', pointImage: '#0e8f79' },
-  noir:          { name: 'Noir',            bg: '#0a0a0a', imageFill: '#f5f5f5', imageStroke: '#ffffff', critical: '#ff5ca8', caustic: '#57c7ff', pointImage: '#ffffff' },
+  ink:           { name: 'Ink',             bg: '#0a0a0a', imageFill: '#ebebeb', imageStroke: '#ffffff', critical: '#ffffff', caustic: '#9aa0a6', pointImage: '#ffffff', lens: '#7bbfcc', source: '#fbbf24', hybrid: '#b09ac8' },
+  ink_inv:       { name: 'Ink (inv.)',      bg: '#ffffff', imageFill: '#141414', imageStroke: '#000000', critical: '#000000', caustic: '#9aa0a6', pointImage: '#000000', lens: '#4a7fc8', source: '#f59e0b', hybrid: '#9b7dd4' },
+  crimson:       { name: 'Crimson',         bg: '#ffffff', imageFill: '#e11d3c', imageStroke: '#8a0f22', critical: '#1a1a1a', caustic: '#f2a6b0', pointImage: '#c8142f', lens: '#4a7fc8', source: '#f59e0b', hybrid: '#9b7dd4' },
+  crimson_inv:   { name: 'Crimson (inv.)',  bg: '#c8102e', imageFill: '#ffffff', imageStroke: '#ffffff', critical: '#ffffff', caustic: '#141414', pointImage: '#ffffff', lens: '#7bbfcc', source: '#fbbf24', hybrid: '#e0b7f0' },
+  blueprint:     { name: 'Blueprint',       bg: '#0d2847', imageFill: '#cbe8ff', imageStroke: '#ffffff', critical: '#8fd0ff', caustic: '#b8ecc9', pointImage: '#eaf6ff', lens: '#7bbfcc', source: '#fbbf24', hybrid: '#b09ac8' },
+  blueprint_inv: { name: 'Blueprint (inv.)',bg: '#dcecfb', imageFill: '#2461a6', imageStroke: '#123f74', critical: '#0f3a68', caustic: '#2f7d57', pointImage: '#2461a6', lens: '#1f5fa8', source: '#b45309', hybrid: '#7c3aed' },
+  espresso:      { name: 'Espresso',        bg: '#f2d7b8', imageFill: '#8a4e1f', imageStroke: '#5c3316', critical: '#6b2e00', caustic: '#a3546d', pointImage: '#1e0e00', lens: '#1f5fa8', source: '#a24a00', hybrid: '#6d28d9' },
+  mint:          { name: 'Mint',            bg: '#ffffff', imageFill: '#22c9ad', imageStroke: '#0e8f79', critical: '#141414', caustic: '#8a9199', pointImage: '#0e8f79', lens: '#4a7fc8', source: '#f59e0b', hybrid: '#9b7dd4' },
+  noir:          { name: 'Noir',            bg: '#0a0a0a', imageFill: '#f5f5f5', imageStroke: '#ffffff', critical: '#ff5ca8', caustic: '#57c7ff', pointImage: '#ffffff', lens: '#7bbfcc', source: '#fbbf24', hybrid: '#b09ac8' },
 };
 // The customisable color roles (order = the picker layout + config serialisation order).
 const LINE_ART_ROLES = [
@@ -95,6 +95,9 @@ const LINE_ART_ROLES = [
   ['critical',    'Critical'],
   ['caustic',     'Caustic'],
   ['pointImage',  'Point img'],
+  ['lens',        'Lens'],
+  ['source',      'Source'],
+  ['hybrid',      'Hybrid'],
 ];
 // Copy just the color fields of a named palette (dropping the display name).
 function paletteColors(key) {
@@ -662,17 +665,30 @@ function saveConfig() {
 // the manifest is explicit; files live in /images/caustica-presets/.
 const PRESET_BASE = '/images/caustica-presets/';
 const PRESETS = [
-  { file: 'single-sie.yaml',    name: 'SIE lens + Point Source' },
-  { file: 'compound-lens.yaml', name: 'Double Lens + Uniform Source' },
-  { file: 'two-plane.yaml',     name: 'Two lens planes (multiplane)' },
+  { file: 'two-plane.yaml',     name: 'Multiplane' },
+  { file: 'compound-lens.yaml', name: 'Uniform Source' },
+  { file: 'single-sie.yaml',    name: 'Point Source' },
   { file: 'fermat-demo.yaml',   name: 'Fermat surface demo' },
   { file: 'zigzag.yaml',        name: 'ZigZag Lens' },
   { file: 'butterfly_caustic.yaml', name: 'Butterfly Caustic' },
-  { file: 'group.yaml',         name: 'Galaxy group (wide field)' },
+  { file: 'group.yaml',         name: 'Galaxy group' },
+  { file: 'line_art.yaml',      name: 'Line art' },
 ];
 
 // Name of the preset last loaded from the dropdown, so the box keeps showing it.
 let _selectedPreset = '';
+
+// YAML snapshot of the initial scene, captured at startup. The "Presets…" entry
+// reloads this so the page default is itself a selectable preset.
+let _defaultConfigYaml = '';
+
+// Reload the page-default scene (shown as the "Presets…" entry) via the normal
+// config path, so it fully resets view state, planes, and history like any preset.
+function loadDefaultScene() {
+  _selectedPreset = '';
+  if (_defaultConfigYaml) loadConfigFromYaml(_defaultConfigYaml);
+  else updatePresetSelect();
+}
 
 // Fetch a preset YAML by filename and load it through the normal config path.
 // A failure is retried once with the HTTP caches bypassed (cache:'reload' skips the
@@ -1170,6 +1186,7 @@ function init() {
   loadDemoState();
   setCosmology({ H0: state.H0, Omega_m: state.Omega_m });  // sync lens.js with state defaults
   invalidateDistances();
+  _defaultConfigYaml = configToYaml();  // snapshot the default scene for the "Presets…" entry
   attachHandlers();
   renderPlaneCard();
   renderSidebar();
@@ -1511,7 +1528,7 @@ function attachHandlers() {
     e.target.blur();
     const file = e.target.value;
     if (file) loadPreset(file);
-    else updatePresetSelect(); // placeholder re-chosen: restore the current label
+    else loadDefaultScene(); // "Presets…" chosen: reload the page-default scene
   });
 
   // Mobile overflow menu (⋯): a dropdown for the topbar items that don't fit on
@@ -3341,14 +3358,57 @@ function renderViewPanel() {
     <div class="sl-panel">
 
       <label class="sl-hide-all-row" title="Hide every overlay and on-canvas control (markers, curves, legend, ruler, scale bar, colorbar, tool buttons) for a clean plot until switched back off">
+        <span style="flex:1">Hide all overlays</span>
         <input type="checkbox" id="sl-hide-overlays" ${state.hideOverlays?'checked':''}>
-        Hide all overlays
       </label>
 
-      <div class="sl-hybrid-section" style="padding:3px 0 5px">
+      <div class="sl-hybrid-section">
+        <div class="sl-view-hdr">
+          <span class="sl-panel-title" style="flex:1">Display</span>
+          ${infoSection('sl-display-info', `
+            <b>FOV</b>: field of view (arcsec).<br>
+            <b>z<sub>s</sub> ref</b>: source redshift used by the quantity maps and critical curves; <b>Auto</b> tracks the highest source plane.<br><br>
+            <b>Positions</b> marks each object, <b>Colorbar</b> applies to quantity maps only. <b>Critical curves</b> / <b>Caustics</b> also toggle with <b>C</b> and the <b>Ruler</b> (distances &amp; angles) with <b>L</b>. <b>Time delays</b> label point-source image arrival times and need a point source behind a lens.`)}
+        </div>
+        <div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
+          <div class="sl-global-input">
+            <label>FOV (″)</label>
+            <input type="number" id="sl-fov" min="0.5" max="300" step="0.5" value="${state.fov}">
+            <span class="sl-unit">"</span>
+          </div>
+          <div class="sl-global-input">
+            <label>z<sub>s</sub> ref</label>
+            <select id="sl-zs-mode" style="flex:0 1 auto;min-width:0">
+              <option value="auto"   ${auto?'selected':''}>Auto</option>
+              <option value="custom" ${auto?'':'selected'}>Custom</option>
+            </select>
+            <input type="number" id="sl-crit-zs-gen" min="0.1" max="15" step="0.1" value="${ezs.toFixed(2)}" ${auto?'disabled':''}>
+          </div>
+          <div class="sl-checkbox-row">
+            <label><input type="checkbox" id="sl-show-markers" ${state.showMarkers?'checked':''}> Positions</label>
+            <label><input type="checkbox" id="sl-show-legend"  ${state.showLegend ?'checked':''}> Legend</label>
+          </div>
+          <div class="sl-checkbox-row">
+            <label><input type="checkbox" id="sl-show-scalebar" ${state.showScaleBar?'checked':''}> Scale bar</label>
+            <label title="${state.vizMode===0?'The lensed image has no colorbar; pick a quantity map to use one':''}"><input type="checkbox" id="sl-show-colorbar" ${state.showColorbar?'checked':''} ${state.vizMode===0?'disabled':''}> Colorbar</label>
+          </div>
+          <div class="sl-checkbox-row">
+            <label><input type="checkbox" id="sl-show-crit" ${state.showCritCurves?'checked':''}> Critical curves</label>
+            <label><input type="checkbox" id="sl-show-caus" ${state.showCaustics   ?'checked':''}> Caustics</label>
+          </div>
+          <div class="sl-checkbox-row">
+            <label title="Measure distances and angles on the image (key L also enables the ruler)"><input type="checkbox" id="sl-show-ruler" ${state.showRuler?'checked':''}> Ruler</label>
+            <label class="${tdAvail?'':'sl-label-disabled'}" title="${tdTitle}"><input type="checkbox" id="sl-show-td" ${state.showTimeDelays?'checked':''} ${tdAvail?'':'disabled'}> Time delays</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="sl-hybrid-section" style="padding:5px 0">
         <div class="sl-view-hdr" style="padding:0">
           <span class="sl-panel-title" style="flex:1">Line art</span>
-          <label style="display:flex;align-items:center;cursor:pointer;margin:0" title="Render the scene as flat vector line-art (lensed-image outlines, critical curves, caustics) in a minimal palette. Only uniform-disc and point sources produce clean lines.">
+          ${infoSection('sl-lineart-info', `
+            Flat vector line-art of the lensing structure. Only <b>uniform-disc</b> and <b>point</b> sources are drawn; other source types are ignored. The palette below sets the line-art colors; all other plot elements follow the page's light / dark theme (<b>D</b>).`)}
+          <label style="display:flex;align-items:center;cursor:pointer;margin:0 0 0 4px" title="Vector line-art render mode">
             <input type="checkbox" id="sl-lineart" ${state.lineArt?'checked':''} style="margin:0">
           </label>
         </div>
@@ -3369,46 +3429,7 @@ function renderViewPanel() {
             ${LINE_ART_ROLES.map(([role, label]) =>
               `<label class="sl-la-color"><span>${label}</span><input type="color" data-la-color="${role}" value="${lineArtPalette()[role]}"></label>`).join('')}
           </div>
-          <p class="sl-perf-note" style="margin:6px 0 0">Vector line-art of the lensing structure. Grid density follows the critical-curve setting (Settings). Gaussian / exponential / pasted sources are ignored in this mode.</p>
         </div>` : '' }
-      </div>
-
-      <div class="sl-hybrid-section">
-        <div class="sl-view-hdr">
-          <span class="sl-panel-title" style="flex:1">Display</span>
-        </div>
-        <div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
-          <div class="sl-global-input">
-            <label>FOV (″)</label>
-            <input type="number" id="sl-fov" min="0.5" max="300" step="0.5" value="${state.fov}">
-            <span class="sl-unit">"</span>
-          </div>
-          <div class="sl-global-input">
-            <label>z<sub>s</sub> ref</label>
-            <select id="sl-zs-mode" style="flex:0 1 auto;min-width:0">
-              <option value="auto"   ${auto?'selected':''}>Auto</option>
-              <option value="custom" ${auto?'':'selected'}>Custom</option>
-            </select>
-            <input type="number" id="sl-crit-zs-gen" min="0.1" max="15" step="0.1" value="${ezs.toFixed(2)}" ${auto?'disabled':''}>
-          </div>
-          <p class="sl-perf-note" style="margin:2px 0 8px">The source redshift referred to by the lensing quantity maps and critical curves. Auto tracks the highest source plane.</p>
-          <div class="sl-checkbox-row">
-            <label><input type="checkbox" id="sl-show-markers" ${state.showMarkers?'checked':''}> Positions</label>
-            <label><input type="checkbox" id="sl-show-legend"  ${state.showLegend ?'checked':''}> Legend</label>
-          </div>
-          <div class="sl-checkbox-row">
-            <label><input type="checkbox" id="sl-show-scalebar" ${state.showScaleBar?'checked':''}> Scale bar</label>
-            <label title="${state.vizMode===0?'The lensed image has no colorbar; pick a quantity map to use one':''}"><input type="checkbox" id="sl-show-colorbar" ${state.showColorbar?'checked':''} ${state.vizMode===0?'disabled':''}> Colorbar</label>
-          </div>
-          <div class="sl-checkbox-row">
-            <label><input type="checkbox" id="sl-show-crit" ${state.showCritCurves?'checked':''}> Critical curves</label>
-            <label><input type="checkbox" id="sl-show-caus" ${state.showCaustics   ?'checked':''}> Caustics</label>
-          </div>
-          <div class="sl-checkbox-row">
-            <label title="Measure distances and angles on the image (key L also enables the ruler)"><input type="checkbox" id="sl-show-ruler" ${state.showRuler?'checked':''}> Ruler</label>
-            <label class="${tdAvail?'':'sl-label-disabled'}" title="${tdTitle}"><input type="checkbox" id="sl-show-td" ${state.showTimeDelays?'checked':''} ${tdAvail?'':'disabled'}> Time delays</label>
-          </div>
-        </div>
       </div>
 
       ${vizModeHasScale(state.vizMode) ? `
@@ -4581,7 +4602,8 @@ function drawOverlay() {
     for (const plane of state.planes) {
       for (const obj of plane.objects) {
         if (!obj.showShape || obj.hidden) continue;
-        const col = typeColorHex(obj.type);
+        // Follow the marker color (palette-driven in line art, hybrid-aware).
+        const col = _pal ? _pal[obj.hybridId ? 'hybrid' : obj.type] : typeColorHex(obj.type);
         const p = obj.params;
 
         // Constant deflection: single-headed arrow showing direction and amplitude.
@@ -4703,7 +4725,7 @@ function drawOverlay() {
           drawnHybrids.add(obj.hybridId);
         }
         const markerType = obj.hybridId ? 'hybrid' : obj.type;
-        const col = typeColorHex(markerType);
+        const col = _pal ? _pal[markerType] : typeColorHex(markerType);
         const [px, py] = toPixel(obj.cx, obj.cy);
         const sel = plane.id === state.selectedPlaneId &&
           (obj.id === state.selectedObjId ||
@@ -4779,9 +4801,9 @@ function drawOverlay() {
     const hasLensObj   = state.planes.some(p => p.objects.some(o => o.type === 'lens'   && !o.hybridId));
     const hasSrcObj    = state.planes.some(p => p.objects.some(o => o.type === 'source' && !o.hybridId));
     const hasHybridObj = state.planes.some(p => p.objects.some(o => o.hybridId));
-    if (hasLensObj)   legendItems.push({ color: typeColorHex('lens'),   label: 'Lens',   isDot: true, markerType: 'lens'   });
-    if (hasSrcObj)    legendItems.push({ color: typeColorHex('source'), label: 'Source', isDot: true, markerType: 'source' });
-    if (hasHybridObj) legendItems.push({ color: typeColorHex('hybrid'), label: 'Hybrid', isDot: true, markerType: 'hybrid' });
+    if (hasLensObj)   legendItems.push({ color: _pal ? _pal.lens   : typeColorHex('lens'),   label: 'Lens',   isDot: true, markerType: 'lens'   });
+    if (hasSrcObj)    legendItems.push({ color: _pal ? _pal.source : typeColorHex('source'), label: 'Source', isDot: true, markerType: 'source' });
+    if (hasHybridObj) legendItems.push({ color: _pal ? _pal.hybrid : typeColorHex('hybrid'), label: 'Hybrid', isDot: true, markerType: 'hybrid' });
   }
   // Dashed-ellipse "show shape" outlines get a legend entry so the dotted line reads.
   // Only the ellipse-drawing models qualify; the external-field models (shear /
