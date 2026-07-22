@@ -83,7 +83,7 @@ const LINE_ART_PALETTES = {
   crimson_inv:   { name: 'Crimson (inv.)',  bg: '#c8102e', imageFill: '#ffffff', imageStroke: '#ffffff', critical: '#ffffff', caustic: '#141414', pointImage: '#ffffff', lens: '#7bbfcc', source: '#fbbf24', hybrid: '#e0b7f0' },
   blueprint:     { name: 'Blueprint',       bg: '#0d2847', imageFill: '#cbe8ff', imageStroke: '#ffffff', critical: '#8fd0ff', caustic: '#b8ecc9', pointImage: '#eaf6ff', lens: '#7bbfcc', source: '#fbbf24', hybrid: '#b09ac8' },
   blueprint_inv: { name: 'Blueprint (inv.)',bg: '#dcecfb', imageFill: '#2461a6', imageStroke: '#123f74', critical: '#0f3a68', caustic: '#2f7d57', pointImage: '#2461a6', lens: '#1f5fa8', source: '#b45309', hybrid: '#7c3aed' },
-  espresso:      { name: 'Espresso',        bg: '#f2d7b8', imageFill: '#8a4e1f', imageStroke: '#5c3316', critical: '#6b2e00', caustic: '#a3546d', pointImage: '#1e0e00', lens: '#1f5fa8', source: '#a24a00', hybrid: '#6d28d9' },
+  espresso:      { name: 'Espresso',        bg: '#f2d7b8', imageFill: '#743f16', imageStroke: '#5c3316', critical: '#6b2e00', caustic: '#a3546d', pointImage: '#1e0e00', lens: '#1f5fa8', source: '#a24a00', hybrid: '#6d28d9' },
   mint:          { name: 'Mint',            bg: '#ffffff', imageFill: '#22c9ad', imageStroke: '#0e8f79', critical: '#141414', caustic: '#8a9199', pointImage: '#0e8f79', lens: '#4a7fc8', source: '#f59e0b', hybrid: '#9b7dd4' },
   noir:          { name: 'Noir',            bg: '#0a0a0a', imageFill: '#f5f5f5', imageStroke: '#ffffff', critical: '#ff5ca8', caustic: '#57c7ff', pointImage: '#ffffff', lens: '#7bbfcc', source: '#fbbf24', hybrid: '#b09ac8' },
 };
