@@ -44,10 +44,9 @@ layout: compress
       .home-page .greedy-nav { background: transparent !important; }
 
       /* ---- fixed background layers ---- */
-      /* orientation/composition is baked into each background file (the loader
-         applies no transforms); art fades in once the random pick has loaded */
-      .home-page .hero-art { position: fixed; inset: 0; z-index: 0; pointer-events: none; will-change: transform; opacity: 0; transition: opacity 0.6s ease; }
-      .home-page .hero-art.is-loaded { opacity: 1; }
+      /* mirror lives here (once) so the big arc sits on the right; the JS keeps
+         the same single scaleX(-1) and only adds the zoom */
+      .home-page .hero-art { position: fixed; inset: 0; z-index: 0; pointer-events: none; will-change: transform; transform: scaleX(-1); }
       .home-page .hero-art svg {
         width: 100%; height: 100%; color: var(--accent);
         opacity: var(--art-opacity);
@@ -164,7 +163,7 @@ layout: compress
     {% include browser-upgrade.html %}
     {% include masthead.html %}
 
-    <div class="hero-art" id="heroArt"><!-- a random background is loaded here on each page load --></div>
+    <div class="hero-art" id="heroArt">{% include hero-caustic.html %}</div>
     <div class="scrim-main" id="scrimMain" aria-hidden="true"></div>
     <div class="scrim-top" id="scrimTop" aria-hidden="true"></div>
 
@@ -173,37 +172,6 @@ layout: compress
     </main>
 
     {% include scripts.html %}
-
-    <!-- list of background SVGs, auto-generated from _pages-adjacent images/backgrounds/ at build -->
-    <script>
-      window.BG_ARTS = [{% for f in site.static_files %}{% if f.path contains '/images/backgrounds/' and f.extname == '.svg' %}"{{ f.path }}",{% endif %}{% endfor %}];
-    </script>
-    <!-- pick a random background on each page load; strip its exported bg + recolor to the accent -->
-    <script>
-      (function () {
-        var host = document.getElementById('heroArt');
-        var arts = (window.BG_ARTS || []).filter(Boolean);
-        if (!host) return;
-        if (!arts.length) { host.classList.add('is-loaded'); return; }
-        var url = arts[Math.floor(Math.random() * arts.length)];
-        fetch(url).then(function (r) { return r.text(); }).then(function (txt) {
-          var svg = new DOMParser().parseFromString(txt, 'image/svg+xml').querySelector('svg');
-          if (!svg || svg.tagName.toLowerCase() !== 'svg') { host.classList.add('is-loaded'); return; }
-          svg.querySelectorAll('rect').forEach(function (el) { el.parentNode.removeChild(el); });      // drop the exported opaque background
-          svg.querySelectorAll('[fill],[stroke]').forEach(function (el) {                              // recolor curves to the theme accent
-            ['fill', 'stroke'].forEach(function (a) {
-              var v = el.getAttribute(a);
-              if (v && v !== 'none' && v.toLowerCase() !== 'currentcolor') el.setAttribute(a, 'currentColor');
-            });
-          });
-          svg.setAttribute('preserveAspectRatio', 'xMidYMid slice');                                   // cover the viewport
-          svg.removeAttribute('width'); svg.removeAttribute('height');
-          host.textContent = '';
-          host.appendChild(document.importNode(svg, true));
-          requestAnimationFrame(function () { host.classList.add('is-loaded'); });
-        }).catch(function () { host.classList.add('is-loaded'); });
-      })();
-    </script>
 
     <script>
       (function () {
@@ -224,12 +192,12 @@ layout: compress
           var vh = window.innerHeight || 1;
           // Background rushes up faster than the page (1.25x); foreground drifts up
           // slower (0.7x) and fades. Reduced-motion: leave everything at rest.
-          if (reduce) { art.style.transform = ''; return; }
+          if (reduce) { art.style.transform = 'scaleX(-1)'; return; }
           // Background is a continuous fixed backdrop for the whole page; a gentle
           // zoom gives depth without ever leaving a gap (translating it would).
           var maxS = Math.max(1, document.documentElement.scrollHeight - vh);
           var p = clamp01(s / maxS);
-          art.style.transform = 'scale(' + (1 + p * 0.06).toFixed(4) + ')';
+          art.style.transform = 'scaleX(-1) scale(' + (1 + p * 0.06).toFixed(4) + ')';
           // Foreground drifts up slower than the scroll and fades as the hero
           // hands off to the panel; scrims stay so the backdrop reads as one scene.
           fg.style.transform  = 'translate3d(0,' + (s * 0.28).toFixed(1) + 'px,0)';
