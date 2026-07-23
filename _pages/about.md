@@ -30,25 +30,4 @@ redirect_from:
     </nav>
   </div>
   <a class="credit" href="/assets/caustica/">Background made with <b>Caustica</b> <span class="arr">&#8599;</span></a>
-  <div class="scroll-cue" aria-hidden="true">
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-  </div>
-</section>
-
-<section class="home-below" id="about">
-  <div class="below-inner">
-    <div>
-      <p class="section-label">About</p>
-      <p class="about-text">I'm a PhD candidate at the MIT Kavli Institute for Astrophysics and Space Research. I work on understanding the particle nature of dark matter using strong gravitational lensing and galactic dynamics, and on bridging the gap between cosmological simulations and real observations.</p>
-    </div>
-    <div>
-      <p class="section-label">Get in touch</p>
-      <div class="contact-links">
-        <a href="mailto:roche@mit.edu">roche@mit.edu</a>
-        <a href="https://github.com/CianMRoche" target="_blank" rel="noopener">GitHub</a>
-        <a href="https://orcid.org/0000-0002-3400-6991" target="_blank" rel="noopener">ORCID</a>
-        <a href="https://space.mit.edu/people/cian-roche/" target="_blank" rel="noopener">MIT page</a>
-      </div>
-    </div>
-  </div>
 </section>

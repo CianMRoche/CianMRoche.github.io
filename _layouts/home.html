@@ -11,7 +11,7 @@ layout: compress
     {% include head/custom.html %}
     <style>
       /* =========================================================================
-         Homepage: full-bleed caustic hero + a scroll-in About/contact panel.
+         Homepage: a single full-bleed caustic hero screen.
          Palette is exactly three colours: background, ink, one blue accent.
          Greys are ink at reduced alpha (color-mix), not a fourth colour.
          Scoped to body.home-page so no other page is affected.
@@ -67,10 +67,9 @@ layout: compress
 
       .home-page .home-main { position: relative; z-index: 5; }
 
-      /* ---- hero foreground (first screen) ---- */
+      /* ---- hero foreground (single screen) ---- */
       .home-page .hero-fg {
         position: relative; min-height: 100vh; display: flex; align-items: flex-end;
-        will-change: transform, opacity;
       }
       .home-page .hero-inner { max-width: 1180px; margin: 0 auto; padding: 0 2rem 8vh; width: 100%; }
       .home-page .avatar {
@@ -96,7 +95,9 @@ layout: compress
       }
       .home-page .summary .kw { color: var(--accent); font-weight: 600; }
       .home-page .links { display: flex; flex-wrap: wrap; gap: 1.6rem; margin: 1.8rem 0 0; padding: 0; list-style: none; }
-      .home-page .links a {
+      /* :visited pinned to --ink so clicked links don't turn the theme's purple */
+      .home-page .links a,
+      .home-page .links a:visited {
         color: var(--ink); text-decoration: none; font-size: 0.98rem; font-weight: 500;
         display: inline-flex; align-items: center; gap: 0.45rem;
       }
@@ -119,41 +120,12 @@ layout: compress
       .home-page .credit .arr { color: var(--accent); }
       .home-page .credit:hover { color: var(--ink); border-color: var(--accent); }
 
-      /* scroll cue */
-      .home-page .scroll-cue {
-        position: absolute; left: 50%; bottom: 1.6rem; transform: translateX(-50%);
-        color: var(--faint); z-index: 2; animation: cue-bounce 1.9s ease-in-out infinite;
-      }
-      @keyframes cue-bounce { 0%,100% { transform: translate(-50%, 0); } 50% { transform: translate(-50%, 6px); } }
-
-      /* ---- About / contact panel (scroll-in) ---- */
-      /* transparent so the fixed caustic backdrop shows through here too */
-      .home-page .home-below {
-        position: relative; z-index: 5; background: transparent;
-        min-height: 100vh; display: flex; align-items: center;
-        text-shadow: 0 1px 14px rgba(var(--scrim), 0.55);
-      }
-      .home-page .below-inner { max-width: 1180px; margin: 0 auto; padding: 7rem 2rem; width: 100%; display: grid; gap: 3.2rem; }
-      .home-page .section-label {
-        font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.16em;
-        color: var(--accent); font-weight: 700; margin: 0 0 1rem;
-      }
-      .home-page .about-text { margin: 0; font-size: clamp(1.1rem, 1.7vw, 1.4rem); line-height: 1.6; color: var(--ink); font-weight: 400; max-width: 46rem; }
-      .home-page .about-text a { color: var(--accent); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); }
-      .home-page .contact-links { display: flex; flex-wrap: wrap; gap: 1.5rem; }
-      /* opaque muted (not the alpha-based --muted) so visited links, e.g. the MIT
-         page, don't render brighter than the others under the :visited privacy rules */
-      .home-page .contact-links a,
-      .home-page .contact-links a:visited { color: color-mix(in srgb, var(--ink) 64%, var(--bg)); text-decoration: none; font-size: 1.02rem; transition: color 0.15s; }
-      .home-page .contact-links a:hover { color: var(--accent); }
-
       @media (max-width: 640px) {
         .home-page .credit { display: none; }
         .home-page .avatar { width: 132px; height: 132px; }
       }
       @media (prefers-reduced-motion: reduce) {
         .home-page * { transition: none !important; }
-        .home-page .scroll-cue { animation: none; }
       }
     </style>
   </head>
@@ -172,45 +144,6 @@ layout: compress
     </main>
 
     {% include scripts.html %}
-
-    <script>
-      (function () {
-        var art  = document.getElementById('heroArt');
-        var fg   = document.getElementById('heroFg');
-        var sm   = document.getElementById('scrimMain');
-        var st   = document.getElementById('scrimTop');
-        var cue  = document.querySelector('.home-page .scroll-cue');
-        if (!art || !fg) return;
-        var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        var ticking = false;
-
-        function clamp01(x) { return x < 0 ? 0 : (x > 1 ? 1 : x); }
-
-        function apply() {
-          ticking = false;
-          var s = window.pageYOffset || document.documentElement.scrollTop || 0;
-          var vh = window.innerHeight || 1;
-          /* Background rushes up faster than the page (1.25x); foreground drifts up */
-          /* slower (0.7x) and fades. Reduced-motion: leave everything at rest. */
-          if (reduce) { art.style.transform = 'scaleX(-1)'; return; }
-          /* Background is a continuous fixed backdrop for the whole page; a gentle */
-          /* zoom gives depth without ever leaving a gap (translating it would). */
-          var maxS = Math.max(1, document.documentElement.scrollHeight - vh);
-          var p = clamp01(s / maxS);
-          art.style.transform = 'scaleX(-1) scale(' + (1 + p * 0.06).toFixed(4) + ')';
-          /* Foreground drifts up slower than the scroll and fades as the hero */
-          /* hands off to the panel; scrims stay so the backdrop reads as one scene. */
-          fg.style.transform  = 'translate3d(0,' + (s * 0.28).toFixed(1) + 'px,0)';
-          fg.style.opacity    = clamp01(1 - s / (vh * 0.62));
-          if (cue) cue.style.opacity = clamp01(1 - s / (vh * 0.25));
-        }
-        function onScroll() { if (!ticking) { ticking = true; requestAnimationFrame(apply); } }
-
-        window.addEventListener('scroll', onScroll, { passive: true });
-        window.addEventListener('resize', apply);
-        apply();
-      })();
-    </script>
 
   </body>
 </html>
