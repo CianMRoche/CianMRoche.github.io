@@ -44,9 +44,14 @@ layout: compress
       .home-page .greedy-nav { background: transparent !important; }
 
       /* ---- fixed background layers ---- */
-      /* mirror lives here (once) so the big arc sits on the right; the JS keeps
-         the same single scaleX(-1) and only adds the zoom */
-      .home-page .hero-art { position: fixed; inset: 0; z-index: 0; pointer-events: none; will-change: transform; transform: scaleX(-1); }
+      /* No transform: each background renders exactly as authored (orientation is
+         baked into the file). Starts transparent and fades in once the
+         randomly-chosen SVG has been fetched and themed. */
+      .home-page .hero-art {
+        position: fixed; inset: 0; z-index: 0; pointer-events: none;
+        opacity: 0; transition: opacity 0.55s ease;
+      }
+      .home-page .hero-art.is-loaded { opacity: 1; }
       .home-page .hero-art svg {
         width: 100%; height: 100%; color: var(--accent);
         opacity: var(--art-opacity);
@@ -135,9 +140,84 @@ layout: compress
     {% include browser-upgrade.html %}
     {% include masthead.html %}
 
-    <div class="hero-art" id="heroArt">{% include hero-caustic.html %}</div>
+    <!-- Background SVG: one file, chosen at random from
+         images/backgrounds/homepage_*.svg, is fetched and injected here. -->
+    <div class="hero-art" id="heroArt"></div>
     <div class="scrim-main" id="scrimMain" aria-hidden="true"></div>
     <div class="scrim-top" id="scrimTop" aria-hidden="true"></div>
+
+    <!-- Kick the background fetch off here, before the theme's blocking JS
+         (scripts.html) below, so it starts as early as possible. -->
+    <script>
+      (function () {
+        var host = document.getElementById('heroArt');
+        if (!host) return;
+        /* BGS is built at BUILD time by scanning the site's static files, so
+           dropping a new images/backgrounds/homepage_N.svg into the repo is all
+           that's needed - no edit here. One is picked at random per load. */
+        var BGS = [
+          {%- for f in site.static_files -%}
+            {%- if f.extname == '.svg' and f.path contains '/images/backgrounds/homepage_' -%}
+              "{{ f.path }}",
+            {%- endif -%}
+          {%- endfor -%}
+        ];
+        if (!BGS.length) return;
+        var url = BGS[Math.floor(Math.random() * BGS.length)];
+
+        fetch(url).then(function (r) { return r.text(); }).then(function (txt) {
+          host.innerHTML = txt;
+          var svg = host.querySelector('svg');
+          if (!svg) return;
+          themeSvg(svg);
+          svg.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+          svg.setAttribute('aria-hidden', 'true');
+          host.classList.add('is-loaded');   /* fade in only once themed */
+        }).catch(function () {});
+
+        /* Normalise an uploaded SVG to the site's look:
+           1. drop the full-canvas background rect so the page background shows
+              through (homepage_0 has none; the others bake in a solid rect), then
+           2. repaint every remaining colour to currentColor, which the CSS
+              `color: var(--accent)` resolves to the theme accent in light + dark.
+           'none' is preserved so unfilled / line-art shapes stay unfilled. */
+        function themeSvg(svg) {
+          var vb = (svg.getAttribute('viewBox') || '').split(/[\s,]+/);
+          var W = vb.length === 4 ? parseFloat(vb[2]) : parseFloat(svg.getAttribute('width'));
+          var H = vb.length === 4 ? parseFloat(vb[3]) : parseFloat(svg.getAttribute('height'));
+          var rects = svg.querySelectorAll('rect');
+          for (var i = 0; i < rects.length; i++) {
+            var r = rects[i];
+            var w = parseFloat(r.getAttribute('width'));
+            var h = parseFloat(r.getAttribute('height'));
+            var x = parseFloat(r.getAttribute('x')) || 0;
+            var y = parseFloat(r.getAttribute('y')) || 0;
+            if (W && H && w >= W - 1 && h >= H - 1 && x <= 1 && y <= 1) {
+              r.parentNode.removeChild(r);
+            }
+          }
+          var nodes = svg.querySelectorAll('*');
+          for (var j = 0; j < nodes.length; j++) recolour(nodes[j]);
+        }
+
+        function recolour(el) {
+          ['fill', 'stroke'].forEach(function (a) {
+            var v = el.getAttribute(a);
+            if (v && v !== 'none' && v !== 'currentColor') el.setAttribute(a, 'currentColor');
+          });
+          var sc = el.getAttribute('stop-color');
+          if (sc && sc !== 'currentColor') el.setAttribute('stop-color', 'currentColor');
+          var st = el.getAttribute('style');
+          if (st) {
+            var nst = st.replace(/(fill|stroke)\s*:\s*([^;]+)/gi, function (m, prop, val) {
+              val = val.trim().toLowerCase();
+              return (val === 'none' || val === 'currentcolor') ? m : prop + ':currentColor';
+            });
+            if (nst !== st) el.setAttribute('style', nst);
+          }
+        }
+      })();
+    </script>
 
     <main class="home-main">
       {{ content }}
