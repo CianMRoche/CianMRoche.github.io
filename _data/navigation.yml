@@ -4,8 +4,11 @@ main:
     url: /research/
 
   - title: "Side Projects"
-    url: /side_projects/    
-    
+    url: /side_projects/
+
+  - title: "Demos"
+    url: /demos/
+
   - title: "Community"
     url: /community/
     

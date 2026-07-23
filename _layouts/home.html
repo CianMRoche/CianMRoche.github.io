@@ -1,0 +1,149 @@
+---
+layout: compress
+---
+
+{% include base_path %}
+
+<!doctype html>
+<html lang="{{ site.locale | slice: 0,2 }}" class="no-js">
+  <head>
+    {% include head.html %}
+    {% include head/custom.html %}
+    <style>
+      /* =========================================================================
+         Homepage: full-bleed caustic hero.
+         Palette is exactly three colours: background, ink, and one blue accent.
+         Every grey is ink at reduced alpha (via color-mix), not a fourth colour.
+         Scoped to body.home-page so no other page is affected.
+         ========================================================================= */
+      .home-page {
+        --bg: #0d1117; --ink: #e6edf3; --accent: #93c5fd;
+        --muted: color-mix(in srgb, var(--ink) 64%, transparent);
+        --faint: color-mix(in srgb, var(--ink) 42%, transparent);
+        --hair:  color-mix(in srgb, var(--ink) 18%, transparent);
+        --art-opacity: 0.92;
+        --scrim: 13, 17, 23;
+        margin: 0; padding: 0;
+        background: var(--bg); color: var(--ink);
+        overflow-x: hidden;
+      }
+      html[data-theme="light"] .home-page {
+        --bg: #ffffff; --ink: #1f2933; --accent: #4a7ec5;
+        --muted: color-mix(in srgb, var(--ink) 60%, transparent);
+        --faint: color-mix(in srgb, var(--ink) 40%, transparent);
+        --hair:  color-mix(in srgb, var(--ink) 14%, transparent);
+        --art-opacity: 0.82;
+        --scrim: 255, 255, 255;
+      }
+
+      /* nav overlaid on the art (the bleed runs behind it) */
+      .home-page .masthead {
+        position: absolute; top: 0; left: 0; right: 0; z-index: 20;
+        background: transparent !important; border-bottom: none !important;
+      }
+      /* the greedy-nav itself paints a solid background box; clear it so the art
+         shows through the nav instead of a rectangle being cut out of the bleed */
+      .home-page .greedy-nav { background: transparent !important; }
+
+      .home-page .home-stage { position: relative; min-height: 100vh; overflow: hidden; }
+
+      .home-page .hero-art { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+      .home-page .hero-art svg {
+        width: 100%; height: 100%; color: var(--accent);
+        opacity: var(--art-opacity); transform: scaleX(-1);
+      }
+
+      /* legibility scrims: strong toward lower-left (text) and top (nav), clear top-right (art) */
+      .home-page .scrim-main {
+        position: absolute; inset: 0; z-index: 1; pointer-events: none;
+        background: linear-gradient(to top right,
+          rgba(var(--scrim), 0.96) 0%, rgba(var(--scrim), 0.72) 26%,
+          rgba(var(--scrim), 0.18) 52%, rgba(var(--scrim), 0) 70%);
+      }
+      /* soft gradient so the nav stays legible where the art is bold up top */
+      .home-page .scrim-top {
+        position: absolute; top: 0; left: 0; right: 0; height: 130px; z-index: 1; pointer-events: none;
+        background: linear-gradient(to bottom, rgba(var(--scrim), 0.85), rgba(var(--scrim), 0));
+      }
+
+      /* overlaid identity, lower-left */
+      .home-page .hero-content { position: absolute; left: 0; right: 0; bottom: 8vh; z-index: 2; }
+      .home-page .hero-inner { max-width: 1180px; margin: 0 auto; padding: 0 2rem; }
+      .home-page .avatar {
+        width: 175px; height: 175px; border-radius: 50%; object-fit: cover; display: block;
+        margin-bottom: 1.15rem; border: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.22);
+      }
+      .home-page .eyebrow {
+        margin: 0 0 0.9rem; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.16em;
+        text-transform: uppercase; color: var(--accent);
+      }
+      .home-page .name {
+        margin: 0; font-size: clamp(2.6rem, 6.5vw, 4.6rem); font-weight: 800;
+        letter-spacing: -0.03em; line-height: 0.98; color: var(--ink);
+      }
+      .home-page .name .pron {
+        display: block; font-size: 0.9rem; font-weight: 500; letter-spacing: 0;
+        color: var(--faint); margin-top: 0.6rem;
+      }
+      .home-page .summary {
+        margin: 1.2rem 0 0; font-size: clamp(1rem, 1.5vw, 1.2rem);
+        color: var(--muted); max-width: 34rem; line-height: 1.55;
+      }
+      .home-page .summary .kw { color: var(--accent); font-weight: 600; }
+      .home-page .links { display: flex; flex-wrap: wrap; gap: 1.6rem; margin: 1.8rem 0 0; padding: 0; list-style: none; }
+      .home-page .links a {
+        color: var(--ink); text-decoration: none; font-size: 0.98rem; font-weight: 500;
+        display: inline-flex; align-items: center; gap: 0.45rem;
+      }
+      .home-page .links a svg { width: 17px; height: 17px; flex-shrink: 0; color: var(--faint); transition: color 0.15s; }
+      .home-page .links a .arr { color: var(--faint); transition: transform 0.18s, color 0.15s; }
+      .home-page .links a:hover { color: var(--accent); }
+      .home-page .links a:hover svg { color: var(--accent); }
+      .home-page .links a:hover .arr { color: var(--accent); transform: translateX(3px); }
+
+      /* Caustica credit, lower-right */
+      .home-page .credit {
+        position: absolute; right: 2rem; bottom: 8vh; z-index: 2;
+        display: inline-flex; align-items: center; gap: 0.45rem;
+        padding: 0.5rem 0.85rem; border-radius: 999px;
+        background: color-mix(in srgb, var(--bg) 55%, transparent);
+        backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px);
+        border: 1px solid var(--hair); color: var(--muted); text-decoration: none; font-size: 0.82rem;
+        transition: color 0.15s, border-color 0.15s;
+      }
+      .home-page .credit b { color: var(--ink); font-weight: 600; }
+      .home-page .credit .arr { color: var(--accent); }
+      .home-page .credit:hover { color: var(--ink); border-color: var(--accent); }
+
+      @media (max-width: 640px) {
+        .home-page .credit { display: none; }
+        .home-page .hero-content { bottom: 6vh; }
+      }
+      @media (prefers-reduced-motion: reduce) { .home-page * { transition: none !important; } }
+    </style>
+  </head>
+
+  <body class="home-page">
+
+    {% include browser-upgrade.html %}
+    {% include masthead.html %}
+
+    <main class="home-stage">
+      <div class="hero-art">{% include hero-caustic.html %}</div>
+      <div class="scrim-main" aria-hidden="true"></div>
+      <div class="scrim-top" aria-hidden="true"></div>
+
+      <section class="hero-content">
+        <div class="hero-inner">
+          {{ content }}
+        </div>
+      </section>
+
+      <a class="credit" href="{{ base_path }}/assets/caustica/">Background made with <b>Caustica</b> <span class="arr">&#8599;</span></a>
+    </main>
+
+    {% include scripts.html %}
+
+  </body>
+</html>
