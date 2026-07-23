@@ -20,7 +20,9 @@
       "Bash(zsh /private/tmp/claude-501/-Users-roche-Documents-Projects-CianMRoche-github-io/d0596272-3b81-4543-b5cc-9b1945015478/scratchpad/shoot8.sh)",
       "Bash(xargs kill)",
       "Bash(sort -t: -k2)",
-      "Bash(grep -n \"const state = \\\\|let state = \\\\|state = {\\\\|...CONFIG_DEFAULTS\\\\|Object.assign\" main.js)"
+      "Bash(grep -n \"const state = \\\\|let state = \\\\|state = {\\\\|...CONFIG_DEFAULTS\\\\|Object.assign\" main.js)",
+      "Bash('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' --headless=new --disable-gpu --hide-scrollbars --virtual-time-budget=3500 --window-size=1120,760 --screenshot=/private/tmp/claude-501/-Users-roche-Documents-Projects-CianMRoche-github-io/18684617-4376-4597-b304-8b2413636f41/scratchpad/multi.png http://localhost:4051/multi.html)",
+      "Bash(echo \"exit $?\")"
     ]
   }
 }

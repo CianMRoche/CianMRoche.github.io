@@ -126,13 +126,43 @@ layout: compress
       .home-page .credit:hover { color: var(--ink); border-color: var(--accent); }
 
       @media (max-width: 640px) {
-        /* keep the credit visible but move it to a centered strip below the hero
-           content (at the right edge it would collide with the wrapped links);
-           trim the content's bottom padding to leave room for it */
-        .home-page .hero-inner { padding-bottom: 4.75rem; }
+        /* Keep the hero content anchored to the bottom of the screen (with the
+           art filling the space above it), but stack it as a column so the
+           Caustica credit flows directly under the buttons. This only fits in one
+           screenful because the mobile content is compact: the buttons sit on a
+           single row (below) and the credit is in-document rather than a separate
+           bottom-pinned element, so the whole block clears the fold with room to
+           spare and never has to be scrolled to. */
+        .home-page .hero-fg {
+          flex-direction: column; align-items: flex-start; justify-content: flex-end;
+          /* scrim behind the whole bottom-anchored block (the text AND the
+             Caustica credit below it) so it stays legible over bright arcs of the
+             art. Painted on hero-fg, which reaches the bottom of the screen, and
+             anchored there in absolute units: solid across the content, feathering
+             up into the empty art space above it. The content stack is ~510px tall
+             and bottom-aligned, so the fade lands just above it whatever the
+             viewport height. */
+          background: linear-gradient(to top,
+            rgba(var(--scrim), 0.68) 0, rgba(var(--scrim), 0.68) 430px,
+            rgba(var(--scrim), 0) 510px);
+        }
+        .home-page .hero-inner {
+          padding-top: 2.5rem; padding-bottom: 0;
+          /* in a flex column the inner block would otherwise shrink-wrap to its
+             max content width (wider than the phone) and clip the summary at the
+             right edge; cap it to the viewport */
+          max-width: 100%; box-sizing: border-box;
+        }
+        /* one row of buttons: drop the trailing arrows and tighten the gap so
+           Papers / CV / GitHub sit side by side */
+        .home-page .links { flex-wrap: nowrap; gap: 1.1rem; }
+        .home-page .links .arr { display: none; }
+        .home-page .links a { font-size: 0.9rem; gap: 0.35rem; }
+        /* credit flows in-document under the buttons; its bottom margin is the
+           padding between it and the bottom of the screen */
         .home-page .credit {
-          right: auto; left: 50%; transform: translateX(-50%);
-          bottom: 1.25rem; font-size: 0.74rem; padding: 0.4rem 0.72rem;
+          position: static; transform: none;
+          margin: 1rem 2rem 2rem; font-size: 0.74rem; padding: 0.4rem 0.72rem;
         }
         .home-page .avatar { width: 132px; height: 132px; }
       }
