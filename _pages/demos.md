@@ -149,7 +149,7 @@ Here are some interactive demos which explain aspects of my research.
       p.hidden = !on;
       if (on) {
         var f = p.querySelector('iframe[data-src]');
-        if (f && !f.getAttribute('src')) { f.setAttribute('src', f.dataset.src); }  // lazy-load on first open
+        if (f && !f.getAttribute('src')) { f.setAttribute('src', f.dataset.src); }  
       }
     });
   }
