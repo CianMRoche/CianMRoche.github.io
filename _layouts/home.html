@@ -11,9 +11,9 @@ layout: compress
     {% include head/custom.html %}
     <style>
       /* =========================================================================
-         Homepage: full-bleed caustic hero.
-         Palette is exactly three colours: background, ink, and one blue accent.
-         Every grey is ink at reduced alpha (via color-mix), not a fourth colour.
+         Homepage: full-bleed caustic hero + a scroll-in About/contact panel.
+         Palette is exactly three colours: background, ink, one blue accent.
+         Greys are ink at reduced alpha (color-mix), not a fourth colour.
          Scoped to body.home-page so no other page is affected.
          ========================================================================= */
       .home-page {
@@ -36,39 +36,43 @@ layout: compress
         --scrim: 255, 255, 255;
       }
 
-      /* nav overlaid on the art (the bleed runs behind it) */
+      /* nav overlaid on the art, fixed so it persists as you scroll */
       .home-page .masthead {
-        position: absolute; top: 0; left: 0; right: 0; z-index: 20;
+        position: fixed; top: 0; left: 0; right: 0; z-index: 30;
         background: transparent !important; border-bottom: none !important;
       }
-      /* the greedy-nav itself paints a solid background box; clear it so the art
-         shows through the nav instead of a rectangle being cut out of the bleed */
       .home-page .greedy-nav { background: transparent !important; }
 
-      .home-page .home-stage { position: relative; min-height: 100vh; overflow: hidden; }
-
-      .home-page .hero-art { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+      /* ---- fixed background layers ---- */
+      /* mirror lives here (once) so the big arc sits on the right; the JS keeps
+         the same single scaleX(-1) and only adds the zoom */
+      .home-page .hero-art { position: fixed; inset: 0; z-index: 0; pointer-events: none; will-change: transform; transform: scaleX(-1); }
       .home-page .hero-art svg {
         width: 100%; height: 100%; color: var(--accent);
-        opacity: var(--art-opacity); transform: scaleX(-1);
+        opacity: var(--art-opacity);
       }
-
-      /* legibility scrims: strong toward lower-left (text) and top (nav), clear top-right (art) */
+      /* left-weighted scrim: keeps left-aligned text legible over the art on both
+         screens (the art's dense arc sits on the right), and never fades out so the
+         backdrop stays continuous down the whole page */
       .home-page .scrim-main {
-        position: absolute; inset: 0; z-index: 1; pointer-events: none;
-        background: linear-gradient(to top right,
-          rgba(var(--scrim), 0.96) 0%, rgba(var(--scrim), 0.72) 26%,
-          rgba(var(--scrim), 0.18) 52%, rgba(var(--scrim), 0) 70%);
+        position: fixed; inset: 0; z-index: 1; pointer-events: none;
+        background: linear-gradient(to right,
+          rgba(var(--scrim), 0.92) 0%, rgba(var(--scrim), 0.62) 34%,
+          rgba(var(--scrim), 0.16) 60%, rgba(var(--scrim), 0) 78%);
       }
-      /* soft gradient so the nav stays legible where the art is bold up top */
       .home-page .scrim-top {
-        position: absolute; top: 0; left: 0; right: 0; height: 130px; z-index: 1; pointer-events: none;
+        position: fixed; top: 0; left: 0; right: 0; height: 130px; z-index: 2; pointer-events: none;
         background: linear-gradient(to bottom, rgba(var(--scrim), 0.85), rgba(var(--scrim), 0));
       }
 
-      /* overlaid identity, lower-left */
-      .home-page .hero-content { position: absolute; left: 0; right: 0; bottom: 8vh; z-index: 2; }
-      .home-page .hero-inner { max-width: 1180px; margin: 0 auto; padding: 0 2rem; }
+      .home-page .home-main { position: relative; z-index: 5; }
+
+      /* ---- hero foreground (first screen) ---- */
+      .home-page .hero-fg {
+        position: relative; min-height: 100vh; display: flex; align-items: flex-end;
+        will-change: transform, opacity;
+      }
+      .home-page .hero-inner { max-width: 1180px; margin: 0 auto; padding: 0 2rem 8vh; width: 100%; }
       .home-page .avatar {
         width: 175px; height: 175px; border-radius: 50%; object-fit: cover; display: block;
         margin-bottom: 1.15rem; border: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
@@ -102,7 +106,6 @@ layout: compress
       .home-page .links a:hover svg { color: var(--accent); }
       .home-page .links a:hover .arr { color: var(--accent); transform: translateX(3px); }
 
-      /* Caustica credit, lower-right */
       .home-page .credit {
         position: absolute; right: 2rem; bottom: 8vh; z-index: 2;
         display: inline-flex; align-items: center; gap: 0.45rem;
@@ -116,11 +119,42 @@ layout: compress
       .home-page .credit .arr { color: var(--accent); }
       .home-page .credit:hover { color: var(--ink); border-color: var(--accent); }
 
+      /* scroll cue */
+      .home-page .scroll-cue {
+        position: absolute; left: 50%; bottom: 1.6rem; transform: translateX(-50%);
+        color: var(--faint); z-index: 2; animation: cue-bounce 1.9s ease-in-out infinite;
+      }
+      @keyframes cue-bounce { 0%,100% { transform: translate(-50%, 0); } 50% { transform: translate(-50%, 6px); } }
+
+      /* ---- About / contact panel (scroll-in) ---- */
+      /* transparent so the fixed caustic backdrop shows through here too */
+      .home-page .home-below {
+        position: relative; z-index: 5; background: transparent;
+        min-height: 100vh; display: flex; align-items: center;
+        text-shadow: 0 1px 14px rgba(var(--scrim), 0.55);
+      }
+      .home-page .below-inner { max-width: 1180px; margin: 0 auto; padding: 7rem 2rem; width: 100%; display: grid; gap: 3.2rem; }
+      .home-page .section-label {
+        font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.16em;
+        color: var(--accent); font-weight: 700; margin: 0 0 1rem;
+      }
+      .home-page .about-text { margin: 0; font-size: clamp(1.1rem, 1.7vw, 1.4rem); line-height: 1.6; color: var(--ink); font-weight: 400; max-width: 46rem; }
+      .home-page .about-text a { color: var(--accent); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); }
+      .home-page .contact-links { display: flex; flex-wrap: wrap; gap: 1.5rem; }
+      /* opaque muted (not the alpha-based --muted) so visited links, e.g. the MIT
+         page, don't render brighter than the others under the :visited privacy rules */
+      .home-page .contact-links a,
+      .home-page .contact-links a:visited { color: color-mix(in srgb, var(--ink) 64%, var(--bg)); text-decoration: none; font-size: 1.02rem; transition: color 0.15s; }
+      .home-page .contact-links a:hover { color: var(--accent); }
+
       @media (max-width: 640px) {
         .home-page .credit { display: none; }
-        .home-page .hero-content { bottom: 6vh; }
+        .home-page .avatar { width: 132px; height: 132px; }
       }
-      @media (prefers-reduced-motion: reduce) { .home-page * { transition: none !important; } }
+      @media (prefers-reduced-motion: reduce) {
+        .home-page * { transition: none !important; }
+        .home-page .scroll-cue { animation: none; }
+      }
     </style>
   </head>
 
@@ -129,21 +163,54 @@ layout: compress
     {% include browser-upgrade.html %}
     {% include masthead.html %}
 
-    <main class="home-stage">
-      <div class="hero-art">{% include hero-caustic.html %}</div>
-      <div class="scrim-main" aria-hidden="true"></div>
-      <div class="scrim-top" aria-hidden="true"></div>
+    <div class="hero-art" id="heroArt">{% include hero-caustic.html %}</div>
+    <div class="scrim-main" id="scrimMain" aria-hidden="true"></div>
+    <div class="scrim-top" id="scrimTop" aria-hidden="true"></div>
 
-      <section class="hero-content">
-        <div class="hero-inner">
-          {{ content }}
-        </div>
-      </section>
-
-      <a class="credit" href="{{ base_path }}/assets/caustica/">Background made with <b>Caustica</b> <span class="arr">&#8599;</span></a>
+    <main class="home-main">
+      {{ content }}
     </main>
 
     {% include scripts.html %}
+
+    <script>
+      (function () {
+        var art  = document.getElementById('heroArt');
+        var fg   = document.getElementById('heroFg');
+        var sm   = document.getElementById('scrimMain');
+        var st   = document.getElementById('scrimTop');
+        var cue  = document.querySelector('.home-page .scroll-cue');
+        if (!art || !fg) return;
+        var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        var ticking = false;
+
+        function clamp01(x) { return x < 0 ? 0 : (x > 1 ? 1 : x); }
+
+        function apply() {
+          ticking = false;
+          var s = window.pageYOffset || document.documentElement.scrollTop || 0;
+          var vh = window.innerHeight || 1;
+          // Background rushes up faster than the page (1.25x); foreground drifts up
+          // slower (0.7x) and fades. Reduced-motion: leave everything at rest.
+          if (reduce) { art.style.transform = 'scaleX(-1)'; return; }
+          // Background is a continuous fixed backdrop for the whole page; a gentle
+          // zoom gives depth without ever leaving a gap (translating it would).
+          var maxS = Math.max(1, document.documentElement.scrollHeight - vh);
+          var p = clamp01(s / maxS);
+          art.style.transform = 'scaleX(-1) scale(' + (1 + p * 0.06).toFixed(4) + ')';
+          // Foreground drifts up slower than the scroll and fades as the hero
+          // hands off to the panel; scrims stay so the backdrop reads as one scene.
+          fg.style.transform  = 'translate3d(0,' + (s * 0.28).toFixed(1) + 'px,0)';
+          fg.style.opacity    = clamp01(1 - s / (vh * 0.62));
+          if (cue) cue.style.opacity = clamp01(1 - s / (vh * 0.25));
+        }
+        function onScroll() { if (!ticking) { ticking = true; requestAnimationFrame(apply); } }
+
+        window.addEventListener('scroll', onScroll, { passive: true });
+        window.addEventListener('resize', apply);
+        apply();
+      })();
+    </script>
 
   </body>
 </html>
