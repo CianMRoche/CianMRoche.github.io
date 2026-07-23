@@ -132,7 +132,13 @@ select.sl-topbar-preset {
   width: auto;
   border: 1px solid var(--hairline);
   border-radius: 5px;
-  background: transparent;
+  /* Match the topbar's own var(--bg): visually identical to transparent for the
+     closed box, but gives the native dropdown popup a solid background so
+     Chrome/Edge on Windows paint the option list in the theme color (like the
+     object model .sl-select does) instead of defaulting it to white. A plain
+     transparent background there resolves to white in the popup regardless of
+     color-scheme. */
+  background: var(--bg);
   color: var(--muted);
   cursor: pointer;
   max-width: 150px;
