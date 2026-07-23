@@ -119,14 +119,21 @@ layout: compress
         background: color-mix(in srgb, var(--bg) 55%, transparent);
         backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px);
         border: 1px solid var(--hair); color: var(--muted); text-decoration: none; font-size: 0.82rem;
-        transition: color 0.15s, border-color 0.15s;
+        white-space: nowrap; transition: color 0.15s, border-color 0.15s;
       }
       .home-page .credit b { color: var(--ink); font-weight: 600; }
       .home-page .credit .arr { color: var(--accent); }
       .home-page .credit:hover { color: var(--ink); border-color: var(--accent); }
 
       @media (max-width: 640px) {
-        .home-page .credit { display: none; }
+        /* keep the credit visible but move it to a centered strip below the hero
+           content (at the right edge it would collide with the wrapped links);
+           trim the content's bottom padding to leave room for it */
+        .home-page .hero-inner { padding-bottom: 4.75rem; }
+        .home-page .credit {
+          right: auto; left: 50%; transform: translateX(-50%);
+          bottom: 1.25rem; font-size: 0.74rem; padding: 0.4rem 0.72rem;
+        }
         .home-page .avatar { width: 132px; height: 132px; }
       }
       @media (prefers-reduced-motion: reduce) {
