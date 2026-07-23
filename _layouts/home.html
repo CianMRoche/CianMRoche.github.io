@@ -190,16 +190,16 @@ layout: compress
           ticking = false;
           var s = window.pageYOffset || document.documentElement.scrollTop || 0;
           var vh = window.innerHeight || 1;
-          // Background rushes up faster than the page (1.25x); foreground drifts up
-          // slower (0.7x) and fades. Reduced-motion: leave everything at rest.
+          /* Background rushes up faster than the page (1.25x); foreground drifts up */
+          /* slower (0.7x) and fades. Reduced-motion: leave everything at rest. */
           if (reduce) { art.style.transform = 'scaleX(-1)'; return; }
-          // Background is a continuous fixed backdrop for the whole page; a gentle
-          // zoom gives depth without ever leaving a gap (translating it would).
+          /* Background is a continuous fixed backdrop for the whole page; a gentle */
+          /* zoom gives depth without ever leaving a gap (translating it would). */
           var maxS = Math.max(1, document.documentElement.scrollHeight - vh);
           var p = clamp01(s / maxS);
           art.style.transform = 'scaleX(-1) scale(' + (1 + p * 0.06).toFixed(4) + ')';
-          // Foreground drifts up slower than the scroll and fades as the hero
-          // hands off to the panel; scrims stay so the backdrop reads as one scene.
+          /* Foreground drifts up slower than the scroll and fades as the hero */
+          /* hands off to the panel; scrims stay so the backdrop reads as one scene. */
           fg.style.transform  = 'translate3d(0,' + (s * 0.28).toFixed(1) + 'px,0)';
           fg.style.opacity    = clamp01(1 - s / (vh * 0.62));
           if (cue) cue.style.opacity = clamp01(1 - s / (vh * 0.25));
