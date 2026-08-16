@@ -1564,110 +1564,288 @@ function buildShell() {
   attachMenuHandlers();
 }
 
-// Per-difficulty feature list rendered on the difficulty cards.
-// Each tier lists its own full set of bullets (no "inherits from" shorthand).
-// The bullets follow a consistent template: number of points → y-axis type →
-// error-bar treatment → optional extras (rotation, clouds).
+// ============================================================
+//  Landing page (the "hub")
+// ============================================================
+// The menu presents Play / Leaderboard / Sandbox as three equal panels.
+// Each panel is self-contained: Play carries the difficulty + timer
+// controls, Leaderboard previews the top of whichever board the Play
+// panel is pointed at, and Sandbox pitches itself with a mini plot.
+// A slim tutorial bar sits under all three so the guided walkthrough has
+// a clear home without competing with the modes.
+
+// Per-difficulty trait summary shown under the difficulty list. Kept
+// short (one line each, joined with " · ") so the line wraps to at most
+// ~3 lines in a narrow panel and the layout doesn't jump when hovering
+// between tiers. Template: number of points → y-axis type → error-bar
+// treatment → optional extras.
 const DIFFICULTY_FEATURES = {
-  easy: [
-    '5–8 data points',
-    'linear y axis',
-    'uniform error bars',
-  ],
-  intermediate: [
-    '7–12 data points',
-    'linear y axis',
-    'variable error bar sizes',
-  ],
-  challenging: [
-    '8–12 data points',
-    'linear / log y axis',
-    'variable error bar sizes',
-  ],
-  hard: [
-    '12–20 data points',
-    'linear / log y axis',
-    'variable error bar sizes',
-    'rotating error bars',
-  ],
-  impossible: [
-    '12–20 data points',
-    'linear / log y axis',
-    'variable error bar sizes',
-    "bar visuals replaced by ongoing samples from each point's uncertainty",
-  ],
+  easy:         ['5–8 points',  'linear y',       'uniform error bars'],
+  intermediate: ['7–12 points', 'linear y',       'variable error bars'],
+  challenging:  ['8–12 points', 'linear / log y', 'variable error bars'],
+  hard:         ['12–20 points', 'linear / log y', 'variable error bars', 'rotating bars'],
+  impossible:   ['12–20 points', 'linear / log y', 'error bars shown as live samples'],
 };
 
+// Panel glyphs. Inline SVG so they inherit each panel's accent color via
+// currentColor and stay crisp under the .app-inner transform scale.
+const HUB_ICONS = {
+  play: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M7.5 4.6 L19.5 12 L7.5 19.4 Z"/></svg>`,
+  board: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 20.5 h17"/><rect x="4.5" y="12" width="4.4" height="6.5"/><rect x="9.8" y="6.5" width="4.4" height="12"/><rect x="15.1" y="14.5" width="4.4" height="4"/></svg>`,
+  sandbox: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M2.5 18.5 C 6.5 18, 8.5 7.5, 12.5 7 S 18.5 12.5, 21.5 9"/><circle cx="6.6" cy="15.4" r="1.7" fill="currentColor" stroke="none"/><circle cx="12.6" cy="8.6" r="1.7" fill="currentColor" stroke="none"/><circle cx="18.4" cy="12.6" r="1.7" fill="currentColor" stroke="none"/></svg>`,
+};
+
+// Decorative "what the sandbox looks like" thumbnail: a model curve with a
+// handful of points and error bars scattered around it. Purely illustrative
+// — the coordinates are hand-placed, not generated from a real round.
+const SANDBOX_PREVIEW = (() => {
+  const pts = [
+    [26, 76, 9], [58, 60, 12], [92, 38, 8],
+    [124, 31, 10], [158, 52, 13], [192, 34, 9],
+  ];
+  const marks = pts.map(([x, y, e]) => `
+    <line x1="${x}" y1="${y - e}" x2="${x}" y2="${y + e}"/>
+    <line x1="${x - 3.5}" y1="${y - e}" x2="${x + 3.5}" y2="${y - e}"/>
+    <line x1="${x - 3.5}" y1="${y + e}" x2="${x + 3.5}" y2="${y + e}"/>
+    <circle cx="${x}" cy="${y}" r="3" class="sbp-dot"/>`).join('');
+  return `
+    <svg class="sb-preview" viewBox="0 0 218 96"
+         role="img" aria-label="A model curve threaded through scattered data points with error bars">
+      <path class="sbp-curve" d="M6 82 C 42 80, 58 38, 96 33 C 132 28, 148 58, 212 26"/>
+      <g class="sbp-marks">${marks}</g>
+    </svg>`;
+})();
+
+// How many rows the leaderboard panel previews. Short boards are padded
+// with blank rows so the panel keeps a fixed arcade-board height.
+const HUB_LB_ROWS = 5;
+
+// Compact time label for the leaderboard panel's board chip. The full
+// timeChoiceLabel() ("30s / round") is too wide for a narrow column.
+function shortTimeLabel(tc) {
+  return tc === 'unlimited' ? 'Unlimited' : `${tc}s`;
+}
+
+// The time dropdown is the live source of truth while the menu is up;
+// game.timeChoice only catches up when Start is pressed.
+function currentTimeChoice() {
+  const sel = document.getElementById('time-choice');
+  return sel ? sel.value : game.timeChoice;
+}
+
+function hubLeaderboardRowsMarkup(diff, timeChoice) {
+  const board = getMergedLeaderboard(diff, timeChoice);
+  const rows = board.slice(0, HUB_LB_ROWS).map((e, i) => `
+    <li class="hub-lb-row${i === 0 ? ' hub-lb-row-top' : ''}">
+      <span class="hub-lb-rank">${i + 1}</span>
+      <span class="hub-lb-name">${escapeHtml(leaderboardDisplayName(e))}</span>
+      <span class="hub-lb-score">${crownIfQualified(e.score, e.difficulty || diff, 12)}${Number(e.score).toLocaleString()}</span>
+    </li>`);
+  while (rows.length < HUB_LB_ROWS) {
+    rows.push(`<li class="hub-lb-row hub-lb-row-empty" aria-hidden="true"></li>`);
+  }
+  // Overlaid on the blank row scaffold (absolutely positioned, so it takes
+  // no grid slot of its own) rather than replacing it — the empty board
+  // should still look like a board.
+  const empty = board.length
+    ? ''
+    : `<li class="hub-lb-nothing">No scores on this board yet</li>`;
+  return rows.join('') + empty;
+}
+
+function hubLeaderboardFootMarkup(diff, timeChoice) {
+  // "Your best" comes from the local board only — that's this device's
+  // history, which is the closest thing to a personal best we have.
+  const mine = getLeaderboard(diff, timeChoice);
+  const best = mine.length ? Math.max(...mine.map(e => Number(e.score) || 0)) : null;
+  const bestTxt = best === null
+    ? `<span class="hub-meta-dim">No score yet</span>`
+    : `Your best <b>${best.toLocaleString()}</b>`;
+  return `${bestTxt}<span class="hub-lb-src">${isRemoteEnabled() ? 'shared' : 'this device'}</span>`;
+}
+
+// Repaint the leaderboard panel from whatever's currently cached, so it
+// always mirrors the difficulty + time the Play panel is set to.
+function renderHubLeaderboard() {
+  const listEl = document.getElementById('hub-lb-list');
+  if (!listEl) return;
+  const diff = game.difficulty;
+  const tc = currentTimeChoice();
+  // The time is its own span so the narrowest panel widths can drop it
+  // (see the responsive rules) rather than ellipsize the difficulty away.
+  document.getElementById('hub-lb-board').innerHTML =
+    `${DIFFICULTIES[diff].name}<span class="lbb-time"> · ${shortTimeLabel(tc)}</span>`;
+  // The ceiling for this difficulty, so a score on the board can be read
+  // against what a perfect game is worth rather than in the abstract.
+  document.getElementById('hub-lb-max').innerHTML =
+    `max <b>${maxScoreForDifficulty(diff).toLocaleString()}</b>`;
+  listEl.innerHTML = hubLeaderboardRowsMarkup(diff, tc);
+  document.getElementById('hub-lb-foot').innerHTML = hubLeaderboardFootMarkup(diff, tc);
+}
+
+// Kick a remote fetch for the currently-shown board and repaint when it
+// lands — but only if the player is still on the menu looking at the same
+// board, otherwise the callback would stomp on a newer selection.
+function refreshHubLeaderboard() {
+  if (!isRemoteEnabled()) return;
+  const diff = game.difficulty;
+  const tc = currentTimeChoice();
+  refreshRemoteBoard(diff, tc, () => {
+    if (game.state !== State.MENU) return;
+    if (game.difficulty !== diff || currentTimeChoice() !== tc) return;
+    renderHubLeaderboard();
+  });
+}
+
+function setDiffDetail(key) {
+  const el = document.getElementById('diff-detail');
+  if (el) el.textContent = (DIFFICULTY_FEATURES[key] || []).join(' · ');
+}
+
 function menuMarkup() {
-  const diffEntries = Object.entries(DIFFICULTIES);
-  const diffBtns = diffEntries.map(([key, d]) => {
-    const features = DIFFICULTY_FEATURES[key] || [];
-    const bullets = features.map(f => `<li>${f}</li>`).join('');
-    return `<div class="diff-cell" data-diff="${key}">
-       <button data-diff="${key}" class="${key === 'challenging' ? 'selected' : ''}">
-         <span class="dname">${d.name}</span>
-         <span class="dmult">&times;${d.scoreMultiplier.toFixed(1)} score</span>
-       </button>
-       <ul class="dfeatures">${bullets}</ul>
-     </div>`;
+  const diffRows = Object.entries(DIFFICULTIES).map(([key, d]) => {
+    const sel = key === game.difficulty;
+    return `<button type="button" class="diff-opt${sel ? ' selected' : ''}"
+              data-diff="${key}" role="radio" aria-checked="${sel}">
+        <span class="do-mark" aria-hidden="true"></span>
+        <span class="do-name">${d.name}</span>
+        <span class="do-mult" title="score multiplier">&times;${d.scoreMultiplier.toFixed(1)}</span>
+      </button>`;
   }).join('');
+
   return `
     <button class="dark-toggle menu-theme-btn" title="Toggle dark mode (D)" aria-label="Toggle dark mode">${THEME_BTN_INNER}</button>
-    <h1><span class="chi">&chi;</span> by eye</h1>
-    <p class="tagline">
-      Estimate the tension between data and model. <br>New to &chi;&sup2;?
-      <button type="button" class="tutorial-link" id="tutorial-link">Walk through the tutorial &rarr;</button>
-    </p>
-    <div class="diff-grid">${diffBtns}</div>
-    <div class="option-row">
-      <label class="time-choice-label">
-        Time per round
-        <select id="time-choice">
-          <option value="unlimited" selected>Unlimited</option>
-          <option value="30">30 seconds</option>
-          <option value="10">10 seconds</option>
-          <option value="5">5 seconds</option>
-        </select>
-      </label>
-    </div>
-    <div class="menu-buttons">
-      <button class="primary start-btn" id="start-btn">Start game</button>
-      <div class="menu-secondary">
-        <button class="leaderboard-btn" id="open-leaderboard">
-          <span class="msb-glyph" aria-hidden="true">&#x2605;</span>
-          <span class="msb-label">Leaderboards</span>
-        </button>
-        <button class="sandbox-btn" id="open-sandbox">
-          <span class="msb-glyph" aria-hidden="true">&#x25CE;</span>
-          <span class="msb-label">Sandbox</span>
-        </button>
+    <div class="menu-inner">
+      <header class="menu-hero">
+        <h1><span class="chi">&chi;</span> by eye</h1>
+        <p class="tagline">Estimate the tension between data and model.</p>
+      </header>
+
+      <div class="hub">
+        <section class="hub-card" data-mode="play">
+          <div class="hub-head">
+            <span class="hub-icon" aria-hidden="true">${HUB_ICONS.play}</span>
+            <span class="hub-titles">
+              <span class="hub-name">Play</span>
+              <span class="hub-sub">${ROUNDS_PER_GAME} scored rounds</span>
+            </span>
+          </div>
+          <div class="hub-body">
+            <div class="diff-list" role="radiogroup" aria-label="Difficulty">${diffRows}</div>
+            <p class="diff-detail" id="diff-detail"></p>
+          </div>
+          <div class="hub-foot">
+            <div class="hub-meta">
+              <label for="time-choice">Time</label>
+              <span class="select-wrap">
+                <select id="time-choice">
+                  <option value="unlimited">Unlimited</option>
+                  <option value="30">30s / round</option>
+                  <option value="10">10s / round</option>
+                  <option value="5">5s / round</option>
+                </select>
+              </span>
+            </div>
+            <button type="button" class="hub-cta" id="start-btn">Start<span class="cta-arrow" aria-hidden="true">&rarr;</span></button>
+          </div>
+        </section>
+
+        <section class="hub-card" data-mode="board">
+          <div class="hub-head">
+            <span class="hub-icon" aria-hidden="true">${HUB_ICONS.board}</span>
+            <span class="hub-titles">
+              <span class="hub-name">Leaderboard</span>
+              <span class="hub-sub">${isRemoteEnabled() ? 'Top scores worldwide' : 'Top scores on this device'}</span>
+            </span>
+          </div>
+          <div class="hub-body">
+            <div class="hub-lb-boardrow">
+              <span class="hub-lb-board" id="hub-lb-board">&mdash;</span>
+              <span class="hub-lb-max" id="hub-lb-max"></span>
+            </div>
+            <ol class="hub-lb-list" id="hub-lb-list"></ol>
+          </div>
+          <div class="hub-foot">
+            <div class="hub-meta" id="hub-lb-foot"></div>
+            <button type="button" class="hub-cta" id="open-leaderboard">View all<span class="cta-arrow" aria-hidden="true">&rarr;</span></button>
+          </div>
+        </section>
+
+        <section class="hub-card" data-mode="sandbox">
+          <div class="hub-head">
+            <span class="hub-icon" aria-hidden="true">${HUB_ICONS.sandbox}</span>
+            <span class="hub-titles">
+              <span class="hub-name">Sandbox</span>
+              <span class="hub-sub">Free play, no clock</span>
+            </span>
+          </div>
+          <div class="hub-body">
+            ${SANDBOX_PREVIEW}
+            <ul class="hub-points">
+              <li>Place and drag your own data points</li>
+              <li>Resize error bars, switch to a log axis</li>
+              <li>Watch &chi;&sup2;, &chi;&sup2;/dof and <em>p</em> update live</li>
+            </ul>
+          </div>
+          <div class="hub-foot">
+            <div class="hub-meta"><span class="hub-meta-dim">Nothing scored or saved</span></div>
+            <button type="button" class="hub-cta" id="open-sandbox">Open<span class="cta-arrow" aria-hidden="true">&rarr;</span></button>
+          </div>
+        </section>
       </div>
-    </div>
-    <div class="footer-note">
-      Convention: two-sided &sigma; equivalent of the
-      &chi;&sup2; upper-tail probability, common in astrophysics.
+
+      <button type="button" class="tutorial-bar" id="tutorial-link">
+        <span class="tut-glyph" aria-hidden="true">?</span>
+        <span class="tut-text"><b>New to &chi;&sup2;?</b> Walk through a guided round, one step at a time.</span>
+        <span class="tut-arrow" aria-hidden="true">&rarr;</span>
+      </button>
+
+      <div class="footer-note">
+        Convention: two-sided &sigma; equivalent of the
+        &chi;&sup2; upper-tail probability, common in astrophysics.
+      </div>
     </div>
   `;
 }
 
 function attachMenuHandlers() {
-  // Difficulty buttons. Clicking a different difficulty selects it.
-  // Clicking the already-selected one launches the game — which means
-  // double-clicking any difficulty is a quick-start shortcut.
-  menuEl.querySelectorAll('.diff-grid button').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const wasSelected = btn.classList.contains('selected');
-      menuEl.querySelectorAll('.diff-grid button').forEach(b => b.classList.remove('selected'));
-      btn.classList.add('selected');
-      game.difficulty = btn.dataset.diff;
-      if (wasSelected) {
-        document.getElementById('start-btn').click();
-      }
-    });
-  });
-  // Time-per-round dropdown
   const timeSelect = document.getElementById('time-choice');
   if (game.timeChoice) timeSelect.value = game.timeChoice;
+  setDiffDetail(game.difficulty);
+  renderHubLeaderboard();
+  refreshHubLeaderboard();
+
+  // Difficulty rows. Clicking a different tier selects it; clicking the
+  // already-selected one launches the game — which means double-clicking
+  // any tier is a quick-start shortcut. Hovering previews that tier's
+  // traits in the detail line without moving the selection.
+  menuEl.querySelectorAll('.diff-opt').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const wasSelected = btn.classList.contains('selected');
+      menuEl.querySelectorAll('.diff-opt').forEach(b => {
+        b.classList.remove('selected');
+        b.setAttribute('aria-checked', 'false');
+      });
+      btn.classList.add('selected');
+      btn.setAttribute('aria-checked', 'true');
+      game.difficulty = btn.dataset.diff;
+      setDiffDetail(game.difficulty);
+      renderHubLeaderboard();
+      refreshHubLeaderboard();
+      if (wasSelected) document.getElementById('start-btn').click();
+    });
+    btn.addEventListener('mouseenter', () => setDiffDetail(btn.dataset.diff));
+    btn.addEventListener('mouseleave', () => setDiffDetail(game.difficulty));
+  });
+
+  // Time-per-round dropdown. The leaderboard panel tracks it so the two
+  // panels always describe the same board.
+  timeSelect.addEventListener('change', () => {
+    game.timeChoice = timeSelect.value;
+    renderHubLeaderboard();
+    refreshHubLeaderboard();
+  });
+
   document.getElementById('start-btn').addEventListener('click', () => {
     game.timeChoice = timeSelect.value; // "unlimited" | "5" | "10" | "30"
     if (game.timeChoice === 'unlimited') {
@@ -1679,15 +1857,18 @@ function attachMenuHandlers() {
     }
     startGame();
   });
-  // Tutorial link
-  const tutLink = document.getElementById('tutorial-link');
-  if (tutLink) tutLink.addEventListener('click', startTutorial);
-  // Leaderboard link
-  const lbBtn = document.getElementById('open-leaderboard');
-  if (lbBtn) lbBtn.addEventListener('click', openLeaderboardView);
-  // Sandbox link
-  const sbBtn = document.getElementById('open-sandbox');
-  if (sbBtn) sbBtn.addEventListener('click', openSandboxView);
+
+  document.getElementById('tutorial-link').addEventListener('click', startTutorial);
+
+  // The leaderboard and sandbox panels have no controls of their own, so
+  // the whole card is the click target. Their CTA buttons carry keyboard
+  // focus and their clicks bubble up to the same handler.
+  menuEl.querySelector('[data-mode="board"]').addEventListener('click', () => {
+    openLeaderboardView({ difficulty: game.difficulty, timeChoice: currentTimeChoice() });
+  });
+  menuEl.querySelector('[data-mode="sandbox"]').addEventListener('click', () => {
+    openSandboxView();
+  });
 }
 
 // ---------- state transitions ----------

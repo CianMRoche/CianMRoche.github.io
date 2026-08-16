@@ -28,9 +28,20 @@
      than reading as a "warning". */
   --truth:             #c2871a;
 
-  /* Crown / high-score platinum — a cool steel-blue-grey that reads as
-     "premium tier above gold" on both light and dark backgrounds. */
+  /* Crown platinum — a cool steel-blue-grey. It reads as silver, so it sits
+     one rung BELOW gold: a crown earned at the 90% threshold, where a maxed
+     score gets gold instead. */
   --crown-platinum:    #6988a4;
+
+  /* Landing-page mode accents — one per hub panel, so Play / Leaderboard /
+     Sandbox each have their own identity while staying visually equal.
+     Play and Sandbox borrow existing site colors (they're aliases, so they
+     follow --accent / --truth into dark mode automatically) — sand for the
+     Sandbox. Leaderboard needs its own violet because every other slot in
+     the palette is taken. */
+  --mode-play:    var(--accent);
+  --mode-board:   #8b5cf6;
+  --mode-sandbox: var(--truth);
 
   /* Plot colors — read by plot.js via getComputedStyle */
   --plot-bg:      #ffffff;
@@ -53,6 +64,7 @@ html[data-theme="dark"] {
   --diff-hard:         #f87171;
   --diff-impossible:   #c084fc;
   --truth:             #e6c34d;
+  --mode-board:        #b18cf0;
 }
 
 html[data-theme="dark"] {
@@ -620,23 +632,59 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
    .controls .value display instead. */
 .submit-sigma-label { display: none; }
 
-/* ---------- menu overlay ---------- */
+/* ============================================================ */
+/*  Landing page ("the hub")                                    */
+/* ============================================================ */
+/* Three equal panels — Play / Leaderboard / Sandbox — over a slim
+   tutorial bar. Each panel owns an accent color via --panel and is laid
+   out head / body / foot, with the foot pinned to the bottom so the three
+   call-to-action buttons line up across the row.
+
+   .menu is a plain block with .menu-inner doing the centering: a flex
+   container with min-height:100% centers when the content fits and flows
+   from the top (still scrollable) when it doesn't. Centering .menu itself
+   would push the top of an overflowing layout out of reach. */
 .menu {
   position: absolute;
   inset: 0;
+  display: block;
+  overflow-y: auto;
+  padding: 28px 32px;
+  background: var(--bg);
+  z-index: 10;
+}
+/* Soft accent wash behind the hero so the page doesn't read as a bare sheet. */
+.menu::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 320px;
+  background: radial-gradient(58% 100% at 50% 0%,
+              color-mix(in srgb, var(--accent) 10%, transparent), transparent 72%);
+  pointer-events: none;
+}
+.menu-inner {
+  position: relative;
+  min-height: 100%;
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 32px;
-  background: var(--bg);
-  z-index: 10;
+}
+
+/* ---------- hero ---------- */
+.menu-hero {
+  text-align: center;
+  margin-bottom: 24px;
 }
 .menu h1 {
-  font-size: 44px;
+  font-size: 42px;
   font-weight: 300;
-  letter-spacing: -0.01em;
-  margin-bottom: 4px;
+  letter-spacing: -0.015em;
+  line-height: 1.1;
 }
 .menu h1 .chi {
   font-family: 'Times New Roman', serif;
@@ -645,127 +693,459 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 .menu .tagline {
   color: var(--muted);
-  font-size: 14px;
-  margin-bottom: 36px;
-  max-width: 520px;
-  text-align: center;
+  font-size: 13.5px;
+  letter-spacing: 0.01em;
+  margin-top: 8px;
 }
-.diff-grid {
+
+/* ---------- the three panels ---------- */
+.hub {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 12px;
-  margin-bottom: 28px;
-  max-width: 920px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
   width: 100%;
-  align-items: start;
+  align-items: stretch;
 }
-.diff-cell {
+.hub-card {
+  --panel: var(--muted);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 16px 16px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  background: var(--bg-soft);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.14s ease;
+}
+.hub-card[data-mode="play"]    { --panel: var(--mode-play); }
+.hub-card[data-mode="board"]   { --panel: var(--mode-board); }
+.hub-card[data-mode="sandbox"] { --panel: var(--mode-sandbox); }
+.hub-card:hover {
+  border-color: color-mix(in srgb, var(--panel) 55%, var(--hairline));
+  box-shadow: 0 10px 28px -14px color-mix(in srgb, var(--panel) 60%, transparent);
+  transform: translateY(-2px);
+}
+/* Leaderboard and Sandbox carry no controls of their own, so the whole
+   panel is the click target (see attachMenuHandlers). Play does not,
+   because clicks inside it land on the difficulty rows and the timer. */
+.hub-card[data-mode="board"],
+.hub-card[data-mode="sandbox"] { cursor: pointer; }
+
+.hub-head {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 14px;
+}
+.hub-icon {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  color: var(--panel);
+  background: color-mix(in srgb, var(--panel) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--panel) 26%, transparent);
+}
+.hub-icon svg { width: 19px; height: 19px; display: block; }
+.hub-titles { display: flex; flex-direction: column; min-width: 0; }
+.hub-name {
+  font-size: 15.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--fg);
+}
+.hub-sub {
+  font-size: 11.5px;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+.hub-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.hub-foot {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hairline);
   display: flex;
   flex-direction: column;
   gap: 10px;
-  min-width: 0;
 }
-.diff-grid button {
-  --diff-color: var(--muted);
-  --diff-tint:  rgba(0,0,0,0.04);
-  padding: 14px 8px;
-  flex-direction: column;
+/* The line above each CTA. Fixed min-height so the three buttons align
+   even though the three panels put different things here. */
+.hub-meta {
   display: flex;
   align-items: center;
-  gap: 4px;
-  border: 1.5px solid var(--diff-color);
-  background: var(--bg);
-  color: var(--diff-color);
-  transition: background 0.15s ease, color 0.15s ease, transform 0.08s ease;
-  width: 100%;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 26px;
+  font-size: 11.5px;
+  color: var(--fg-soft);
 }
-.diff-grid button:hover {
-  background: var(--diff-tint);
-  transform: translateY(-1px);
-}
-.diff-grid button.selected {
-  background: var(--diff-color);
-  color: var(--bg);
-  border-color: var(--diff-color);
-}
-.diff-grid button.selected .dmult { color: var(--bg); opacity: 0.9; }
-.diff-grid button .dname {
-  font-weight: 500;
-  font-size: 13.5px;
-  letter-spacing: 0.02em;
-}
-.diff-grid button .dmult {
-  font-size: 11px;
-  color: var(--muted);
+.hub-meta b {
+  font-weight: 600;
+  color: var(--fg);
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.03em;
 }
-.diff-grid .dfeatures {
-  list-style: disc;
-  padding-left: 18px;
-  margin: 0;
+.hub-meta-dim { color: var(--muted); }
+.hub-meta label {
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+/* Native select chrome is heavy next to the flat panels, so strip it and
+   draw our own caret on the wrapper (a CSS chevron themes itself; a
+   background-image can't use currentColor). */
+.select-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  max-width: 62%;
+}
+.select-wrap::after {
+  content: '';
+  position: absolute;
+  right: 9px;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  border-right: 1.5px solid var(--muted);
+  border-bottom: 1.5px solid var(--muted);
+  transform: translateY(-75%) rotate(45deg);
+  pointer-events: none;
+}
+.hub-meta select {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  font-family: inherit;
+  font-size: 11.5px;
+  padding: 4px 24px 4px 9px;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  cursor: pointer;
+  transition: border-color 0.12s ease;
+}
+.hub-meta select:hover {
+  border-color: color-mix(in srgb, var(--panel) 55%, var(--hairline));
+}
+
+/* All three CTAs share one shape and weight — that parity is the whole
+   point of the layout. Each just tints itself with its panel color. */
+.hub-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1.5px solid color-mix(in srgb, var(--panel) 55%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 12%, transparent);
+  color: var(--panel);
+}
+.hub-cta:hover,
+.hub-card[data-mode="board"]:hover   .hub-cta,
+.hub-card[data-mode="sandbox"]:hover .hub-cta {
+  background: var(--panel);
+  border-color: var(--panel);
+  color: var(--bg);
+}
+.cta-arrow {
+  font-size: 13px;
+  transition: transform 0.18s ease;
+}
+.hub-cta:hover .cta-arrow,
+.hub-card[data-mode="board"]:hover   .cta-arrow,
+.hub-card[data-mode="sandbox"]:hover .cta-arrow { transform: translateX(3px); }
+
+/* ---------- Play panel: difficulty rows ---------- */
+.diff-list {
   display: flex;
   flex-direction: column;
   gap: 3px;
 }
-.diff-grid .dfeatures li {
-  font-size: 11px;
+.diff-opt {
+  --diff-color: var(--muted);
+  display: grid;
+  grid-template-columns: 4px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  text-align: left;
+  letter-spacing: normal;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.diff-opt .do-mark {
+  width: 4px;
+  height: 15px;
+  border-radius: 2px;
+  background: var(--diff-color);
+  opacity: 0.4;
+  transition: opacity 0.12s ease;
+}
+.diff-opt .do-name {
+  font-size: 13px;
+  color: var(--fg-soft);
   letter-spacing: 0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.diff-opt .do-mult {
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+}
+.diff-opt:hover {
+  background: color-mix(in srgb, var(--diff-color) 10%, transparent);
+}
+.diff-opt:hover .do-mark { opacity: 0.75; }
+.diff-opt.selected {
+  background: color-mix(in srgb, var(--diff-color) 14%, transparent);
+  border-color: color-mix(in srgb, var(--diff-color) 42%, transparent);
+}
+.diff-opt.selected .do-mark { opacity: 1; }
+.diff-opt.selected .do-name { color: var(--diff-color); font-weight: 600; }
+.diff-opt.selected .do-mult { color: var(--diff-color); opacity: 0.85; }
+/* Per-difficulty color assignments (sourced from the global --diff-* vars) */
+.diff-opt[data-diff="easy"]         { --diff-color: var(--diff-easy); }
+.diff-opt[data-diff="intermediate"] { --diff-color: var(--diff-intermediate); }
+.diff-opt[data-diff="challenging"]  { --diff-color: var(--diff-challenging); }
+.diff-opt[data-diff="hard"]         { --diff-color: var(--diff-hard); }
+.diff-opt[data-diff="impossible"]   { --diff-color: var(--diff-impossible); }
+/* Traits of the selected (or hovered) tier. min-height reserves two lines
+   — what the longest list needs at any panel width the 3-up layout
+   produces — so hovering down the rows doesn't shuffle the layout. */
+.diff-detail {
+  margin-top: 10px;
+  min-height: 2.9em;
+  font-size: 11px;
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+  color: var(--muted);
+}
+
+/* ---------- Leaderboard panel ---------- */
+/* Chip naming the board being previewed, with that difficulty's ceiling
+   opposite it. Both mirror the Play panel's difficulty + time so the two
+   panels always describe the same board. */
+.hub-lb-boardrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.hub-lb-max {
+  flex: 0 0 auto;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.hub-lb-max b {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--fg-soft);
+  font-variant-numeric: tabular-nums;
+}
+/* The chip and the ceiling share a line that is only ~215 CSS px wide on a
+   small laptop (the shell is scaled 1.3x, so the panel is much narrower
+   than the viewport suggests). Sentence case rather than uppercase, and a
+   small size, because uppercase tracking costs roughly 40% more width than
+   the pill can afford. Shrinkable with an ellipsis as a backstop so the
+   ceiling can never be pushed off the panel edge. */
+.hub-lb-board {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--panel);
+  background: color-mix(in srgb, var(--panel) 12%, transparent);
+}
+.hub-lb-list {
+  position: relative;
+  flex: 1;
+  list-style: none;
+  display: grid;
+  grid-template-rows: repeat(5, minmax(24px, 1fr));
+}
+.hub-lb-row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  border-bottom: 1px solid color-mix(in srgb, var(--hairline) 70%, transparent);
+}
+.hub-lb-row:last-child { border-bottom: none; }
+.hub-lb-row-empty { border-bottom-color: color-mix(in srgb, var(--hairline) 40%, transparent); }
+.hub-lb-rank {
+  font-size: 10.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.hub-lb-name {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  color: var(--fg-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hub-lb-score {
+  display: inline-flex;
+  align-items: center;
+  font-weight: 600;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+.hub-lb-row-top .hub-lb-rank,
+.hub-lb-row-top .hub-lb-name,
+.hub-lb-row-top .hub-lb-score { color: var(--panel); }
+/* Shown over the empty row scaffold when a board has no scores at all. */
+.hub-lb-nothing {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.hub-lb-src {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ---------- Sandbox panel ---------- */
+.sb-preview {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.sb-preview .sbp-curve {
+  fill: none;
+  stroke: var(--panel);
+  stroke-width: 2;
+  opacity: 0.85;
+}
+.sb-preview .sbp-marks line {
+  stroke: var(--fg-soft);
+  stroke-width: 1.2;
+  opacity: 0.45;
+}
+.sb-preview .sbp-dot { fill: var(--fg); opacity: 0.7; }
+/* margin-top:auto pins the bullets to the bottom of the body, so the
+   preview absorbs whatever extra height the taller Play panel forces. */
+.hub-points {
+  list-style: none;
+  margin-top: auto;
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.hub-points li {
+  position: relative;
+  padding-left: 14px;
+  font-size: 11.5px;
   line-height: 1.4;
   color: var(--muted);
 }
-.diff-grid .dfeatures li::marker {
-  color: var(--hairline);
+.hub-points li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 0.55em;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--panel);
+  opacity: 0.6;
 }
-/* Per-difficulty color assignments (sourced from the global --diff-* vars) */
-.diff-grid button[data-diff="easy"]         { --diff-color: var(--diff-easy);         --diff-tint: rgba(16,185,129,0.10); }
-.diff-grid button[data-diff="intermediate"] { --diff-color: var(--diff-intermediate); --diff-tint: rgba(14,165,233,0.10); }
-.diff-grid button[data-diff="challenging"]  { --diff-color: var(--diff-challenging);  --diff-tint: rgba(245,158,11,0.12); }
-.diff-grid button[data-diff="hard"]         { --diff-color: var(--diff-hard);         --diff-tint: rgba(239,68,68,0.10); }
-.diff-grid button[data-diff="impossible"]   { --diff-color: var(--diff-impossible);   --diff-tint: rgba(168,85,247,0.10); }
-.menu .option-row {
+
+/* ---------- tutorial bar ---------- */
+/* Deliberately lighter than the three panels: dashed, transparent, full
+   width. It has its own clear place without competing as a fourth mode. */
+.tutorial-bar {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 28px;
-  color: var(--fg-soft);
-  font-size: 13px;
+  width: 100%;
+  margin-top: 16px;
+  padding: 11px 16px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 40%, var(--hairline));
+  border-radius: 11px;
+  background: transparent;
+  text-align: left;
+  letter-spacing: normal;
 }
-.menu .option-row label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
-.menu .option-row input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
-.menu .option-row input[type="number"] {
-  width: 60px;
-  padding: 4px 8px;
-  border: 1px solid var(--hairline);
-  background: var(--bg);
-  color: var(--fg);
-  border-radius: 4px;
-  font-family: inherit;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
+.tutorial-bar:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
-/* Hide native number-input spinner arrows */
-.menu .option-row input[type="number"]::-webkit-outer-spin-button,
-.menu .option-row input[type="number"]::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
+.tut-glyph {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
 }
-.menu .option-row input[type="number"] {
-  -moz-appearance: textfield;
-  appearance: textfield;
+.tut-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  letter-spacing: 0.01em;
 }
-.menu .start-btn {
-  font-size: 16px;
-  padding: 12px 36px;
-  border-radius: 8px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+.tut-text b { color: var(--fg-soft); font-weight: 600; }
+.tut-arrow {
+  color: var(--accent);
+  font-size: 14px;
+  transition: transform 0.18s ease;
 }
+.tutorial-bar:hover .tut-arrow { transform: translateX(3px); }
+
 .menu .footer-note {
-  margin-top: 36px;
-  font-size: 11px;
+  margin-top: 20px;
+  max-width: 620px;
+  font-size: 10.5px;
   color: var(--muted);
   letter-spacing: 0.03em;
+  text-align: center;
 }
 .menu .footer-note a { color: var(--muted); }
 
@@ -972,24 +1352,27 @@ html[data-theme="dark"] .reveal-restore { box-shadow: 0 3px 12px rgba(0,0,0,0.4)
   flex-shrink: 0;
   filter: drop-shadow(0 1px 2px rgba(0,0,0,0.10));
 }
+/* Gold is the top tier — a maxed-out score. Platinum reads as silver next
+   to it, so it takes the rung below (a crown earned at the 90% threshold
+   but short of the maximum). */
 .summary .total .crown.crown-max {
-  color: var(--crown-platinum);
+  color: var(--warn);
 }
 /* Inline crown shown next to qualifying scores in leaderboard rows. */
 .crown.crown-inline {
-  color: var(--warn);
+  color: var(--crown-platinum);
   vertical-align: -2px;        /* baseline-align with the score number */
   margin-right: 4px;
   flex-shrink: 0;
 }
 .crown.crown-inline.crown-max {
-  color: var(--crown-platinum);
+  color: var(--warn);
 }
 html[data-theme="dark"] .summary .total .crown {
   filter: drop-shadow(0 1px 4px rgba(123,191,204,0.25));
 }
 html[data-theme="dark"] .summary .total .crown.crown-max {
-  filter: drop-shadow(0 1px 4px rgba(168,196,220,0.30));
+  filter: drop-shadow(0 1px 4px rgba(251,191,36,0.30));
 }
 .summary .grid {
   display: grid;
@@ -1219,103 +1602,10 @@ html[data-theme="dark"] .tutorial-tooltip {
   background: var(--bg-soft);
 }
 
-/* Tutorial menu link */
-.tutorial-link {
-  display: inline;
-  color: var(--accent);
-  background: transparent;
-  border: none;
-  padding: 0;
-  font-family: inherit;
-  font-size: inherit;
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-.tutorial-link:hover { filter: brightness(1.15); }
-
-/* ============================================================ */
-/*  Menu: time-choice dropdown + leaderboard / start buttons    */
-/* ============================================================ */
-.menu .time-choice-label {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 13px;
-  color: var(--fg-soft);
-}
-.menu .time-choice-label select {
-  font-family: inherit;
-  font-size: 13px;
-  padding: 6px 10px;
-  border: 1px solid var(--hairline);
-  background: var(--bg);
-  color: var(--fg);
-  border-radius: 5px;
-  cursor: pointer;
-}
-.menu-buttons {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  align-items: center;
-  margin-bottom: 8px;
-}
-/* Row holding the two secondary actions (Leaderboards / Sandbox) below
-   the primary Start button. They render side-by-side on wider menus and
-   stack on phones (handled in the responsive section). */
-.menu .menu-secondary {
-  display: flex;
-  flex-direction: row;
-  gap: 10px;
-  width: 100%;
-  max-width: 360px;
-  justify-content: center;
-}
-/* Ghost-button base shared by the two secondary actions: thin colored
-   border, transparent fill, colored label + glyph; hover fills the
-   border color (à la the difficulty buttons). Each button supplies its
-   own --secondary-color so a single base rule themes both. */
-.menu .leaderboard-btn,
-.menu .sandbox-btn {
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-  font-family: inherit;
-  font-size: 12px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 10px 14px;
-  border: 1.5px solid var(--secondary-color, var(--muted));
-  border-radius: 6px;
-  background: transparent;
-  color: var(--secondary-color, var(--muted));
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease,
-              transform 0.08s ease, box-shadow 0.15s ease;
-}
-.menu .leaderboard-btn { --secondary-color: var(--accent); }
-.menu .sandbox-btn     { --secondary-color: var(--truth);  }
-.menu .leaderboard-btn .msb-glyph,
-.menu .sandbox-btn     .msb-glyph {
-  font-size: 14px;
-  line-height: 1;
-  opacity: 0.85;
-  transition: transform 0.25s ease;
-}
-.menu .leaderboard-btn:hover,
-.menu .sandbox-btn:hover {
-  background: var(--secondary-color);
-  color: var(--bg);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--secondary-color) 28%, transparent);
-}
-/* A small flourish on hover so the glyph reads as alive — the trophy
-   spins slightly, the target nudges. */
-.menu .leaderboard-btn:hover .msb-glyph { transform: rotate(-8deg) scale(1.1); }
-.menu .sandbox-btn:hover     .msb-glyph { transform: scale(1.15); }
+/* The inline crown next to a leaderboard score carries its own right
+   margin for the summary-screen rows; the hub row is a flex line that
+   supplies its own spacing instead. */
+.hub-lb-score .crown.crown-inline { margin-right: 5px; }
 
 /* ============================================================ */
 /*  Leaderboard preview (lives inside the summary screen)        */
@@ -1709,16 +1999,6 @@ html[data-theme="dark"] .tutorial-tooltip {
   /* Hide date column on narrow screens */
   .leaderboard-view .lbf-list-head .lbf-date,
   .leaderboard-view .lbf-row .lbf-date { display: none; }
-  .menu-buttons { gap: 10px; }
-  /* On phones the two ghost buttons get tighter padding and the row
-     widens to the full menu width. */
-  .menu .menu-secondary { gap: 8px; max-width: 100%; }
-  .menu .leaderboard-btn,
-  .menu .sandbox-btn {
-    font-size: 11.5px;
-    padding: 9px 10px;
-    gap: 7px;
-  }
 }
 
 /* ============================================================ */
@@ -2135,29 +2415,29 @@ html[data-theme="dark"] .tutorial-tooltip {
     font-size: 12px;
   }
 
-  /* ---- menu: tighter, difficulty grid stacks ---- */
-  /* Top-align (not center) so when the content is taller than the viewport
-     the top remains scrollable. Center-justification + overflow pushes
-     content above the scrollable region on phones. */
-  .menu {
-    justify-content: flex-start;
-    padding: 24px 16px 32px;
-    overflow-y: auto;
-  }
+  /* ---- landing page: the three panels stack ---- */
+  .menu { padding: 22px 16px 30px; }
+  .menu::before { height: 220px; }
+  /* Once stacked the hub is taller than the viewport, so anchor the layout
+     to the top and let .menu scroll rather than centering a tall column. */
+  .menu-inner { justify-content: flex-start; }
+  .menu-hero { margin-bottom: 18px; }
   .menu h1 { font-size: 32px; }
-  .menu .tagline { font-size: 13px; margin-bottom: 22px; }
-  .diff-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
+  .menu .tagline { font-size: 13px; }
+  .hub {
+    grid-template-columns: 1fr;
+    gap: 12px;
   }
-  .diff-grid .dfeatures li { font-size: 10.5px; }
-  .menu .option-row {
-    flex-direction: column;
-    gap: 10px;
-    margin-bottom: 22px;
-  }
-  .menu .start-btn { width: 100%; padding: 14px; }
-  .menu .footer-note { font-size: 10.5px; padding: 0 8px; text-align: center; }
+  .hub-card { padding: 14px 14px 12px; }
+  /* Stacked, each panel is full-width, so the reserved space for the
+     longest trait line and for blank board rows is no longer needed. */
+  .diff-detail { min-height: 0; }
+  .hub-lb-list { grid-template-rows: repeat(5, minmax(26px, auto)); }
+  /* Stacked panels are full-width, so the chip row has room to breathe. */
+  .hub-lb-board { font-size: 11px; padding: 3px 10px; }
+  .hub-lb-max { font-size: 9.5px; }
+  .hub-lb-max b { font-size: 11.5px; }
+  .menu .footer-note { font-size: 10.5px; padding: 0 8px; }
 
   /* ---- summary: 1 column of mini panels at narrow widths ---- */
   .summary { padding: 18px 14px; }
@@ -2178,8 +2458,57 @@ html[data-theme="dark"] .tutorial-tooltip {
   .tutorial-quit { top: 10px; font-size: 10.5px; padding: 4px 10px; }
 }
 
-/* Extra narrow (≈ < 380 px wide): make the difficulty grid a single column */
+/* Extra narrow (≈ < 420 px wide) */
 @media (max-width: 420px) {
-  .diff-grid { grid-template-columns: 1fr; }
   .menu h1 { font-size: 28px; }
+  .tut-text { font-size: 12px; }
+}
+
+/* Small laptops and half-width windows. The aspect-ratio guard matches the
+   condition that produces the 3-up layout in the first place (its inverse
+   stacks the panels above), so these tightenings never reach a portrait
+   tablet, which stacks and has room to spare. Above 720px the shell is
+   scaled 1.3x (see .app-inner), so a 1200px viewport only gives the hub
+   ~860 CSS px for three panels — tighten them rather than stack, since the
+   available height is scaled down by the same factor. */
+@media (min-width: 721px) and (min-aspect-ratio: 1) and (max-width: 1200px) {
+  .menu { padding: 18px 20px; }
+  .menu h1 { font-size: 36px; }
+  .menu-hero { margin-bottom: 16px; }
+  .hub { gap: 12px; }
+  .hub-card { padding: 13px 12px 11px; }
+  .hub-icon { width: 30px; height: 30px; border-radius: 8px; }
+  .hub-icon svg { width: 17px; height: 17px; }
+  .hub-name { font-size: 14.5px; }
+  .hub-sub { font-size: 11px; }
+  .hub-foot { margin-top: 11px; padding-top: 10px; gap: 8px; }
+  .diff-opt { padding: 5px 8px; gap: 8px; }
+  .diff-opt .do-name { font-size: 12.5px; }
+  .hub-cta { font-size: 11.5px; padding: 9px 8px; letter-spacing: 0.06em; }
+  .hub-lb-list { grid-template-rows: repeat(5, minmax(22px, 1fr)); }
+  /* Chip + ceiling share an even narrower line here, so tighten both. */
+  .hub-lb-boardrow { gap: 6px; }
+  .hub-lb-board { font-size: 9.5px; padding: 3px 7px; }
+  .hub-lb-max { font-size: 8.5px; letter-spacing: 0.04em; }
+  .hub-lb-max b { font-size: 10px; }
+  .hub-points li { font-size: 11px; }
+  .tutorial-bar { margin-top: 12px; padding: 9px 14px; }
+  .tut-text { font-size: 12px; }
+  .menu .footer-note { margin-top: 14px; }
+}
+
+/* Narrowest widths that still get the 3-up layout: the chip can no longer
+   hold both halves, so drop the time rather than ellipsize the difficulty
+   away. The Play panel's timer dropdown sits right alongside, so the
+   information is still on screen. */
+@media (min-width: 721px) and (min-aspect-ratio: 1) and (max-width: 1000px) {
+  .hub-lb-board .lbb-time { display: none; }
+}
+
+/* Smallest window that still gets the 3-up layout. Even difficulty-only,
+   the chip needs the ceiling label to give a few more pixels back. */
+@media (min-width: 721px) and (min-aspect-ratio: 1) and (max-width: 800px) {
+  .hub-lb-boardrow { gap: 4px; }
+  .hub-lb-max { font-size: 8px; }
+  .hub-lb-max b { font-size: 9.5px; }
 }
