@@ -13,6 +13,8 @@
 //   r.setScene(planes, dist, fovArcsec)
 //   r.setPastedTexture(objId, canvas)   — call after pasting an image
 //   r.clearPastedTexture(objId)         — call when object is deleted
+//   r.setBackdrop(canvas | null)        — background image behind the lensed view
+//   r.bgOpts = { fit, zoom, offX, offY, bright, skyLock, angSize } | null
 //   r.resize()
 //   r.destroy()
 
@@ -101,6 +103,18 @@ uniform vec2 u_pastedSz0;
 uniform vec2 u_pastedSz1;
 uniform vec2 u_pastedSz2;
 uniform vec2 u_pastedSz3;
+
+// Background image (View tab): a screen-space backdrop that replaces the flat
+// black field behind the lensed image. u_bgScale is how much of the texture one
+// screen width/height spans and u_bgOffset pans it; both are computed on the CPU
+// (see _bgUniforms) so the fit / zoom / pan / sky-lock arithmetic lives in one place.
+uniform sampler2D u_bgTex;
+uniform int   u_bgOn;      // 1 = a background image is bound
+uniform vec2  u_bgScale;   // texture span covered by the viewport, per axis
+uniform vec2  u_bgOffset;  // pan, in texture units
+uniform float u_bgBright;  // brightness multiplier
+uniform int   u_bgTile;    // 1 = wrap the texture instead of letterboxing
+uniform int   u_bgInvert;  // 1 = pre-invert, cancelling the canvas's CSS invert
 
 // ── Lens deflection angles ────────────────────────────────────────────────────
 
@@ -431,6 +445,34 @@ vec3 samplePasted(int idx, vec2 beta) {
   return u_srcParams[idx].w * col.rgb * fade;
 }
 
+// ── Background image ──────────────────────────────────────────────────────────
+// Screen-space backdrop for the lensed-image view. v_uv is the viewport UV, so
+// the sample window is a straight affine map of it; outside [0,1] the backdrop
+// returns 0 — the empty field in this shader's convention, which the light-theme
+// CSS invert turns back into white — unless tiling is on, in which case the
+// texture's own MIRRORED_REPEAT wrap fills the plane.
+//
+// In light theme the whole canvas is CSS-inverted so the lensed light reads dark
+// on white; the picture is pre-inverted here to cancel that, which is what keeps
+// it looking the same in both themes while everything else still flips. The
+// inversion happens BEFORE the brightness scale so that brightness stays a fade
+// from the empty field toward the picture (0 = plain field, 1 = the picture as
+// supplied) rather than a fade to black in one theme and to white in the other.
+
+vec3 sampleBackdrop() {
+  if (u_bgOn == 0) return vec3(0.0);
+  vec2 uv = (v_uv - 0.5) * u_bgScale + 0.5 + u_bgOffset;
+  uv.y = 1.0 - uv.y;  // WebGL textures: first data row (image top) is at t=0
+  vec3 col = texture(u_bgTex, uv).rgb;
+  if (u_bgInvert == 1) col = vec3(1.0) - col;
+  col *= u_bgBright;
+  if (u_bgTile == 1) return col;
+  // Mask (rather than branch) outside the image, so the mipmapped fetch above
+  // stays in uniform control flow and its derivatives remain well defined.
+  vec2 inside = step(vec2(0.0), uv) * step(uv, vec2(1.0));
+  return col * inside.x * inside.y;
+}
+
 // ── Analytical source brightness (white) ──────────────────────────────────────
 
 float analyticalBrightness(int idx, vec2 beta) {
@@ -730,7 +772,14 @@ void main() {
     vizWarp(colorOut.g, u_vizMin, u_vizMax, u_vizScale, u_vizScaleParam),
     vizWarp(colorOut.b, u_vizMin, u_vizMax, u_vizScale, u_vizScaleParam)
   );
-  fragColor = vec4(colorOut, 1.0);
+  // Composite the backdrop UNDER the lensed light, using the source brightness as
+  // its own coverage: a fully lit pixel hides the backdrop completely, an empty
+  // one shows it in full. A plain sum would instead add the backdrop's value to
+  // every pixel, so the Brightness slider would shift the lensed image too (and
+  // un-clip arcs that the sum had saturated). Applied after the stretch, so the
+  // brightness curve shapes only the lensed light and not the supplied picture.
+  float cover = clamp(max(max(colorOut.r, colorOut.g), colorOut.b), 0.0, 1.0);
+  fragColor = vec4(clamp(colorOut + sampleBackdrop() * (1.0 - cover), 0.0, 1.0), 1.0);
 }`;
 
 // ── Renderer class ────────────────────────────────────────────────────────────
@@ -770,6 +819,12 @@ export class Renderer {
     this._scene = null;
     this.dprMode = 'auto';   // 'auto' (dpr capped at 2) | '1x' | 'native'; see resize()
 
+    // Background image: { tex, w, h } once one is loaded, plus the View-tab
+    // framing controls. Kept as renderer properties rather than setScene()
+    // arguments so every existing call site picks the backdrop up unchanged.
+    this._bg     = null;
+    this.bgOpts  = null;   // { fit, zoom, offX, offY, bright, skyLock, angSize }
+
     // Cache: objId → { tex: WebGLTexture, w, h }
     this._pastedTexCache = new Map();
     // Dummy 1×1 black texture for unoccupied slots.
@@ -779,6 +834,58 @@ export class Renderer {
   // Per-type object cap this renderer actually built with (≤ MAX_OBJECTS). The
   // UI reads it to know how many objects can appear before the display limit.
   get maxObjects() { return this._maxObjects; }
+
+  // Upload (or replace) the background image; pass null to clear it.
+  setBackdrop(imageCanvas) {
+    const { gl } = this;
+    if (this._bg) { gl.deleteTexture(this._bg.tex); this._bg = null; }
+    if (!imageCanvas) return;
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, imageCanvas);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    this._bg = { tex, w: imageCanvas.width, h: imageCanvas.height };
+  }
+
+  get hasBackdrop() { return !!this._bg; }
+
+  // Turn the View-tab background controls into the shader's sample window.
+  //
+  // Fit sets how much of the texture the (always square) viewport spans for an
+  // image of aspect ratio ar: cover shrinks the span on the long axis so the
+  // image fills the square and overflows, contain grows it so the whole image
+  // fits inside and the remainder letterboxes, stretch spans exactly one image
+  // on both axes, and tile uses the contain span with wrapping. Zoom divides the
+  // span (a larger zoom shows less texture, so the image looks bigger), sky-lock
+  // scales it by fov/angSize so the backdrop magnifies with the field of view,
+  // and the offsets pan by a fraction of the viewport — negated so that a
+  // positive offset moves the image right / up rather than the sample window.
+  _bgUniforms(fovArcsec) {
+    const b = this._bg, o = this.bgOpts;
+    if (!b || !o) return null;
+    const ar   = b.w / b.h;
+    const tile = o.fit === 'tile';
+    let sx, sy;
+    if (o.fit === 'stretch') {
+      sx = 1;                   sy = 1;
+    } else if (o.fit === 'contain' || tile) {
+      sx = Math.max(1, 1 / ar); sy = Math.max(1, ar);
+    } else {                                  // cover
+      sx = Math.min(1, 1 / ar); sy = Math.min(1, ar);
+    }
+    const k = (o.zoom > 0 ? o.zoom : 1)
+            / (o.skyLock && o.angSize > 0 ? fovArcsec / o.angSize : 1);
+    sx /= k; sy /= k;
+    return {
+      scale:  [sx, sy],
+      offset: [-(o.offX ?? 0) * sx * 0.5, -(o.offY ?? 0) * sy * 0.5],
+      bright: o.bright ?? 1,
+      invert: !!o.invert,
+      tile,
+    };
+  }
 
   // Upload (or update) the pasted image for a specific source object.
   setPastedTexture(objId, imageCanvas) {
@@ -831,6 +938,7 @@ export class Renderer {
     gl.deleteProgram(this._prog);
     gl.deleteBuffer(this._quad);
     for (const { tex } of this._pastedTexCache.values()) gl.deleteTexture(tex);
+    if (this._bg) gl.deleteTexture(this._bg.tex);
     gl.deleteTexture(this._dummyTex);
   }
 
@@ -999,6 +1107,23 @@ export class Renderer {
       gl.uniform2f(szLocs[s], szH * ar, szH);
     }
 
+    // Background image on the slot after the pasted-image textures.
+    const bg = this._bgUniforms(fovArcsec);
+    gl.activeTexture(gl.TEXTURE0 + MAX_PASTED);
+    gl.bindTexture(gl.TEXTURE_2D, bg ? this._bg.tex : this._dummyTex);
+    if (bg) {
+      const wrap = bg.tile ? gl.MIRRORED_REPEAT : gl.CLAMP_TO_EDGE;
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrap);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrap);
+    }
+    gl.uniform1i (_locs.u_bgTex,    MAX_PASTED);
+    gl.uniform1i (_locs.u_bgOn,     bg ? 1 : 0);
+    gl.uniform2fv(_locs.u_bgScale,  bg ? bg.scale  : [1, 1]);
+    gl.uniform2fv(_locs.u_bgOffset, bg ? bg.offset : [0, 0]);
+    gl.uniform1f (_locs.u_bgBright, bg ? bg.bright : 1);
+    gl.uniform1i (_locs.u_bgTile,   bg && bg.tile   ? 1 : 0);
+    gl.uniform1i (_locs.u_bgInvert, bg && bg.invert ? 1 : 0);
+
     gl.drawArrays(gl.TRIANGLES, 0, 6);
   }
 
@@ -1087,6 +1212,13 @@ export class Renderer {
       u_pastedSz1:    u('u_pastedSz1'),
       u_pastedSz2:    u('u_pastedSz2'),
       u_pastedSz3:    u('u_pastedSz3'),
+      u_bgTex:        u('u_bgTex'),
+      u_bgOn:         u('u_bgOn'),
+      u_bgScale:      u('u_bgScale'),
+      u_bgOffset:     u('u_bgOffset'),
+      u_bgBright:     u('u_bgBright'),
+      u_bgTile:       u('u_bgTile'),
+      u_bgInvert:     u('u_bgInvert'),
       u_saddlePhi:    u('u_saddlePhi'),
       u_nSaddle:      u('u_nSaddle'),
       u_fermatBeta:   u('u_fermatBeta'),

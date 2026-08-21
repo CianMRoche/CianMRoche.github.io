@@ -55,6 +55,9 @@ let _lastHybridId     = null;
 // from the system clipboard so it never clashes with the pasted-image workflow.
 let _objClipboard     = null;
 let _progExpanded     = false;
+// View-tab collapsible sections, both closed by default (like Programmatic).
+let _cmapExpanded     = false;
+let _bgExpanded       = false;
 
 // Invert a 6-digit hex colour (#rrggbb → complement).
 function invertHexColor(hex) {
@@ -233,7 +236,26 @@ const CONFIG_DEFAULTS = {
   lineArtPalette:     'ink',  // key into LINE_ART_PALETTES
   lineArtFill:        true,   // fill lensed-image outlines (vs stroke only)
   lineArtSmooth:      true,   // curvature-aware Chaikin smoothing of the vector curves
+  // Background image framing (View tab → Background). The picture itself is binary
+  // data and is not part of the config, only how it is framed.
+  bgFit:              'cover',// 'cover' | 'contain' | 'stretch' | 'tile'
+  bgZoom:             1.0,    // zoom on top of the fit (>1 magnifies)
+  bgOffX:             0.0,    // pan, in half-viewport widths (+ moves the image right)
+  bgOffY:             0.0,    // pan, in half-viewport heights (+ moves the image up)
+  bgBright:           1.0,    // brightness multiplier
+  bgSkyLock:          false,  // false = fixed to the viewport; true = zooms with the FOV
+  bgHidden:           false,  // eye toggle: keep the loaded image but stop drawing it
 };
+
+// Ranges for the background-image controls, shared by the View-tab sliders and
+// the config loader so a hand-edited file can't push them out of bounds.
+const BG_FITS       = ['cover', 'contain', 'stretch', 'tile'];
+const BG_ZOOM_MIN   = 0.25, BG_ZOOM_MAX = 5;
+const BG_OFF_MAX    = 1;
+const BG_BRIGHT_MAX = 2;
+
+// Numeric config field: finite and clamped into range, else the supplied default.
+const _clampNum = (v, lo, hi, d) => isFinite(v) ? Math.min(hi, Math.max(lo, +v)) : d;
 
 const state = {
   ...CONFIG_DEFAULTS,
@@ -255,7 +277,31 @@ const state = {
   // Live line-art colors: seeded from the chosen palette, editable per-role via the
   // View-tab color pickers. Picking a palette resets these to that palette's colors.
   lineArtColors:   paletteColors(CONFIG_DEFAULTS.lineArtPalette),
+  // Background image (transient: pixels are not saved in the config, like pasted
+  // sources). bgAngSize freezes the FOV at load time so the sky-lock option has a
+  // reference scale at which the backdrop matches its viewport-fixed framing.
+  bgCanvas:        null,     // decoded image as a canvas, or null
+  bgName:          '',       // file name, shown in the View tab
+  bgAngSize:       0,        // FOV (arcsec) when the image was loaded
 };
+
+// True when a background image is actually on screen. It replaces the flat field
+// of the lensed-image view only: the quantity maps colour every pixel themselves,
+// and line art paints its own opaque palette background over the GL canvas. The
+// eye toggle keeps the loaded picture but takes it off screen.
+function bgImageActive() {
+  return !!state.bgCanvas && !state.bgHidden && state.vizMode === 0 && !state.lineArt;
+}
+
+// Whether the GL canvas is CSS-inverted right now: in light theme the lensed
+// image is inverted so arcs read dark on white, while the quantity maps carry
+// their own theming (see style.css). PNG capture and recording replicate the
+// inversion, and the shader pre-inverts the background image to cancel it, so
+// all three read this one test.
+function glCanvasInverted() {
+  return state.vizMode === 0 &&
+         document.documentElement.getAttribute('data-theme') !== 'dark';
+}
 
 // Default colour-mapping per viz mode (chosen to reproduce the original hardcoded look).
 // scale: 0=linear 1=sqrt 2=power 3=asinh 4=log ; param = γ (power) or a (asinh).
@@ -578,6 +624,14 @@ function configToYaml() {
   y += `lineArtColors: ${LINE_ART_ROLES.map(([r]) => state.lineArtColors[r]).join(' ')}\n`;
   y += `lineArtFill: ${state.lineArtFill}\n`;
   y += `lineArtSmooth: ${state.lineArtSmooth}\n`;
+  // Background framing only; the image itself is binary data (see loadConfigFromYaml).
+  y += `bgFit: ${state.bgFit}\n`;
+  y += `bgZoom: ${+state.bgZoom.toFixed(4)}\n`;
+  y += `bgOffX: ${+state.bgOffX.toFixed(4)}\n`;
+  y += `bgOffY: ${+state.bgOffY.toFixed(4)}\n`;
+  y += `bgBright: ${+state.bgBright.toFixed(4)}\n`;
+  y += `bgSkyLock: ${state.bgSkyLock}\n`;
+  y += `bgHidden: ${state.bgHidden}\n`;
   y += `fermatUseSourcePos: ${state.fermatUseSourcePos}\n`;
   if (state.lastFermatSource) {
     const fsp = state.planes.find(p => p.id === state.lastFermatSource.planeId);
@@ -830,6 +884,16 @@ function loadConfigFromYaml(yaml) {
     }
     state.lineArtFill    = _bool(cfg.lineArtFill,    CONFIG_DEFAULTS.lineArtFill);
     state.lineArtSmooth  = _bool(cfg.lineArtSmooth,  CONFIG_DEFAULTS.lineArtSmooth);
+    // Background framing. The picture is not part of the config, so a loaded file
+    // restores how a backdrop is framed but leaves whatever image is loaded (if
+    // any) in place, exactly as pasted-image source textures behave.
+    state.bgFit     = BG_FITS.includes(cfg.bgFit) ? cfg.bgFit : CONFIG_DEFAULTS.bgFit;
+    state.bgZoom    = _clampNum(cfg.bgZoom,   BG_ZOOM_MIN, BG_ZOOM_MAX, CONFIG_DEFAULTS.bgZoom);
+    state.bgOffX    = _clampNum(cfg.bgOffX,  -BG_OFF_MAX, BG_OFF_MAX, CONFIG_DEFAULTS.bgOffX);
+    state.bgOffY    = _clampNum(cfg.bgOffY,  -BG_OFF_MAX, BG_OFF_MAX, CONFIG_DEFAULTS.bgOffY);
+    state.bgBright  = _clampNum(cfg.bgBright,  0, BG_BRIGHT_MAX, CONFIG_DEFAULTS.bgBright);
+    state.bgSkyLock = _bool(cfg.bgSkyLock, CONFIG_DEFAULTS.bgSkyLock);
+    state.bgHidden  = _bool(cfg.bgHidden,  CONFIG_DEFAULTS.bgHidden);
     if (isFinite(cfg.fermatBetaX) && isFinite(cfg.fermatBetaY) && isFinite(cfg.fermatSrcPlaneZ)) {
       const fsp = state.planes.find(p => Math.abs(p.z - cfg.fermatSrcPlaneZ) < 1e-4);
       state.lastFermatSource = fsp ? { cx: cfg.fermatBetaX, cy: cfg.fermatBetaY, planeId: fsp.id } : null;
@@ -2939,6 +3003,81 @@ function _applyImageFile(file, obj) {
 }
 
 
+// ── Background image (View tab) ───────────────────────────────────────────────
+// Largest texture dimension kept: a backdrop is never shown above canvas
+// resolution, so a 6000px photo is downscaled rather than filling GPU memory.
+const BG_MAX_DIM = 4096;
+
+// Hidden file picker. The View panel is rebuilt with innerHTML on every render,
+// so the input lives on <body>: a rebuild while the dialog was open would
+// otherwise destroy the element before its change event fired.
+let _bgFileInput = null;
+function pickBackgroundImage() {
+  if (!_bgFileInput) {
+    _bgFileInput = document.createElement('input');
+    _bgFileInput.type = 'file';
+    _bgFileInput.accept = 'image/*';
+    _bgFileInput.id = 'sl-bg-file-input';
+    _bgFileInput.style.display = 'none';
+    _bgFileInput.addEventListener('change', e => {
+      const file = e.target.files?.[0];
+      e.target.value = '';               // allow re-picking the same file
+      if (file) _applyBackgroundFile(file);
+    });
+    document.body.appendChild(_bgFileInput);
+  }
+  _bgFileInput.click();
+}
+
+function _applyBackgroundFile(file) {
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+    const k  = Math.min(1, BG_MAX_DIM / Math.max(iw, ih));
+    const cvs = document.createElement('canvas');
+    cvs.width  = Math.max(1, Math.round(iw * k));
+    cvs.height = Math.max(1, Math.round(ih * k));
+    cvs.getContext('2d').drawImage(img, 0, 0, cvs.width, cvs.height);
+    URL.revokeObjectURL(url);
+    state.bgCanvas  = cvs;
+    state.bgName    = file.name || 'image';
+    state.bgAngSize = state.fov;   // sky-lock reference: identical framing at this FOV
+    renderer?.setBackdrop(cvs);
+    syncBackdrop();
+    renderSidebar(); redraw();
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); showToast('Could not read that image.'); };
+  img.src = url;
+}
+
+function clearBackgroundImage() {
+  state.bgCanvas = null;
+  state.bgName   = '';
+  state.bgHidden = false;   // so the next upload starts visible
+  renderer?.setBackdrop(null);
+  syncBackdrop();
+  renderSidebar(); redraw();
+}
+
+// Push the View-tab background controls into the renderer. `invert` tells the
+// shader to pre-invert the picture so the light-theme canvas inversion cancels
+// out: the picture then looks the same in both themes while every other plot
+// element still flips with the theme as it always did.
+function syncBackdrop() {
+  if (!renderer) return;
+  renderer.bgOpts = (state.bgCanvas && !state.bgHidden) ? {
+    fit:     state.bgFit,
+    zoom:    state.bgZoom,
+    offX:    state.bgOffX,
+    offY:    state.bgOffY,
+    bright:  state.bgBright,
+    skyLock: state.bgSkyLock,
+    angSize: state.bgAngSize,
+    invert:  glCanvasInverted(),
+  } : null;
+}
+
 function canvasToArcsec(canvas, e) {
   const r = canvas.getBoundingClientRect();
   return {
@@ -3343,6 +3482,86 @@ function renderScenePanel() {
   }
 }
 
+// Minimal HTML escape for text interpolated into a panel template (file names).
+function _escHtml(str) {
+  return String(str).replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+}
+
+// ── View tab: Background image section ───────────────────────────────────────
+// An uploaded picture replaces the flat black (or, in light theme, white) field
+// behind the lensed image, and is unaffected by the theme itself. The image panel
+// is always square, so a rectangular picture needs framing: Fit picks the starting
+// frame, then Zoom and the two Offsets give full manual control over which part of
+// it fills the square.
+function backgroundSectionHtml() {
+  const has = !!state.bgCanvas;
+  const dis = has ? '' : 'disabled';
+  const hid = has && state.bgHidden;
+  // A loaded image that isn't currently visible: say why rather than looking broken.
+  const inertNote = !has || bgImageActive() ? ''
+    : hid            ? 'Hidden. Use the eye button to show it again.'
+    : state.lineArt  ? 'Line art draws its own background; switch it off to see the image.'
+    : 'Shown in the lensed-image view only, not on the quantity maps.';
+  return `
+      <div class="sl-hybrid-section">
+        <div class="sl-view-hdr" style="padding:0">
+          <button class="sl-hybrid-hdr" id="sl-bg-section-hdr" style="flex:1">
+            <span class="sl-hybrid-arrow">${_bgExpanded?'▼':'▶'}</span>
+            <span class="sl-panel-title" style="flex:1">Background</span>
+          </button>
+          ${infoSection('sl-bg-info', `
+            An uploaded image replaces the empty field behind the lensed image and sits behind the lensed light, which covers it where the image is bright. The picture looks the same in either theme; every other plot element still follows the light / dark theme (<b>D</b>) as usual.<br><br>
+            <b>Fit</b>: the image panel is square. <b>Cover</b> fills it and crops the long axis, <b>Contain</b> fits the whole image and leaves the rest empty, <b>Stretch</b> distorts it to the square, <b>Tile</b> fits it and mirror-repeats to fill.<br><br>
+            <b>Zoom</b> and <b>Offset X / Y</b> then frame it by hand (offsets are in half-panel widths). <b>Brightness</b> fades the picture toward the empty field (0) or past its supplied brightness (above 1), and affects the backdrop only. <b>Zoom with FOV</b> pins the backdrop to the sky instead of the viewport, so zooming the field magnifies it too.<br><br>
+            The eye button takes the picture off the plot without unloading it. Only the framing is saved in the config file; the picture itself is not.`)}
+        </div>
+        ${_bgExpanded ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
+          <div class="sl-capture-row" style="margin-top:0">
+            <button class="sl-capture-btn" id="sl-bg-pick">${has ? 'Replace image…' : 'Upload image…'}</button>
+            ${has ? `<button type="button" class="sl-hybrid-part-btn${hid ? ' sl-obj-hidden' : ''}" id="sl-bg-vis" title="${hid ? 'Show' : 'Hide'} the background image">${eyeIcon(hid)}</button>
+            <button class="sl-rec-mini-btn sl-rec-mini-clear" id="sl-bg-clear" title="Remove the background image">Remove</button>` : ''}
+          </div>
+          ${has ? `<div class="sl-bg-file" title="${_escHtml(state.bgName)}">${_escHtml(state.bgName)} · ${state.bgCanvas.width}×${state.bgCanvas.height}</div>` : ''}
+          ${inertNote ? `<p class="sl-muted-note" style="margin:6px 0 0">${inertNote}</p>` : ''}
+          <div class="sl-global-input" style="margin-top:8px">
+            <label>Fit</label>
+            <select id="sl-bg-fit" style="flex:1 1 auto;min-width:0" ${dis}>
+              <option value="cover"   ${state.bgFit==='cover'  ?'selected':''}>Cover (crop)</option>
+              <option value="contain" ${state.bgFit==='contain'?'selected':''}>Contain (fit)</option>
+              <option value="stretch" ${state.bgFit==='stretch'?'selected':''}>Stretch</option>
+              <option value="tile"    ${state.bgFit==='tile'   ?'selected':''}>Tile (mirrored)</option>
+            </select>
+          </div>
+          <div class="sl-global-input">
+            <label>Zoom</label>
+            <input type="range" id="sl-bg-zoom" data-disp-dec="2" min="${BG_ZOOM_MIN}" max="${BG_ZOOM_MAX}" step="any" data-drag-step="0.05" value="${state.bgZoom}" ${dis}>
+            <span class="sl-tone-param-val">${state.bgZoom.toFixed(2)}</span>
+          </div>
+          <div class="sl-global-input">
+            <label>Offset X</label>
+            <input type="range" id="sl-bg-offx" data-disp-dec="2" min="${-BG_OFF_MAX}" max="${BG_OFF_MAX}" step="any" data-drag-step="0.02" value="${state.bgOffX}" ${dis}>
+            <span class="sl-tone-param-val">${state.bgOffX.toFixed(2)}</span>
+          </div>
+          <div class="sl-global-input">
+            <label>Offset Y</label>
+            <input type="range" id="sl-bg-offy" data-disp-dec="2" min="${-BG_OFF_MAX}" max="${BG_OFF_MAX}" step="any" data-drag-step="0.02" value="${state.bgOffY}" ${dis}>
+            <span class="sl-tone-param-val">${state.bgOffY.toFixed(2)}</span>
+          </div>
+          <div class="sl-global-input">
+            <label>Brightness</label>
+            <input type="range" id="sl-bg-bright" data-disp-dec="2" min="0" max="${BG_BRIGHT_MAX}" step="any" data-drag-step="0.05" value="${state.bgBright}" ${dis}>
+            <span class="sl-tone-param-val">${state.bgBright.toFixed(2)}</span>
+          </div>
+          <div class="sl-checkbox-row">
+            <label class="${has?'':'sl-label-disabled'}" title="Anchor the backdrop to the sky instead of the viewport: it is framed as you see it now at ${(state.bgAngSize||state.fov).toFixed(2)}″, and zooming the field of view magnifies it along with the lensed image"><input type="checkbox" id="sl-bg-skylock" ${state.bgSkyLock?'checked':''} ${dis}> Zoom with FOV</label>
+          </div>
+          <div style="margin-top:4px">
+            <button id="sl-bg-reset" type="button" style="font-size:11px;background:none;border:none;color:var(--muted);text-decoration:underline;cursor:pointer;padding:0">Reset framing</button>
+          </div>
+        </div>` : ''}
+      </div>`;
+}
+
 // ── View tab: display, reference plane, color mapping, Fermat contours ────────
 function renderViewPanel() {
   const el = document.getElementById('sl-tab-view');
@@ -3434,11 +3653,14 @@ function renderViewPanel() {
 
       ${vizModeHasScale(state.vizMode) ? `
       <div class="sl-hybrid-section">
-        <div class="sl-view-hdr">
-          <span class="sl-panel-title" style="flex:1">Color Map</span>
+        <div class="sl-view-hdr" style="padding:0">
+          <button class="sl-hybrid-hdr" id="sl-cmap-section-hdr" style="flex:1">
+            <span class="sl-hybrid-arrow">${_cmapExpanded?'▼':'▶'}</span>
+            <span class="sl-panel-title" style="flex:1">Color Map</span>
+          </button>
           ${infoSection('sl-cmap-info', cmapInfoHtml(state.vizMode))}
         </div>
-        <div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
+        ${_cmapExpanded ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
           ${(() => {
             const vs = vizScaleFor(state.vizMode);
             const heading = { 0:'Brightness stretch', 1:'κ color scale', 2:'γ color scale',
@@ -3487,8 +3709,10 @@ function renderViewPanel() {
             <button id="sl-viz-reset" type="button" style="font-size:11px;background:none;border:none;color:var(--muted);text-decoration:underline;cursor:pointer;padding:0">Reset to defaults</button>
           </div>`;
           })()}
-        </div>
+        </div>` : ''}
       </div>` : ''}
+
+      ${backgroundSectionHtml()}
 
       ${state.vizMode === 6 ? `
       <div class="sl-hybrid-section">
@@ -3632,6 +3856,48 @@ function renderViewPanel() {
   });
   document.getElementById('sl-fermat-use-src')?.addEventListener('change', e => {
     state.fermatUseSourcePos = e.target.checked;
+    renderSidebar(); redraw();
+  });
+  // Collapsible section headers (same pattern as Programmatic in the Export tab).
+  document.getElementById('sl-cmap-section-hdr')?.addEventListener('click', () => { _cmapExpanded = !_cmapExpanded; renderSidebar(); });
+  document.getElementById('sl-bg-section-hdr')?.addEventListener('click', () => { _bgExpanded = !_bgExpanded; renderSidebar(); });
+
+  // ── Background image section ───────────────────────────────────────────────
+  document.getElementById('sl-bg-pick')?.addEventListener('click', pickBackgroundImage);
+  document.getElementById('sl-bg-clear')?.addEventListener('click', clearBackgroundImage);
+  document.getElementById('sl-bg-vis')?.addEventListener('click', () => {
+    state.bgHidden = !state.bgHidden;
+    renderSidebar(); redraw();
+  });
+  document.getElementById('sl-bg-fit')?.addEventListener('change', e => {
+    if (BG_FITS.includes(e.target.value)) { state.bgFit = e.target.value; redraw(); }
+  });
+  // Framing sliders: update state and the readout in place, no panel rebuild, so
+  // dragging stays smooth (redraw() coalesces to one frame).
+  const _bgSlider = (id, key, dec = 2) => {
+    const inp = document.getElementById(id);
+    inp?.addEventListener('input', () => {
+      state[key] = parseFloat(inp.value);
+      const val = inp.parentElement.querySelector('.sl-tone-param-val');
+      if (val) val.textContent = state[key].toFixed(dec);
+      redraw();
+    });
+  };
+  _bgSlider('sl-bg-zoom',   'bgZoom');
+  _bgSlider('sl-bg-offx',   'bgOffX');
+  _bgSlider('sl-bg-offy',   'bgOffY');
+  _bgSlider('sl-bg-bright', 'bgBright');
+  document.getElementById('sl-bg-skylock')?.addEventListener('change', e => {
+    state.bgSkyLock = e.target.checked;
+    // Anchor to the field of view on screen now, so switching the lock on never
+    // changes the framing; only later zooming does.
+    if (state.bgSkyLock) state.bgAngSize = state.fov;
+    renderSidebar(); redraw();
+  });
+  document.getElementById('sl-bg-reset')?.addEventListener('click', () => {
+    for (const k of ['bgFit', 'bgZoom', 'bgOffX', 'bgOffY', 'bgBright', 'bgSkyLock', 'bgHidden'])
+      state[k] = CONFIG_DEFAULTS[k];
+    state.bgAngSize = state.fov;
     renderSidebar(); redraw();
   });
 }
@@ -5212,6 +5478,7 @@ function redraw() {
 }
 
 function _doRedraw() {
+  syncBackdrop();   // background framing is read by the renderer at draw time
   if (!renderer || !state.dist) return;
   const sorted = [...state.planes].sort((a, b) => a.z - b.z);
   const isDark  = document.documentElement.getAttribute('data-theme') === 'dark' ? 1 : 0;
@@ -5294,9 +5561,10 @@ function buildCompositeCanvas() {
   off.height = gl.height;
   const ctx  = off.getContext('2d');
   ctx.drawImage(gl, 0, 0);
-  // Match on-screen appearance: in light mode only the lensed-image view is
-  // CSS-inverted (viz maps carry their own theming), so invert here only for mode 0.
-  if (state.vizMode === 0 && document.documentElement.getAttribute('data-theme') !== 'dark') {
+  // Match on-screen appearance: only the plain lensed-image view is CSS-inverted
+  // in light mode (viz maps carry their own theming, and a background image
+  // suspends the inversion), so mirror exactly that test.
+  if (glCanvasInverted()) {
     ctx.globalCompositeOperation = 'difference';
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, off.width, off.height);
@@ -5666,8 +5934,8 @@ function _compositeToLive() {
   }
   const ctx = lc.getContext('2d');
   ctx.drawImage(gl, 0, 0);
-  // Only the lensed-image view is CSS-inverted in light mode (see buildCompositeCanvas).
-  if (state.vizMode === 0 && document.documentElement.getAttribute('data-theme') !== 'dark') {
+  // Mirrors the on-screen CSS inversion (see buildCompositeCanvas).
+  if (glCanvasInverted()) {
     ctx.globalCompositeOperation = 'difference';
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, lc.width, lc.height);

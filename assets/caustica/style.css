@@ -315,7 +315,9 @@ html[data-theme="dark"] .sl-topbar-menu { box-shadow: 0 8px 24px rgba(0, 0, 0, 0
   touch-action: none; /* prevent page scroll/refresh when dragging on the canvas */
 }
 
-/* In light mode, invert the lensed image so background is bright and arcs are dark. */
+/* In light mode, invert the lensed image so background is bright and arcs are dark.
+   Keep this selector in step with glCanvasInverted() in main.js, which PNG/video
+   capture and the background image's pre-inversion both read. */
 html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); }
 
 /* Overlay canvas for critical curves — sits on top, pointer-events off. */
@@ -987,6 +989,16 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   margin-bottom: 7px;
 }
 .sl-muted-note { font-size: 11.5px; color: var(--muted); }
+
+/* Background-image section: the loaded-file line under the upload row. */
+.sl-bg-file {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* Small "Set" / "✕" buttons in programmatic rows */
 .sl-rec-mini-btn {
