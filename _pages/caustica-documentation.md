@@ -217,7 +217,7 @@ The shear and magnification maps are less affected.
 
 ### Colour scale, limits, and palette
 
-The $\kappa$, $\gamma$, $\lvert\mu\rvert$, and $\lvert\hat{\boldsymbol{\alpha}}\rvert$ maps share a set of controls in the **Color Map** section of the View tab. Each map remembers its own settings. The reference source redshift these maps use is set by the **z<sub>s</sub> ref** control in the View tab's Display section (Auto tracks the highest source plane; a chip on the image shows the value in use), and quick toggles for critical curves, caustics, markers, and the colorbar sit beside the view dropdown on the image itself.
+The $\kappa$, $\gamma$, $\lvert\mu\rvert$, and $\lvert\hat{\boldsymbol{\alpha}}\rvert$ maps share a set of controls in the **Color Map** section of the View tab. Each map remembers its own settings. The reference source redshift these maps use is set by the **z<sub>s</sub> ref** control in the View tab's Display section (Auto tracks the highest source plane; a chip on the image shows the value in use), and quick toggles for critical curves, caustics, and markers sit beside the view dropdown on the image itself.
 
 A raw quantity value $v$ is mapped to a colour in two steps: first warped to a normalised position $t \in [0,1]$ between the chosen limits, then passed through the selected colour palette.
 
@@ -235,7 +235,7 @@ A raw quantity value $v$ is mapped to a colour in two steps: first warped to a n
 (where $u = (v-\text{min})/(\text{max}-\text{min})$ clamped to $[0,1]$).
 
 - **Colormap** selects the palette: **Default** (theme-aware purple→orange→yellow), **Viridis**, **Inferno**, **Plasma**, **Turbo**, or **Grayscale**. The standard palettes are evaluated on the GPU via compact polynomial fits and are theme-independent.
-- **Show colorbar** toggles the on-canvas colour bar, which is labelled with the current Min/Max (at most two decimal places).
+- **Colorbar** (in the View tab's Display section) toggles the on-canvas colour bar, which is labelled with the current Min/Max (at most two decimal places). It has no on-image chip, since the bar itself is the obvious place to notice it is on.
 
 A small ⓘ button in the section header summarises whichever controls are currently shown; the header itself expands and collapses the section, as does the **Background** section below it (§6). Both start collapsed. The same Min/Max/Scale machinery also drives the brightness stretch of the lensed-image view (§6).
 

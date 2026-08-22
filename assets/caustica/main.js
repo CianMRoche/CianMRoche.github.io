@@ -1462,9 +1462,6 @@ function buildDOM() {
               <button data-flag="showMarkers" title="Position markers" aria-label="Toggle position markers" aria-pressed="false">
                 <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M8 3.5 L13 12.5 H3 Z"/></svg>
               </button>
-              <button data-flag="showColorbar" title="Colorbar" aria-label="Toggle colorbar" aria-pressed="false">
-                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="6" width="12" height="4.5" rx="1"/><line x1="6" y1="6" x2="6" y2="10.5"/><line x1="10" y1="6" x2="10" y2="10.5"/></svg>
-              </button>
             </div>
             <div class="sl-zs-chip" id="sl-zs-chip" style="display:none"></div>
             <div class="sl-colorbar" id="sl-colorbar" style="display:none">
@@ -1704,7 +1701,6 @@ function attachHandlers() {
     if (!btn) return;
     const flag = btn.dataset.flag;
     state[flag] = !state[flag];
-    if (flag === 'showColorbar') _updateColorbar();
     updateOverlayChips();
     if (activeTab === 'view') renderSidebar();
     redraw();
