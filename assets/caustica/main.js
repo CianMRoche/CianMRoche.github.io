@@ -282,6 +282,7 @@ const state = {
   // reference scale at which the backdrop matches its viewport-fixed framing.
   bgCanvas:        null,     // decoded image as a canvas, or null
   bgName:          '',       // file name, shown in the View tab
+  bgSrc:           '',       // site file name when the image came from a config, else ''
   bgAngSize:       0,        // FOV (arcsec) when the image was loaded
 };
 
@@ -624,7 +625,9 @@ function configToYaml() {
   y += `lineArtColors: ${LINE_ART_ROLES.map(([r]) => state.lineArtColors[r]).join(' ')}\n`;
   y += `lineArtFill: ${state.lineArtFill}\n`;
   y += `lineArtSmooth: ${state.lineArtSmooth}\n`;
-  // Background framing only; the image itself is binary data (see loadConfigFromYaml).
+  // Background framing, plus the image's file name when it came from the site's
+  // own images (a user-uploaded picture is binary data with no address to save).
+  if (state.bgSrc) y += `bgImage: ${state.bgSrc}\n`;
   y += `bgFit: ${state.bgFit}\n`;
   y += `bgZoom: ${+state.bgZoom.toFixed(4)}\n`;
   y += `bgOffX: ${+state.bgOffX.toFixed(4)}\n`;
@@ -718,6 +721,17 @@ function saveConfig() {
 // Example scenes shipped with the site. GitHub Pages can't list a directory, so
 // the manifest is explicit; files live in /images/caustica-presets/.
 const PRESET_BASE = '/images/caustica-presets/';
+
+// A config may name a background image to load with the scene (the presets use
+// this; a picture the user uploads has no URL to save). Those images live in the
+// preset directory alongside the scenes that reference them, and only a bare file
+// name is accepted: resolving against one fixed directory keeps a loaded config
+// from making the browser fetch an arbitrary address, and keeps the texture
+// same-origin, which matters because a cross-origin image taints the canvas and
+// WebGL then refuses to upload it.
+const BG_IMAGE_BASE = PRESET_BASE;
+const BG_IMAGE_RE   = /^[A-Za-z0-9_.-]+\.(png|jpe?g|webp|gif|avif)$/i;
+const isPresetBgName = n => typeof n === 'string' && BG_IMAGE_RE.test(n) && !n.includes('..');
 const PRESETS = [
   { file: 'two-plane.yaml',     name: 'Multiplane' },
   { file: 'compound-lens.yaml', name: 'Uniform Source' },
@@ -726,6 +740,7 @@ const PRESETS = [
   { file: 'zigzag.yaml',        name: 'ZigZag Lens' },
   { file: 'butterfly_caustic.yaml', name: 'Butterfly Caustic' },
   { file: 'group.yaml',         name: 'Galaxy group' },
+  { file: 'image_recreation.yaml', name: 'Image recreation' },
   { file: 'line_art.yaml',      name: 'Line art' },
 ];
 
@@ -884,9 +899,17 @@ function loadConfigFromYaml(yaml) {
     }
     state.lineArtFill    = _bool(cfg.lineArtFill,    CONFIG_DEFAULTS.lineArtFill);
     state.lineArtSmooth  = _bool(cfg.lineArtSmooth,  CONFIG_DEFAULTS.lineArtSmooth);
-    // Background framing. The picture is not part of the config, so a loaded file
-    // restores how a backdrop is framed but leaves whatever image is loaded (if
-    // any) in place, exactly as pasted-image source textures behave.
+    // Background image. A config may name one of the site's own images (the presets
+    // do); anything else is rejected by isPresetBgName. With no name given, an image
+    // that itself came from a config is dropped, while a picture the user uploaded
+    // by hand is left alone — so loading a preset never silently discards their
+    // upload, and never leaves the previous preset's image behind either.
+    if (isPresetBgName(cfg.bgImage)) {
+      if (cfg.bgImage !== state.bgSrc) _loadBackgroundFromSite(cfg.bgImage);
+    } else if (state.bgSrc) {
+      clearBackgroundImage();
+    }
+    // Background framing.
     state.bgFit     = BG_FITS.includes(cfg.bgFit) ? cfg.bgFit : CONFIG_DEFAULTS.bgFit;
     state.bgZoom    = _clampNum(cfg.bgZoom,   BG_ZOOM_MIN, BG_ZOOM_MAX, CONFIG_DEFAULTS.bgZoom);
     state.bgOffX    = _clampNum(cfg.bgOffX,  -BG_OFF_MAX, BG_OFF_MAX, CONFIG_DEFAULTS.bgOffX);
@@ -3029,31 +3052,58 @@ function pickBackgroundImage() {
   _bgFileInput.click();
 }
 
+// Sequence token: a config-named image loads asynchronously, so a load that is
+// still in flight when the next config arrives must not overwrite it.
+let _bgLoadSeq = 0;
+
+// Decode a loaded <img> into a size-capped canvas and install it as the backdrop.
+// `src` is the site file name for a config-named image, '' for a user upload (which
+// has no address to write back out to a config).
+function _installBackground(img, name, src) {
+  const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+  const k  = Math.min(1, BG_MAX_DIM / Math.max(iw, ih));
+  const cvs = document.createElement('canvas');
+  cvs.width  = Math.max(1, Math.round(iw * k));
+  cvs.height = Math.max(1, Math.round(ih * k));
+  cvs.getContext('2d').drawImage(img, 0, 0, cvs.width, cvs.height);
+  state.bgCanvas  = cvs;
+  state.bgName    = name || 'image';
+  state.bgSrc     = src || '';
+  state.bgAngSize = state.fov;   // sky-lock reference: identical framing at this FOV
+  renderer?.setBackdrop(cvs);
+  syncBackdrop();
+  renderSidebar(); redraw();
+}
+
 function _applyBackgroundFile(file) {
   const url = URL.createObjectURL(file);
+  const seq = ++_bgLoadSeq;
   const img = new Image();
   img.onload = () => {
-    const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
-    const k  = Math.min(1, BG_MAX_DIM / Math.max(iw, ih));
-    const cvs = document.createElement('canvas');
-    cvs.width  = Math.max(1, Math.round(iw * k));
-    cvs.height = Math.max(1, Math.round(ih * k));
-    cvs.getContext('2d').drawImage(img, 0, 0, cvs.width, cvs.height);
     URL.revokeObjectURL(url);
-    state.bgCanvas  = cvs;
-    state.bgName    = file.name || 'image';
-    state.bgAngSize = state.fov;   // sky-lock reference: identical framing at this FOV
-    renderer?.setBackdrop(cvs);
-    syncBackdrop();
-    renderSidebar(); redraw();
+    if (seq === _bgLoadSeq) _installBackground(img, file.name, '');
   };
   img.onerror = () => { URL.revokeObjectURL(url); showToast('Could not read that image.'); };
   img.src = url;
 }
 
+// Load a background image shipped with the site, named by a config file.
+function _loadBackgroundFromSite(fileName) {
+  const seq = ++_bgLoadSeq;
+  const img = new Image();
+  img.onload  = () => { if (seq === _bgLoadSeq) _installBackground(img, fileName, fileName); };
+  img.onerror = () => {
+    if (seq !== _bgLoadSeq) return;
+    showToast(`Could not load background image “${fileName}”.`);
+  };
+  img.src = BG_IMAGE_BASE + fileName;
+}
+
 function clearBackgroundImage() {
+  _bgLoadSeq++;             // abandon any load still in flight
   state.bgCanvas = null;
   state.bgName   = '';
+  state.bgSrc    = '';
   state.bgHidden = false;   // so the next upload starts visible
   renderer?.setBackdrop(null);
   syncBackdrop();
@@ -3513,7 +3563,7 @@ function backgroundSectionHtml() {
             An uploaded image replaces the empty field behind the lensed image and sits behind the lensed light, which covers it where the image is bright. The picture looks the same in either theme; every other plot element still follows the light / dark theme (<b>D</b>) as usual.<br><br>
             <b>Fit</b>: the image panel is square. <b>Cover</b> fills it and crops the long axis, <b>Contain</b> fits the whole image and leaves the rest empty, <b>Stretch</b> distorts it to the square, <b>Tile</b> fits it and mirror-repeats to fill.<br><br>
             <b>Zoom</b> and <b>Offset X / Y</b> then frame it by hand (offsets are in half-panel widths). <b>Brightness</b> fades the picture toward the empty field (0) or past its supplied brightness (above 1), and affects the backdrop only. <b>Zoom with FOV</b> pins the backdrop to the sky instead of the viewport, so zooming the field magnifies it too.<br><br>
-            The eye button takes the picture off the plot without unloading it. Only the framing is saved in the config file; the picture itself is not.`)}
+            The eye button takes the picture off the plot without unloading it. Config files save the framing, and the file name only for the images shipped with the site (as the <b>Image recreation</b> preset does); a picture you upload yourself is not saved.`)}
         </div>
         ${_bgExpanded ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
           <div class="sl-capture-row" style="margin-top:0">

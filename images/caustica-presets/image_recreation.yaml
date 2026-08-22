@@ -1,0 +1,76 @@
+fov: 4
+zMax: 3
+vizMode: 0
+vizScale0: 1 0.5 0 1 0
+vizScale1: 0 0.5 0 2 0
+vizScale2: 0 0.5 0 0.5 0
+vizScale3: 4 0.5 1 30 0
+vizScale5: 0 0.5 0 2 0
+showCritCurves: false
+showCaustics: false
+showMarkers: true
+showLegend: true
+showColorbar: true
+showScaleBar: true
+showRuler: false
+critGridN: 512
+psGridN: 300
+renderScale: auto
+critZs: null
+contourSpacing: 1
+contourScale: linear
+H0: 70
+Omega_m: 0.3
+showTimeDelays: false
+lineArt: false
+lineArtPalette: ink
+lineArtColors: #0a0a0a #ebebeb #ffffff #ffffff #9aa0a6 #ffffff #7bbfcc #fbbf24 #b09ac8
+lineArtFill: true
+lineArtSmooth: true
+bgImage: quad_quasar_image.jpg
+bgFit: cover
+bgZoom: 1
+bgOffX: 0
+bgOffY: 0
+bgBright: 0.6
+bgSkyLock: false
+bgHidden: false
+fermatUseSourcePos: false
+fermatBetaX: 0.024036
+fermatBetaY: 0.123642
+fermatSrcPlaneZ: 1.3400
+planes:
+  - z: 0.500
+    objects:
+      - type: lens
+        model: sie
+        cx: 0.18971
+        cy: -0.25008
+        hidden: false
+        showShape: true
+        params:
+          b: 1.770109
+          q: 0.72
+          phi: 2.5
+      - type: lens
+        model: sie
+        cx: -0.00179
+        cy: 1.40667
+        hidden: false
+        showShape: true
+        params:
+          b: 0.717794
+          q: 1
+          phi: 0
+  - z: 1.340
+    objects:
+      - type: source
+        model: pointsource
+        cx: 0.02404
+        cy: 0.12364
+        hidden: false
+        showShape: false
+        params:
+          sigma: 0.05
+          amplitude: 1
+          color: '#ffffff'
