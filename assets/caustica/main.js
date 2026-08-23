@@ -58,6 +58,7 @@ let _progExpanded     = false;
 // View-tab collapsible sections, both closed by default (like Programmatic).
 let _cmapExpanded     = false;
 let _bgExpanded       = false;
+let _instrExpanded    = false;
 
 // Invert a 6-digit hex colour (#rrggbb → complement).
 function invertHexColor(hex) {
@@ -119,6 +120,78 @@ function lineArtPalette() { return state.lineArtColors ?? paletteColors(state.li
 // FOV grows to cluster scale. PS_GRID_MAX is a hard backstop on that count.
 const PS_GRID_MAX = 1200;
 const PS_GRID_OPTIONS = [150, 300, 600, 1200];
+
+// ── Instrument detector models (View tab → Instrument) ───────────────────────
+// px   = detector pixel scale, arcsec/pixel. Published plate scales.
+// fwhm = the width of an *approximate Gaussian* stand-in for the PSF, arcsec. Two
+//        separate approximations are buried in that number, both documented in
+//        §8: the profile is a Gaussian, where the real PSFs are Airy patterns with
+//        rings and diffraction spikes (JWST), Moffat-like seeing profiles with much
+//        heavier wings (Rubin), or an AO core on a broad halo (ELT); and the width
+//        is one mid-band figure, where a diffraction-limited FWHM ≈ 1.03 λ/D grows
+//        across each band (note 1.22 λ/D is the first Airy null, not the FWHM) and
+//        seeing varies nightly. Orientation, not photometry — see the sourced table
+//        in the docs, and use Custom for an exact pair.
+const INSTRUMENTS = {
+  off:            { name: 'Off (full resolution)' },
+  jwst_nircam_sw: { name: 'JWST NIRCam short',  px: 0.031, fwhm: 0.062, group: 'Space' },
+  jwst_nircam_lw: { name: 'JWST NIRCam long',   px: 0.063, fwhm: 0.126, group: 'Space' },
+  jwst_miri:      { name: 'JWST MIRI',          px: 0.11,  fwhm: 0.22,  group: 'Space' },
+  hst_acs:        { name: 'HST ACS/WFC',        px: 0.05,  fwhm: 0.10,  group: 'Space' },
+  hst_wfc3ir:     { name: 'HST WFC3/IR',        px: 0.128, fwhm: 0.15,  group: 'Space' },
+  euclid_vis:     { name: 'Euclid VIS',         px: 0.10,  fwhm: 0.17,  group: 'Space' },
+  euclid_nisp:    { name: 'Euclid NISP',        px: 0.30,  fwhm: 0.45,  group: 'Space' },
+  roman_wfi:      { name: 'Roman WFI',          px: 0.11,  fwhm: 0.12,  group: 'Space' },
+  rubin_lsst:     { name: 'Rubin / LSST',       px: 0.20,   fwhm: 0.70,  group: 'Ground' },
+  subaru_hsc:     { name: 'Subaru HSC',         px: 0.168,  fwhm: 0.60,  group: 'Ground' },
+  vlt_muse_nfm:   { name: 'VLT MUSE (NFM)',     px: 0.025,  fwhm: 0.07,  group: 'Ground' },
+  keck_nirc2:     { name: 'Keck NIRC2 (narrow)',px: 0.00994,fwhm: 0.055, group: 'Ground' },
+  elt_micado:     { name: 'ELT MICADO',         px: 0.004,  fwhm: 0.010, group: 'Ground' },
+  custom:         { name: 'Custom…' },
+};
+const INSTR_PIXEL_MAX = 5.0;    // arcsec/px accepted for Custom
+const INSTR_FWHM_MAX  = 10.0;
+
+// Effective { pixel, fwhm } for the current selection, or null when off.
+function instrumentSpec() {
+  const key = state.instrument;
+  if (key === 'off' || !INSTRUMENTS[key]) return null;
+  if (key === 'custom') return { pixel: state.instrPixel, fwhm: state.instrPsfFwhm };
+  const e = INSTRUMENTS[key];
+  return { pixel: e.px, fwhm: e.fwhm };
+}
+
+// Geometry of the detector model against the current field and render grid:
+// `across` = instrument pixels spanning the field, `samples` = rendered samples
+// per instrument pixel per axis (< 2 means the grid is too coarse to bin — see
+// Renderer.MIN_SAMPLES), `maxFov` = the widest field this pixel scale can be
+// binned at, `minPixel` = the coarsest-needed pixel scale at this field.
+//
+// `canRaise` is whether a higher Render scale would actually gain anything: it
+// only would if the display's own pixel ratio exceeds what the current mode uses
+// (Auto caps at 2, so on a 1× or 2× screen Native is the same thing and switching
+// it changes nothing). `maxFovBest` is the field limit it would buy.
+function detectorStats() {
+  const spec = instrumentSpec();
+  if (!spec || !(spec.pixel > 0) || !glCanvas) return null;
+  const W = Math.min(glCanvas.width, glCanvas.height);
+  if (!(W > 0)) return null;
+  const raw = window.devicePixelRatio || 1;
+  const eff = state.renderScale === '1x' ? 1
+            : state.renderScale === 'native' ? raw
+            : Math.min(raw, 2);
+  const maxFov  = spec.pixel * W / 2;
+  const samples = spec.pixel * W / state.fov;
+  return {
+    ...spec,
+    W, samples, maxFov,
+    across:     state.fov / spec.pixel,
+    ok:         samples >= 2,
+    minPixel:   2 * state.fov / W,
+    canRaise:   raw > eff * 1.001,
+    maxFovBest: maxFov * raw / eff,
+  };
+}
 
 // Overlay-redraw time (ms) above which the orange performance warning appears.
 // Hysteresis (0.6×) prevents the badge flickering on borderline frames.
@@ -245,6 +318,13 @@ const CONFIG_DEFAULTS = {
   bgBright:           1.0,    // brightness multiplier
   bgSkyLock:          false,  // false = fixed to the viewport; true = zooms with the FOV
   bgHidden:           false,  // eye toggle: keep the loaded image but stop drawing it
+  // Detector model (View tab → Instrument). instrPixel / instrPsfFwhm are only
+  // consulted for the 'custom' selection; presets carry their own values.
+  instrument:         'off',  // key into INSTRUMENTS
+  instrPixel:         0.05,   // arcsec per detector pixel (Custom)
+  instrPsfFwhm:       0.10,   // PSF FWHM in arcsec (Custom)
+  instrPsf:           false,  // convolve with the PSF before binning
+  instrHidden:        false,  // eye toggle: keep the selection but stop applying it
 };
 
 // Ranges for the background-image controls, shared by the View-tab sliders and
@@ -635,6 +715,11 @@ function configToYaml() {
   y += `bgBright: ${+state.bgBright.toFixed(4)}\n`;
   y += `bgSkyLock: ${state.bgSkyLock}\n`;
   y += `bgHidden: ${state.bgHidden}\n`;
+  y += `instrument: ${state.instrument}\n`;
+  y += `instrPixel: ${+state.instrPixel.toFixed(5)}\n`;
+  y += `instrPsfFwhm: ${+state.instrPsfFwhm.toFixed(5)}\n`;
+  y += `instrPsf: ${state.instrPsf}\n`;
+  y += `instrHidden: ${state.instrHidden}\n`;
   y += `fermatUseSourcePos: ${state.fermatUseSourcePos}\n`;
   if (state.lastFermatSource) {
     const fsp = state.planes.find(p => p.id === state.lastFermatSource.planeId);
@@ -917,6 +1002,12 @@ function loadConfigFromYaml(yaml) {
     state.bgBright  = _clampNum(cfg.bgBright,  0, BG_BRIGHT_MAX, CONFIG_DEFAULTS.bgBright);
     state.bgSkyLock = _bool(cfg.bgSkyLock, CONFIG_DEFAULTS.bgSkyLock);
     state.bgHidden  = _bool(cfg.bgHidden,  CONFIG_DEFAULTS.bgHidden);
+    // Detector model.
+    state.instrument   = INSTRUMENTS[cfg.instrument] ? cfg.instrument : CONFIG_DEFAULTS.instrument;
+    state.instrPixel   = _clampNum(cfg.instrPixel,   1e-4, INSTR_PIXEL_MAX, CONFIG_DEFAULTS.instrPixel);
+    state.instrPsfFwhm = _clampNum(cfg.instrPsfFwhm,     0, INSTR_FWHM_MAX,  CONFIG_DEFAULTS.instrPsfFwhm);
+    state.instrPsf     = _bool(cfg.instrPsf,    CONFIG_DEFAULTS.instrPsf);
+    state.instrHidden  = _bool(cfg.instrHidden, CONFIG_DEFAULTS.instrHidden);
     if (isFinite(cfg.fermatBetaX) && isFinite(cfg.fermatBetaY) && isFinite(cfg.fermatSrcPlaneZ)) {
       const fsp = state.planes.find(p => Math.abs(p.z - cfg.fermatSrcPlaneZ) < 1e-4);
       state.lastFermatSource = fsp ? { cx: cfg.fermatBetaX, cy: cfg.fermatBetaY, planeId: fsp.id } : null;
@@ -1442,6 +1533,25 @@ function buildDOM() {
               <b style="color:#e8912e">⚠ Display limit reached</b><br>
               <span id="sl-cap-pop-detail"></span>
             </div>
+            <button class="sl-cap-warn sl-res-warn" id="sl-res-warn" style="display:none"
+                    title="The chosen detector is finer than the render grid. Click for details." aria-label="Detector resolution warning">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 4.5 L21 19.5 L3 19.5 Z"/>
+                <line x1="12" y1="10" x2="12" y2="14"/>
+                <line x1="12" y1="16.6" x2="12" y2="16.6"/>
+              </svg>
+              <span>detector not applied</span>
+            </button>
+            <div class="sl-cap-pop sl-res-pop" id="sl-res-pop" style="display:none">
+              <button class="sl-perf-pop-close" id="sl-res-dismiss" title="Don't show this warning again this session" aria-label="Dismiss warning">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+                  <line x1="4.5" y1="4.5" x2="11.5" y2="11.5"/>
+                  <line x1="11.5" y1="4.5" x2="4.5" y2="11.5"/>
+                </svg>
+              </button>
+              <b style="color:#e8912e">⚠ Detector too high resolution!</b><br>
+              <span id="sl-res-pop-detail"></span>
+            </div>
             <div class="sl-viz-chip">
               <select id="sl-viz-mode">
                 <option value="0">Lensed image</option>
@@ -1777,6 +1887,28 @@ function attachHandlers() {
     }
   });
 
+  // Detector resolution warning, stacked above the object-cap badge. Same
+  // badge / popover / dismiss behaviour; reportDetector() drives visibility.
+  const _resBtn = document.getElementById('sl-res-warn');
+  const _resPop = document.getElementById('sl-res-pop');
+  _resBtn?.addEventListener('pointerdown', e => e.stopPropagation());
+  _resBtn?.addEventListener('click', e => {
+    e.stopPropagation();
+    if (_resPop) _resPop.style.display = _resPop.style.display === 'none' ? '' : 'none';
+  });
+  document.getElementById('sl-res-dismiss')?.addEventListener('click', e => {
+    e.stopPropagation();
+    _resWarnDismissed = true;
+    if (_resPop) _resPop.style.display = 'none';
+    if (_resBtn) _resBtn.style.display = 'none';
+  });
+  document.addEventListener('click', e => {
+    if (_resPop && _resPop.style.display !== 'none' &&
+        !_resPop.contains(e.target) && e.target !== _resBtn && !_resBtn?.contains(e.target)) {
+      _resPop.style.display = 'none';
+    }
+  });
+
   // Ruler tool: toggle activates the crosshair; the × clears all measurements.
   // Handle the tap on the button's own pointerdown and stopPropagation, so the
   // image-wrap beneath never sees it. This is essential on touch: while the ruler
@@ -2107,7 +2239,16 @@ function renderQualityPanel() {
       <button class="sl-demo-btn" id="sl-cosmo-reset">Reset (70, 0.3)</button>
     </div>
 
-    <div class="sl-panel-title" style="margin:14px 0 6px">Quality &amp; performance</div>
+    <div class="sl-panel-title-row" style="margin:14px 0 6px">
+      <span class="sl-panel-title" style="flex:1">Quality &amp; performance</span>
+      ${infoSection('sl-perf-info', `
+        <b>Critical curves</b>: how finely the field is sampled when tracing the curves and caustics. Higher is smoother, but slower to redraw.
+        <a href="/caustica-documentation/#9-critical-curves-and-caustics" target="_blank" rel="noopener">Details</a><br><br>
+        <b>Point source</b>: how finely the field is searched for point-source images. Finer catches faint or closely spaced ones.
+        <a href="/caustica-documentation/#point-source" target="_blank" rel="noopener">Details</a><br><br>
+        <b>Render scale</b>: how sharp the plot looks, and how big a saved PNG comes out. Auto suits almost everything; pick Native for a print figure, 1× to keep a heavy scene responsive.
+        <a href="/caustica-documentation/#render-scale" target="_blank" rel="noopener">Details</a>`)}
+    </div>
     <p class="sl-perf-note" style="margin-bottom:8px">These trade accuracy or sharpness against redraw speed.</p>
     <div class="sl-global-input">
       <label>Critical curves</label>
@@ -2239,6 +2380,7 @@ function setFov(v) {
   state.fov = Math.max(FOV_MIN, Math.min(FOV_MAX, v));
   const inp = document.getElementById('sl-fov');
   if (inp && document.activeElement !== inp) inp.value = +state.fov.toFixed(2);
+  _refreshInstrReadout();   // samples per detector pixel scale with the field
   redraw();
 }
 
@@ -3124,6 +3266,62 @@ function syncBackdrop() {
   } : null;
 }
 
+// Push the Instrument selection into the renderer. Null when off, so a scene that
+// never enables it never builds the post-process programs or framebuffers.
+function syncDetector() {
+  if (!renderer) return;
+  const spec = instrumentSpec();
+  renderer.detectorOpts = (spec && spec.pixel > 0 && !state.instrHidden)
+    ? { pixel: spec.pixel, psfFwhm: spec.fwhm ?? 0, psfOn: !!state.instrPsf }
+    : null;
+}
+
+// Orange pill for a detector whose pixels are finer than the render grid, in which
+// case the binning is skipped (the un-binned frame is the honest picture — the
+// instrument would resolve detail the shader never computed). Follows the same
+// badge/popover/dismiss pattern as the performance and object-cap warnings.
+let _resWarnDismissed = false;
+function reportDetector() {
+  const badge = document.getElementById('sl-res-warn');
+  if (!badge) return;
+  const pop = document.getElementById('sl-res-pop');
+  const st  = detectorStats();
+  const show = !_resWarnDismissed && !!st && !st.ok && !state.instrHidden &&
+               state.vizMode === 0 && !state.lineArt;
+  if (!show) {
+    badge.style.display = 'none';
+    if (pop) pop.style.display = 'none';
+    return;
+  }
+  const comp = state.fov / st.W;                    // arcsec per computed sample
+  const name = INSTRUMENTS[state.instrument]?.name ?? 'Detector';
+  const custom = state.instrument === 'custom';
+  const detail = document.getElementById('sl-res-pop-detail');
+  if (detail) {
+    const fixes = [`• Reduce the <b>field of view</b> to ${st.maxFov.toPrecision(2)}&Prime; or below`];
+    // Only offer a higher Render scale when the display can actually deliver one,
+    // and only as something to try: it may not gain enough to close the gap.
+    if (st.canRaise) {
+      fixes.push(`• Try <b>Render scale</b> &rarr; Native (Settings), which would take the ` +
+                 `limit to about ${st.maxFovBest.toPrecision(2)}&Prime; on this display`);
+    }
+    if (custom) {
+      fixes.push(`• Or raise the <b>Pixel scale</b> above ${st.minPixel.toPrecision(2)}&Prime; ` +
+                 `to model a coarser detector`);
+    }
+    detail.innerHTML =
+      `<b>${name}</b> pixels are ${st.pixel}&Prime;, finer than the ` +
+      `${comp.toPrecision(2)}&Prime; the image is currently computed at, so there is nothing to ` +
+      `average over and the detector view is <b>not applied</b>. To fix it:<br><br>` +
+      fixes.join('<br>') +
+      (st.canRaise ? '' : `<br><br>Render scale cannot help here: the grid is already as fine ` +
+                          `as this display goes.`) +
+      `<br><br>A wide field is what makes this hard: the grid spreads over more sky, ` +
+      `so each computed sample covers more of it than one detector pixel does.`;
+  }
+  badge.style.display = '';
+}
+
 function canvasToArcsec(canvas, e) {
   const r = canvas.getBoundingClientRect();
   return {
@@ -3533,6 +3731,109 @@ function _escHtml(str) {
   return String(str).replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
 }
 
+// ── View tab: Instrument section ─────────────────────────────────────────────
+// Resamples the lensed image onto a real detector's pixel grid, optionally
+// convolving with its PSF first. This is a measurement model, not a compute
+// setting: Render scale (Settings) changes how finely the sky is *computed*,
+// while this changes how coarsely a telescope would *sample* it.
+function instrumentSectionHtml() {
+  const on  = state.instrument !== 'off';
+  const cus = state.instrument === 'custom';
+  const hid = on && state.instrHidden;
+  const opt = (k, e) => `<option value="${k}" ${state.instrument===k?'selected':''}>${e.name}</option>`;
+  const groups = ['Space', 'Ground'].map(g => `
+              <optgroup label="${g}">
+                ${Object.entries(INSTRUMENTS).filter(([, e]) => e.group === g).map(([k, e]) => opt(k, e)).join('')}
+              </optgroup>`).join('');
+  return `
+      <div class="sl-hybrid-section">
+        <div class="sl-view-hdr" style="padding:0">
+          <button class="sl-hybrid-hdr" id="sl-instr-section-hdr" style="flex:1">
+            <span class="sl-hybrid-arrow">${_instrExpanded?'▼':'▶'}</span>
+            <span class="sl-panel-title" style="flex:1">Instrument</span>
+            ${on ? `<span class="sl-instr-tag">${INSTRUMENTS[state.instrument].name}</span>` : ''}
+          </button>
+          ${infoSection('sl-instr-info', `
+            Resamples the lensed image onto a telescope's pixels, averaging over each one. Not <b>Render scale</b> (Settings), which sets how finely the sky is computed rather than how coarsely it is sampled.<br><br>
+            <b>Include PSF</b> blurs first, using an <b>approximate Gaussian</b> — not the instrument's real PSF, which has diffraction rings, spikes or a seeing halo.<br><br>
+            Lensed image only. Needs 2+ computed samples per pixel, or it is skipped with a warning.
+            <a href="/caustica-documentation/#8-instrument-model" target="_blank" rel="noopener">Details and sources</a>`)}
+        </div>
+        ${_instrExpanded ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
+          <div class="sl-global-input">
+            <label>Detector</label>
+            <select id="sl-instr" style="flex:1 1 auto;min-width:0">
+              ${opt('off', INSTRUMENTS.off)}${groups}
+              ${opt('custom', INSTRUMENTS.custom)}
+            </select>
+            ${on ? `<button type="button" class="sl-hybrid-part-btn${hid ? ' sl-obj-hidden' : ''}" id="sl-instr-vis" title="${hid ? 'Apply' : 'Hide'} the detector effect — flip it to compare against the full-resolution image">${eyeIcon(hid)}</button>` : ''}
+          </div>
+          ${cus ? `
+          <div class="sl-global-input">
+            <label>Pixel scale</label>
+            <input type="number" class="sl-scrub" id="sl-instr-px" min="0.0001" max="${INSTR_PIXEL_MAX}" step="0.005" value="${state.instrPixel}">
+            <span class="sl-unit">"</span>
+          </div>
+          <div class="sl-global-input">
+            <label>PSF FWHM</label>
+            <input type="number" class="sl-scrub" id="sl-instr-fwhm" min="0" max="${INSTR_FWHM_MAX}" step="0.01" value="${state.instrPsfFwhm}">
+            <span class="sl-unit">"</span>
+          </div>` : ''}
+          ${on ? `
+          <div class="sl-checkbox-row">
+            <label title="Convolve with the instrument's point-spread function before binning — the order a real observation applies them in"><input type="checkbox" id="sl-instr-psf" ${state.instrPsf?'checked':''}> Include PSF</label>
+          </div>` : ''}
+          ${on ? `<div id="sl-instr-readout">${instrReadoutHtml()}</div>` : ''}
+        </div>` : ''}
+      </div>`;
+}
+
+// Live readout under the Instrument dropdown: the detector's scales, how many of
+// its pixels span the field, and how many computed samples back each one.
+function instrReadoutHtml() {
+  const st = detectorStats();
+  if (!st) return '';
+  const across = st.across < 1
+    ? 'under one pixel'
+    : `${st.across.toFixed(st.across < 20 ? 1 : 0)} pixels`;
+  let html = `
+    <p class="sl-muted-note" style="margin:6px 0 0">
+      ${st.pixel}&Prime;/px${st.fwhm > 0 ? ` &middot; PSF ${st.fwhm}&Prime; FWHM` : ''}<br>
+      ${across} across the field &middot; ${st.samples.toFixed(st.samples < 10 ? 1 : 0)} computed samples per pixel
+    </p>`;
+  if (state.instrHidden) {
+    html += `
+    <p class="sl-muted-note" style="margin:6px 0 0">Hidden. Use the eye button to apply it again.</p>`;
+    return html;
+  }
+  if (!st.ok) {
+    const fixes = [`reduce the field of view below ${st.maxFov.toPrecision(2)}&Prime;`];
+    if (st.canRaise) fixes.push('try Render scale &rarr; Native (Settings)');
+    if (state.instrument === 'custom') fixes.push(`raise Pixel scale above ${st.minPixel.toPrecision(2)}&Prime;`);
+    html += `
+    <p class="sl-muted-note" style="margin:6px 0 0;color:#e8912e">
+      <b>Detector too high resolution!</b> Fewer than 2 computed samples per pixel, so the
+      binning is skipped. To fix it, ${fixes.join('; ')}.
+    </p>`;
+  } else if (st.across < 8) {
+    // Coarse but correct: a wide detector pixel over a narrow field genuinely
+    // leaves only a handful of pixels. Worth saying, since it can look like a bug.
+    html += `
+    <p class="sl-muted-note" style="margin:6px 0 0">Only a few pixels span this field — that is genuinely what this detector delivers at this zoom.</p>`;
+  }
+  if (state.vizMode !== 0 || state.lineArt) {
+    html += `
+    <p class="sl-muted-note" style="margin:6px 0 0">Shown in the lensed-image view only${state.lineArt ? ' (Line art draws its own vectors)' : ', not on the quantity maps'}.</p>`;
+  }
+  return html;
+}
+
+// Refresh it without rebuilding the panel, so it stays live under a FOV scrub.
+function _refreshInstrReadout() {
+  const el = document.getElementById('sl-instr-readout');
+  if (el) el.innerHTML = instrReadoutHtml();
+}
+
 // ── View tab: Background image section ───────────────────────────────────────
 // An uploaded picture replaces the flat black (or, in light theme, white) field
 // behind the lensed image, and is unaffected by the theme itself. The image panel
@@ -3667,6 +3968,8 @@ function renderViewPanel() {
           </div>
         </div>
       </div>
+
+      ${instrumentSectionHtml()}
 
       <div class="sl-hybrid-section" style="padding:5px 0">
         <div class="sl-view-hdr" style="padding:0">
@@ -3907,6 +4210,40 @@ function renderViewPanel() {
   // Collapsible section headers (same pattern as Programmatic in the Export tab).
   document.getElementById('sl-cmap-section-hdr')?.addEventListener('click', () => { _cmapExpanded = !_cmapExpanded; renderSidebar(); });
   document.getElementById('sl-bg-section-hdr')?.addEventListener('click', () => { _bgExpanded = !_bgExpanded; renderSidebar(); });
+
+  document.getElementById('sl-instr-section-hdr')?.addEventListener('click', () => { _instrExpanded = !_instrExpanded; renderSidebar(); });
+
+  // ── Instrument section ─────────────────────────────────────────────────────
+  document.getElementById('sl-instr')?.addEventListener('change', e => {
+    if (!INSTRUMENTS[e.target.value]) return;
+    state.instrument = e.target.value;
+    state.instrHidden = false;          // a freshly picked detector should be visible
+    renderSidebar(); redraw();          // rebuild: Custom rows and the readout change
+  });
+  document.getElementById('sl-instr-vis')?.addEventListener('click', () => {
+    state.instrHidden = !state.instrHidden;
+    renderSidebar(); redraw();
+  });
+  const _instrNum = (id, key, lo, hi) => {
+    const inp = document.getElementById(id);
+    if (!inp) return;
+    const apply = v => {
+      if (!isFinite(v)) return;
+      v = Math.min(hi, Math.max(lo, v));
+      inp.value = v;
+      state[key] = v;
+      redraw();
+      _refreshInstrReadout();
+    };
+    inp.addEventListener('change', e => apply(parseFloat(e.target.value)));
+    _attachScrub(inp, { lo, hi, onChange: apply });
+  };
+  _instrNum('sl-instr-px',   'instrPixel',   0.0001, INSTR_PIXEL_MAX);
+  _instrNum('sl-instr-fwhm', 'instrPsfFwhm', 0,      INSTR_FWHM_MAX);
+  document.getElementById('sl-instr-psf')?.addEventListener('change', e => {
+    state.instrPsf = e.target.checked;
+    renderSidebar(); redraw();
+  });
 
   // ── Background image section ───────────────────────────────────────────────
   document.getElementById('sl-bg-pick')?.addEventListener('click', pickBackgroundImage);
@@ -5525,6 +5862,7 @@ function redraw() {
 
 function _doRedraw() {
   syncBackdrop();   // background framing is read by the renderer at draw time
+  syncDetector();   // ... as is the detector model
   if (!renderer || !state.dist) return;
   const sorted = [...state.planes].sort((a, b) => a.z - b.z);
   const isDark  = document.documentElement.getAttribute('data-theme') === 'dark' ? 1 : 0;
@@ -5580,6 +5918,7 @@ function _doRedraw() {
   drawOverlay();
   reportPerf(performance.now() - _t0);
   reportObjectCap();
+  reportDetector();
   updateOverlayChips();
   updateZsChip();
 }

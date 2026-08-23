@@ -15,6 +15,8 @@
 //   r.clearPastedTexture(objId)         — call when object is deleted
 //   r.setBackdrop(canvas | null)        — background image behind the lensed view
 //   r.bgOpts = { fit, zoom, offX, offY, bright, skyLock, angSize } | null
+//   r.detectorOpts = { pixel, psfFwhm, psfOn } | null   — instrument pixel model
+//   r.detectorInfo                      — { applied, nPix, ss, samples, pixel } after a draw
 //   r.resize()
 //   r.destroy()
 
@@ -782,6 +784,74 @@ void main() {
   fragColor = vec4(clamp(colorOut + sampleBackdrop() * (1.0 - cover), 0.0, 1.0), 1.0);
 }`;
 
+// ── Post-process shaders (detector model) ─────────────────────────────────────
+// Both reuse VERT_SRC's fullscreen quad and its v_uv.
+
+// Separable Gaussian, one axis per pass. u_step is the texel offset along the
+// axis being blurred, u_sigma is in source-texture pixels. The loop bound is a
+// compile-time constant with a runtime break, which every ES 3.0 driver unrolls
+// happily; 3σ is clamped to it, truncating a negligible tail on the widest PSFs.
+const BLUR_MAX_R = 48;
+const BLUR_FRAG =
+`#version 300 es
+precision highp float;
+in  vec2 v_uv;
+out vec4 fragColor;
+uniform sampler2D u_src;
+uniform vec2  u_step;
+uniform float u_sigma;
+uniform int   u_radius;
+void main() {
+  float inv2s2 = 1.0 / (2.0 * u_sigma * u_sigma);
+  vec3  acc = vec3(0.0);
+  float wsum = 0.0;
+  for (int i = -${BLUR_MAX_R}; i <= ${BLUR_MAX_R}; i++) {
+    if (i < -u_radius) continue;
+    if (i >  u_radius) break;
+    float x = float(i);
+    float w = exp(-x * x * inv2s2);
+    acc  += w * texture(u_src, v_uv + u_step * x).rgb;
+    wsum += w;
+  }
+  fragColor = vec4(acc / max(wsum, 1e-6), 1.0);
+}`;
+
+// Detector binning: average the scene over each instrument pixel's footprint and
+// emit it as a constant block. Averaging (rather than point-sampling a coarser
+// grid) is what conserves flux and keeps thin arcs and point-source images from
+// aliasing into moiré. u_span is the visible field as a fraction of the rendered
+// field, u_nPix the instrument pixels across the rendered field, u_ss the
+// rendered samples per instrument pixel per axis.
+const DETECT_MAX_SS = 8;
+const DETECT_FRAG =
+`#version 300 es
+precision highp float;
+in  vec2 v_uv;
+out vec4 fragColor;
+uniform sampler2D u_src;
+uniform float u_span;
+uniform float u_nPix;
+uniform int   u_ss;
+void main() {
+  // Fragment position in the rendered field, then the instrument pixel holding it.
+  vec2 uvA = (v_uv - 0.5) * u_span + 0.5;
+  vec2 idx = floor(uvA * u_nPix);
+  vec2 uv0 = idx / u_nPix;
+  float inv = 1.0 / float(u_ss);
+  vec3  acc = vec3(0.0);
+  float n   = 0.0;
+  for (int j = 0; j < ${DETECT_MAX_SS}; j++) {
+    if (j >= u_ss) break;
+    for (int i = 0; i < ${DETECT_MAX_SS}; i++) {
+      if (i >= u_ss) break;
+      vec2 off = (vec2(float(i), float(j)) + 0.5) * inv;
+      acc += texture(u_src, uv0 + off / u_nPix).rgb;
+      n   += 1.0;
+    }
+  }
+  fragColor = vec4(acc / max(n, 1.0), 1.0);
+}`;
+
 // ── Renderer class ────────────────────────────────────────────────────────────
 
 export class Renderer {
@@ -825,6 +895,14 @@ export class Renderer {
     this._bg     = null;
     this.bgOpts  = null;   // { fit, zoom, offX, offY, bright, skyLock, angSize }
 
+    // Detector model (View tab → Instrument): bin the lensed image onto an
+    // instrument's pixel grid, optionally convolving with its PSF first. Built
+    // lazily on first use so a scene that never turns it on pays nothing.
+    this.detectorOpts   = null;  // { pixel (arcsec/px), psfFwhm (arcsec), psfOn }
+    this._detectorInfo  = { applied: false, nPix: 0, ss: 0, samples: 0, pixel: 0 };
+    this._post          = null;  // { blurProg, detProg, locs… } once initialised
+    this._fbo           = {};    // name → { fb, tex, w, h }
+
     // Cache: objId → { tex: WebGLTexture, w, h }
     this._pastedTexCache = new Map();
     // Dummy 1×1 black texture for unoccupied slots.
@@ -834,6 +912,121 @@ export class Renderer {
   // Per-type object cap this renderer actually built with (≤ MAX_OBJECTS). The
   // UI reads it to know how many objects can appear before the display limit.
   get maxObjects() { return this._maxObjects; }
+
+  // What the detector model actually did on the last draw, for the UI's warning
+  // pill: `samples` is the rendered samples per instrument pixel per axis that
+  // were available, and `applied` is false when that was too few to bin honestly.
+  get detectorInfo() { return this._detectorInfo; }
+
+  // Decide the detector geometry for this frame, or null to render normally.
+  //
+  // The instrument pixel grid is centred on the field (an odd pixel count puts a
+  // pixel centre on the optical axis) and covers a field slightly wider than the
+  // visible one, so edge pixels are whole. `samples` is how many rendered samples
+  // fit across one instrument pixel at the current canvas resolution: below
+  // MIN_SAMPLES the instrument samples the sky more finely than the shader
+  // computes it, so binning would invent detail. In that case the honest picture
+  // is the un-binned one, and the UI raises a warning instead.
+  static MIN_SAMPLES = 2;
+  _detectorPlan(fovArcsec, vizMode) {
+    const o = this.detectorOpts;
+    // Detector output is a surface-brightness measurement, so it applies to the
+    // lensed-image view only; the quantity maps are derived fields.
+    if (!o || !(o.pixel > 0) || (vizMode ?? 0) !== 0) return null;
+    const W = Math.min(this.canvas.width, this.canvas.height);
+    const samples = o.pixel * W / fovArcsec;
+    let nPix = Math.ceil(fovArcsec / o.pixel) + 1;
+    if (nPix % 2 === 0) nPix += 1;              // keep a pixel centred on the axis
+    const ss = Math.min(Math.floor(samples), DETECT_MAX_SS);
+    if (ss < Renderer.MIN_SAMPLES) return { applied: false, samples, nPix, ss: 0 };
+    return {
+      applied: true, samples, nPix, ss,
+      res:    nPix * ss,
+      fovFbo: nPix * o.pixel,
+    };
+  }
+
+  // Lazily build the post-process programs and the fullscreen-quad state they share.
+  _initPost() {
+    if (this._post) return this._post;
+    const { gl } = this;
+    const blurProg = this._buildProgram(VERT_SRC, BLUR_FRAG);
+    const detProg  = this._buildProgram(VERT_SRC, DETECT_FRAG);
+    this._post = {
+      blurProg, detProg,
+      blur: {
+        a_pos:  gl.getAttribLocation(blurProg, 'a_pos'),
+        u_src:  gl.getUniformLocation(blurProg, 'u_src'),
+        u_step: gl.getUniformLocation(blurProg, 'u_step'),
+        u_sigma:gl.getUniformLocation(blurProg, 'u_sigma'),
+        u_radius:gl.getUniformLocation(blurProg, 'u_radius'),
+      },
+      det: {
+        a_pos:  gl.getAttribLocation(detProg, 'a_pos'),
+        u_src:  gl.getUniformLocation(detProg, 'u_src'),
+        u_span: gl.getUniformLocation(detProg, 'u_span'),
+        u_nPix: gl.getUniformLocation(detProg, 'u_nPix'),
+        u_ss:   gl.getUniformLocation(detProg, 'u_ss'),
+      },
+    };
+    return this._post;
+  }
+
+  // Create or resize an offscreen colour target. LINEAR sampling so the blur can
+  // read between texels; the detector pass hits texel centres exactly either way.
+  _ensureFbo(name, w, h) {
+    const { gl } = this;
+    let t = this._fbo[name];
+    if (t && t.w === w && t.h === h) return t;
+    if (!t) {
+      t = { fb: gl.createFramebuffer(), tex: gl.createTexture(), w: 0, h: 0 };
+      this._fbo[name] = t;
+    }
+    gl.bindTexture(gl.TEXTURE_2D, t.tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, t.fb);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t.tex, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    t.w = w; t.h = h;
+    return t;
+  }
+
+  // Draw the shared fullscreen quad with whatever program is already bound.
+  _drawQuad(aPos) {
+    const { gl } = this;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this._quad);
+    gl.enableVertexAttribArray(aPos);
+    gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+  }
+
+  // Convolve target `src` in place with a Gaussian of the given σ (in src pixels),
+  // via two separable passes through a scratch target of the same size.
+  _blurInPlace(src, sigma) {
+    const { gl } = this;
+    const post = this._initPost();
+    const tmp  = this._ensureFbo('blurTmp', src.w, src.h);
+    const radius = Math.min(Math.ceil(3 * sigma), BLUR_MAX_R);
+    gl.useProgram(post.blurProg);
+    gl.uniform1i(post.blur.u_src, 0);
+    gl.uniform1f(post.blur.u_sigma, sigma);
+    gl.uniform1i(post.blur.u_radius, radius);
+    gl.activeTexture(gl.TEXTURE0);
+    for (const [from, to, step] of [
+      [src, tmp, [1 / src.w, 0]],
+      [tmp, src, [0, 1 / src.h]],
+    ]) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, to.fb);
+      gl.viewport(0, 0, to.w, to.h);
+      gl.bindTexture(gl.TEXTURE_2D, from.tex);
+      gl.uniform2f(post.blur.u_step, step[0], step[1]);
+      this._drawQuad(post.blur.a_pos);
+    }
+  }
 
   // Upload (or replace) the background image; pass null to clear it.
   setBackdrop(imageCanvas) {
@@ -862,7 +1055,7 @@ export class Renderer {
   // scales it by fov/angSize so the backdrop magnifies with the field of view,
   // and the offsets pan by a fraction of the viewport — negated so that a
   // positive offset moves the image right / up rather than the sample window.
-  _bgUniforms(fovArcsec) {
+  _bgUniforms(fovArcsec, spanRatio = 1) {
     const b = this._bg, o = this.bgOpts;
     if (!b || !o) return null;
     const ar   = b.w / b.h;
@@ -878,9 +1071,12 @@ export class Renderer {
     const k = (o.zoom > 0 ? o.zoom : 1)
             / (o.skyLock && o.angSize > 0 ? fovArcsec / o.angSize : 1);
     sx /= k; sy /= k;
+    // Pan is a fraction of the visible panel, so it is derived before the span
+    // widening below; only the sampled span itself grows with the render field.
+    const offset = [-(o.offX ?? 0) * sx * 0.5, -(o.offY ?? 0) * sy * 0.5];
     return {
-      scale:  [sx, sy],
-      offset: [-(o.offX ?? 0) * sx * 0.5, -(o.offY ?? 0) * sy * 0.5],
+      scale:  [sx * spanRatio, sy * spanRatio],
+      offset,
       bright: o.bright ?? 1,
       invert: !!o.invert,
       tile,
@@ -939,6 +1135,8 @@ export class Renderer {
     gl.deleteBuffer(this._quad);
     for (const { tex } of this._pastedTexCache.values()) gl.deleteTexture(tex);
     if (this._bg) gl.deleteTexture(this._bg.tex);
+    for (const t of Object.values(this._fbo)) { gl.deleteFramebuffer(t.fb); gl.deleteTexture(t.tex); }
+    if (this._post) { gl.deleteProgram(this._post.blurProg); gl.deleteProgram(this._post.detProg); }
     gl.deleteTexture(this._dummyTex);
   }
 
@@ -952,7 +1150,22 @@ export class Renderer {
     // constrained GPU). Shadows the module const so the packing code is unchanged.
     const MAX_OBJECTS = this._maxObjects;
 
-    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    // Detector model: when active, the scene is rendered into an offscreen target
+    // covering a slightly wider field (so every instrument pixel is whole), then
+    // optionally PSF-convolved, then binned onto the pixel grid on the way to the
+    // canvas. renderFov is what the shader traces; fovArcsec stays the visible field.
+    const det = this._detectorPlan(fovArcsec, vizMode);
+    this._detectorInfo = det
+      ? { applied: !!det.applied, nPix: det.nPix, ss: det.ss, samples: det.samples,
+          pixel: this.detectorOpts.pixel }
+      : { applied: false, nPix: 0, ss: 0, samples: 0, pixel: this.detectorOpts?.pixel ?? 0 };
+    const scene     = det?.applied ? this._ensureFbo('scene', det.res, det.res) : null;
+    const renderFov = det?.applied ? det.fovFbo : fovArcsec;
+    const outW      = scene ? scene.w : this.canvas.width;
+    const outH      = scene ? scene.h : this.canvas.height;
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, scene ? scene.fb : null);
+    gl.viewport(0, 0, outW, outH);
     gl.useProgram(_prog);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this._quad);
@@ -960,8 +1173,8 @@ export class Renderer {
     gl.vertexAttribPointer(_locs.a_pos, 2, gl.FLOAT, false, 0, 0);
 
     const _viz = viz ?? {};
-    gl.uniform1f(_locs.u_fov, fovArcsec);
-    gl.uniform2f(_locs.u_res, this.canvas.width, this.canvas.height);
+    gl.uniform1f(_locs.u_fov, renderFov);
+    gl.uniform2f(_locs.u_res, outW, outH);
     gl.uniform1i(_locs.u_vizScale,      _viz.scale ?? 1);
     gl.uniform1f(_locs.u_vizScaleParam, _viz.param ?? 0.5);
     gl.uniform1f(_locs.u_vizMin,        _viz.min   ?? 0.0);
@@ -1107,8 +1320,9 @@ export class Renderer {
       gl.uniform2f(szLocs[s], szH * ar, szH);
     }
 
-    // Background image on the slot after the pasted-image textures.
-    const bg = this._bgUniforms(fovArcsec);
+    // Background image on the slot after the pasted-image textures. The span ratio
+    // keeps it framed to the visible field even when the render field is wider.
+    const bg = this._bgUniforms(fovArcsec, renderFov / fovArcsec);
     gl.activeTexture(gl.TEXTURE0 + MAX_PASTED);
     gl.bindTexture(gl.TEXTURE_2D, bg ? this._bg.tex : this._dummyTex);
     if (bg) {
@@ -1125,6 +1339,32 @@ export class Renderer {
     gl.uniform1i (_locs.u_bgInvert, bg && bg.invert ? 1 : 0);
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+    if (det?.applied) this._runDetectorPasses(det, scene);
+  }
+
+  // PSF convolution then pixel binning, ending on the canvas.
+  _runDetectorPasses(det, scene) {
+    const { gl } = this;
+    const post = this._initPost();
+    const o    = this.detectorOpts;
+
+    // σ in rendered pixels: FWHM/2.3548 arcsec, over the arcsec each pixel spans.
+    if (o.psfOn && o.psfFwhm > 0) {
+      const sigma = (o.psfFwhm / 2.3548) * det.ss / o.pixel;
+      if (sigma > 0.05) this._blurInPlace(scene, sigma);
+    }
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    gl.useProgram(post.detProg);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, scene.tex);
+    gl.uniform1i(post.det.u_src,  0);
+    gl.uniform1f(post.det.u_span, this._scene.fovArcsec / det.fovFbo);
+    gl.uniform1f(post.det.u_nPix, det.nPix);
+    gl.uniform1i(post.det.u_ss,   det.ss);
+    this._drawQuad(post.det.a_pos);
   }
 
   _buildProgram(vertSrc, fragSrc) {
