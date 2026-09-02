@@ -115,6 +115,50 @@ function paletteColors(key) {
 // (stored in state.lineArtColors).
 function lineArtPalette() { return state.lineArtColors ?? paletteColors(state.lineArtPalette); }
 
+// ── Annotation ink ────────────────────────────────────────────────────────────
+// One monochrome colour for the overlay furniture that is not tied to an object
+// type: scale bar, legend text, ruler lines and their labels, time-delay pills,
+// Fermat marker backing. In auto mode (state.annotAuto, the default) it snaps to
+// white or black with the page's light / dark theme. Turning auto off pins
+// state.annotColor instead, so annotations can be black on a dark page (or white
+// on a light one) without touching the site theme.
+
+// Perceived brightness of a #rrggbb colour, 0 (black) to 1 (white).
+function hexLuma(hex) {
+  const m = /^#([0-9a-fA-F]{6})$/.exec(hex ?? '');
+  if (!m) return 0;
+  const n = parseInt(m[1], 16);
+  return (0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255;
+}
+// #rrggbb -> 'rgba(r,g,b,a)'.
+function hexRgba(hex, a) {
+  const m = /^#([0-9a-fA-F]{6})$/.exec(hex ?? '');
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+// The ink auto mode would pick right now: white on a dark page, black on a light one.
+function annotAutoInk() {
+  return document.documentElement.getAttribute('data-theme') === 'dark' ? '#ffffff' : '#000000';
+}
+function annotInk() { return state.annotAuto ? annotAutoInk() : state.annotColor; }
+// Resolved annotation colours for one overlay pass. `light` says whether the ink
+// reads light-on-dark, which is what the halos and pill fills key off. The alphas
+// reproduce the pairs the overlay used back when it read the theme directly, so a
+// white ink on dark / black ink on light look exactly as before.
+function annotColors() {
+  const ink   = annotInk();
+  const light = hexLuma(ink) > 0.5;
+  return {
+    ink, light,
+    text:  hexRgba(ink, light ? 0.92 : 0.82),                      // ruler lines, pill text
+    label: hexRgba(ink, light ? 0.88 : 0.75),                      // legend / marker labels
+    halo:  light ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.7)',   // ruler line halo
+    fill:  light ? 'rgba(0,0,0,0.7)'  : 'rgba(255,255,255,0.7)',   // marker backing
+    pill:  light ? 'rgba(0,0,0,0.7)'  : 'rgba(255,255,255,0.82)',  // label pill background
+  };
+}
+
 // Point-source image grid: number of sample points across the field. This is a
 // fixed count (not an absolute arcsec spacing) so the cost stays bounded as the
 // FOV grows to cluster scale. PS_GRID_MAX is a hard backstop on that count.
@@ -309,6 +353,10 @@ const CONFIG_DEFAULTS = {
   lineArtPalette:     'ink',  // key into LINE_ART_PALETTES
   lineArtFill:        true,   // fill lensed-image outlines (vs stroke only)
   lineArtSmooth:      true,   // curvature-aware Chaikin smoothing of the vector curves
+  // Annotation ink (View tab -> Annotation color). Auto snaps to white/black with
+  // the page theme; off pins annotColor instead.
+  annotAuto:          true,
+  annotColor:         '#ffffff',
   // Background image framing (View tab → Background). The picture itself is binary
   // data and is not part of the config, only how it is framed.
   bgFit:              'cover',// 'cover' | 'contain' | 'stretch' | 'tile'
@@ -705,6 +753,8 @@ function configToYaml() {
   y += `lineArtColors: ${LINE_ART_ROLES.map(([r]) => state.lineArtColors[r]).join(' ')}\n`;
   y += `lineArtFill: ${state.lineArtFill}\n`;
   y += `lineArtSmooth: ${state.lineArtSmooth}\n`;
+  y += `annotAuto: ${state.annotAuto}\n`;
+  y += `annotColor: ${state.annotColor}\n`;
   // Background framing, plus the image's file name when it came from the site's
   // own images (a user-uploaded picture is binary data with no address to save).
   if (state.bgSrc) y += `bgImage: ${state.bgSrc}\n`;
@@ -984,6 +1034,8 @@ function loadConfigFromYaml(yaml) {
     }
     state.lineArtFill    = _bool(cfg.lineArtFill,    CONFIG_DEFAULTS.lineArtFill);
     state.lineArtSmooth  = _bool(cfg.lineArtSmooth,  CONFIG_DEFAULTS.lineArtSmooth);
+    state.annotAuto      = _bool(cfg.annotAuto,      CONFIG_DEFAULTS.annotAuto);
+    state.annotColor     = COLOR_RE.test(cfg.annotColor) ? cfg.annotColor : CONFIG_DEFAULTS.annotColor;
     // Background image. A config may name one of the site's own images (the presets
     // do); anything else is rejected by isPresetBgName. With no name given, an image
     // that itself came from a config is dropped, while a picture the user uploaded
@@ -3484,6 +3536,37 @@ const SOURCE_INFO = {
                 <b>Brightness</b>: overall amplitude multiplier.`,
 };
 
+// Point the View-tab annotation swatch at the live auto ink, for the moments auto
+// is re-armed without a full sidebar rebuild.
+function _syncAnnotSwatch() {
+  const inp = document.getElementById('sl-annot-color');
+  if (inp && state.annotAuto) inp.value = annotInk();
+}
+
+// The ⓘ popups hang absolutely below their button, so one opened low in the rail
+// falls past the bottom of the scrolling tab panel and is never seen. On open,
+// flip it above the button when there is room up there, else scroll it into view.
+// `toggle` does not bubble, so this listens in the capture phase.
+document.addEventListener('toggle', e => {
+  const d = e.target;
+  if (!d.classList?.contains('sl-info-details') || !d.open) return;
+  const content = d.querySelector('.sl-info-content');
+  const btn     = d.querySelector('.sl-info-btn');
+  if (!content || !btn) return;
+  content.classList.remove('sl-info-above');
+  const scroller = d.closest('.sl-tab-content');
+  const view = scroller ? scroller.getBoundingClientRect()
+                        : { top: 0, bottom: window.innerHeight };
+  let r = content.getBoundingClientRect();
+  if (r.bottom <= view.bottom) return;                        // already fits below
+  if (btn.getBoundingClientRect().top - view.top > r.height) { // room above instead
+    content.classList.add('sl-info-above');
+    r = content.getBoundingClientRect();
+  }
+  // Either way, bring it fully into the panel if part of it is still out of sight.
+  if (r.top < view.top || r.bottom > view.bottom) content.scrollIntoView({ block: 'nearest' });
+}, true);
+
 function infoSection(id, html) {
   return `<details class="sl-info-details" id="${id}">
     <summary class="sl-info-btn">i</summary>
@@ -3975,7 +4058,7 @@ function renderViewPanel() {
         <div class="sl-view-hdr" style="padding:0">
           <span class="sl-panel-title" style="flex:1">Line art</span>
           ${infoSection('sl-lineart-info', `
-            Flat vector line-art of the lensing structure. Only <b>uniform-disc</b> and <b>point</b> sources are drawn; other source types are ignored. The palette below sets the line-art colors; all other plot elements follow the page's light / dark theme (<b>D</b>).`)}
+            Flat vector line-art of the lensing structure. Only <b>uniform-disc</b> and <b>point</b> sources are drawn; other source types are ignored. The palette below sets the line-art colors; the scale bar, legend, ruler and other annotations take their color from <b>Annotation color</b> underneath.`)}
           <label style="display:flex;align-items:center;cursor:pointer;margin:0 0 0 4px" title="Vector line-art render mode">
             <input type="checkbox" id="sl-lineart" ${state.lineArt?'checked':''} style="margin:0">
           </label>
@@ -3998,6 +4081,18 @@ function renderViewPanel() {
               `<label class="sl-la-color"><span>${label}</span><input type="color" data-la-color="${role}" value="${lineArtPalette()[role]}"></label>`).join('')}
           </div>
         </div>` : '' }
+      </div>
+
+      <div class="sl-hybrid-section" style="padding:5px 0">
+        <div class="sl-view-hdr" style="padding:0">
+          <span class="sl-panel-title" style="flex:1">Annotation color</span>
+          <label class="sl-annot-auto" title="Follow the page's light / dark theme: white on dark, black on light">
+            <input type="checkbox" id="sl-annot-auto" ${state.annotAuto?'checked':''}> Auto
+          </label>
+          <input type="color" id="sl-annot-color" value="${annotInk()}" title="Annotation ink color (picking one turns Auto off)">
+          ${infoSection('sl-annot-info', `
+            Ink for the plot furniture that isn't tied to an object: scale bar, legend, ruler, time-delay pills, Fermat markers. <b>Auto</b> snaps it to white or black with the page theme; picking a color pins it instead.`)}
+        </div>
       </div>
 
       ${vizModeHasScale(state.vizMode) ? `
@@ -4139,6 +4234,22 @@ function renderViewPanel() {
   document.getElementById('sl-lineart-smooth')?.addEventListener('change', e => { state.lineArtSmooth = e.target.checked; redraw(); });
   document.querySelectorAll('[data-la-color]').forEach(inp =>
     inp.addEventListener('input', e => { state.lineArtColors[e.target.dataset.laColor] = e.target.value; redraw(); }));
+  document.getElementById('sl-annot-auto')?.addEventListener('change', e => {
+    state.annotAuto = e.target.checked;
+    // Leaving auto pins whatever the swatch was already showing, so nothing jumps.
+    const inp = document.getElementById('sl-annot-color');
+    if (state.annotAuto) _syncAnnotSwatch();
+    else if (inp)        state.annotColor = inp.value;
+    redraw();
+  });
+  document.getElementById('sl-annot-color')?.addEventListener('input', e => {
+    // Setting a colour by hand stops the automatic flipping until Auto is re-checked.
+    state.annotColor = e.target.value;
+    state.annotAuto  = false;
+    const auto = document.getElementById('sl-annot-auto');
+    if (auto) auto.checked = false;
+    redraw();
+  });
   document.getElementById('sl-viz-scale')?.addEventListener('change', e => {
     const vs = vizScaleFor(state.vizMode);
     vs.scale = parseInt(e.target.value, 10);
@@ -5038,10 +5149,12 @@ function findStationaryPoints(planes, dist, srcIdx, fov, betaS = [0, 0], gridN =
 
 // Rounded background-rectangle text label ("pill"), centred at (cx, cy). Shared by the
 // ruler measurements and the point-source time-delay labels so they stay identical.
-// Colours track the theme (dark/light); caller positions and clamps the centre.
-function _pillLabel(ctx, text, cx, cy, fsize, dark) {
-  const pillBg  = dark ? 'rgba(0,0,0,0.7)'        : 'rgba(255,255,255,0.82)';
-  const textCol = dark ? 'rgba(255,255,255,0.92)' : 'rgba(0,0,0,0.82)';
+// Colours come from the annotation ink (see annotColors); caller positions and clamps
+// the centre.
+function _pillLabel(ctx, text, cx, cy, fsize) {
+  const _A      = annotColors();
+  const pillBg  = _A.pill;
+  const textCol = _A.text;
   ctx.font = `${fsize}px system-ui, -apple-system, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -5235,7 +5348,7 @@ function drawOverlay() {
           let cx = px + r_px + 4 + boxW / 2, cy = py;
           cx = Math.min(Wl - boxW / 2 - 2, Math.max(boxW / 2 + 2, cx));
           cy = Math.min(Hl - boxH / 2 - 2, Math.max(boxH / 2 + 2, cy));
-          _pillLabel(overlayCtx, label, cx, cy, fsize, dark);
+          _pillLabel(overlayCtx, label, cx, cy, fsize);
         });
         overlayCtx.restore();
       }
@@ -5469,7 +5582,7 @@ function drawOverlay() {
     const lx = 8, ly = 8;
     const lineH = _mob ? 20 : 28, padV = _mob ? 7 : 11, padH = _mob ? 10 : 14;
     const boxW  = _mob ? 150 : 220, boxH = legendItems.length * lineH + 2 * padV;
-    const _dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const _A    = annotColors();
 
     overlayCtx.font         = `${_mob ? 12 : 18}px system-ui, -apple-system, sans-serif`;
     overlayCtx.textBaseline = 'middle';
@@ -5492,7 +5605,7 @@ function drawOverlay() {
         drawShapeMarker(overlayCtx, item.markerType, ix + iconW / 2, iy, dotR);
         overlayCtx.fill();
       }
-      overlayCtx.fillStyle = _dark ? 'rgba(255,255,255,0.88)' : 'rgba(0,0,0,0.75)';
+      overlayCtx.fillStyle = _A.label;
       overlayCtx.fillText(item.label, ix + textOff, iy);
     });
   }
@@ -5500,8 +5613,8 @@ function drawOverlay() {
   // ── 4. Fermat potential stationary point markers + legend ─────────────────────
   // Type 1 = minimum (circle), Type 2 = saddle (diamond), Type 3 = maximum (triangle)
   if (state.vizMode === 6 && !hideOv) {
-    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
-    const typeColor = t => t === 2 ? '#FF6B35' : (t === 3 ? '#CC44FF' : (dark ? '#FFE600' : '#1144DD'));
+    const A = annotColors();
+    const typeColor = t => t === 2 ? '#FF6B35' : (t === 3 ? '#CC44FF' : (A.light ? '#FFE600' : '#1144DD'));
     const typeLabel = t => t === 2 ? 'II' : (t === 3 ? 'III' : 'I');
 
     // ── secondary legend (bottom-right) ──────────────────────────────────────
@@ -5535,12 +5648,12 @@ function drawOverlay() {
         const iy  = by + padV + i * lineH + lineH / 2;
         const col = typeColor(type);
 
-        overlayCtx.fillStyle = dark ? 'rgba(255,255,255,0.88)' : 'rgba(0,0,0,0.75)';
+        overlayCtx.fillStyle = A.label;
         overlayCtx.fillText(word, bx + padH, iy);
 
         const mx = bx + padH + textW + gap + r_leg + 1;
         overlayCtx.strokeStyle = col;
-        overlayCtx.fillStyle   = dark ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.7)';
+        overlayCtx.fillStyle   = A.fill;
         overlayCtx.lineWidth   = 2.0;
         overlayCtx.setLineDash([]);
         if (type === 1) {
@@ -5569,16 +5682,16 @@ function drawOverlay() {
   }
 
   if (needFermatPts) {
-    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const A = annotColors();
     const r_m = Math.max(Wl, Hl) * 0.022; // marker radius ~2.2% of canvas
-    const typeColor = t => t === 2 ? '#FF6B35' : (t === 3 ? '#CC44FF' : (dark ? '#FFE600' : '#1144DD'));
+    const typeColor = t => t === 2 ? '#FF6B35' : (t === 3 ? '#CC44FF' : (A.light ? '#FFE600' : '#1144DD'));
     const typeLabel = t => t === 2 ? 'II' : (t === 3 ? 'III' : 'I');
 
     for (const { tx, ty, type } of state.fermatPoints) {
       const [px, py] = toPixel(tx, ty);
       const col = typeColor(type);
       overlayCtx.strokeStyle = col;
-      overlayCtx.fillStyle   = dark ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.7)';
+      overlayCtx.fillStyle   = A.fill;
       overlayCtx.lineWidth   = 2.2;
       overlayCtx.setLineDash([]);
 
@@ -5617,9 +5730,9 @@ function drawOverlay() {
 
   // ── 5. Ruler measurements (committed + live draft) ───────────────────────────
   if (needRuler) {
-    const dark    = document.documentElement.getAttribute('data-theme') === 'dark';
-    const mainCol = dark ? 'rgba(255,255,255,0.92)' : 'rgba(0,0,0,0.82)';
-    const haloCol = dark ? 'rgba(0,0,0,0.55)'       : 'rgba(255,255,255,0.7)';
+    const A       = annotColors();
+    const mainCol = A.text;
+    const haloCol = A.halo;
     const _mob    = window.innerWidth <= 640;
     const fsize   = _mob ? 12 : 14;
     const accent  = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#4da3ff';
@@ -5665,7 +5778,7 @@ function drawOverlay() {
       let cx = midX + nx * off, cy = midY + ny * off;
       cx = Math.min(Wl - boxW / 2 - 2, Math.max(boxW / 2 + 2, cx));
       cy = Math.min(Hl - boxH / 2 - 2, Math.max(boxH / 2 + 2, cy));
-      _pillLabel(overlayCtx, label, cx, cy, fsize, dark);
+      _pillLabel(overlayCtx, label, cx, cy, fsize);
     }
   }
 
@@ -5673,12 +5786,11 @@ function drawOverlay() {
   // Length snaps to a round value as the FOV changes: 1″ (fov ≤ 6), 2″ (≤ 10),
   // 5″ (≤ 30), 10″ above. Drawn on the overlay, so it appears in captures.
   if (needScale) {
-    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
     const s    = state.fov <= 6 ? 1 : state.fov <= 10 ? 2 : state.fov <= 30 ? 5 : 10;
     const wpx  = s / state.fov * Wl;
     const y    = Hl - 14;
     const x1   = Wl - 12, x0 = x1 - wpx;  // bottom-right corner
-    const col  = dark ? '#ffffff' : '#000000';
+    const col  = annotInk();
     overlayCtx.strokeStyle = col;
     overlayCtx.lineWidth   = 1.5;
     overlayCtx.beginPath();
