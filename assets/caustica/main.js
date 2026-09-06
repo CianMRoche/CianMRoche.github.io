@@ -79,8 +79,13 @@ const CAUS_COLOR = 'rgba(134, 239, 172, 0.95)';
 // critical curves, caustics, and point-source dots. These are fixed looks chosen for
 // their own sake (NOT tied to the site's light/dark theme); the dropdown order below
 // is the order shown to the user. Colors are drawn on the (non-CSS-inverted) overlay,
-// so they render as authored in either site theme.
+// so they render as authored in either site theme. The exception is 'default' (the
+// palette line art starts on): it borrows the site's own dark-mode background
+// (#0d1117, $dm-bg in _sass/_dark-mode.scss) and the homepage hero accent blue
+// (#93c5fd, the dark --accent in _layouts/home.html that images/backgrounds/*.svg
+// are recolored to), so a fresh line-art view matches the site's own artwork.
 const LINE_ART_PALETTES = {
+  default:       { name: 'Default',         bg: '#0d1117', imageFill: '#93c5fd', imageStroke: '#93c5fd', critical: '#93c5fd', caustic: '#fbbf24', pointImage: '#93c5fd', lens: '#7bbfcc', source: '#fbbf24', hybrid: '#b09ac8' },
   ink:           { name: 'Ink',             bg: '#0a0a0a', imageFill: '#ebebeb', imageStroke: '#ffffff', critical: '#ffffff', caustic: '#9aa0a6', pointImage: '#ffffff', lens: '#7bbfcc', source: '#fbbf24', hybrid: '#b09ac8' },
   ink_inv:       { name: 'Ink (inv.)',      bg: '#ffffff', imageFill: '#141414', imageStroke: '#000000', critical: '#000000', caustic: '#9aa0a6', pointImage: '#000000', lens: '#4a7fc8', source: '#f59e0b', hybrid: '#9b7dd4' },
   crimson:       { name: 'Crimson',         bg: '#ffffff', imageFill: '#e11d3c', imageStroke: '#8a0f22', critical: '#1a1a1a', caustic: '#f2a6b0', pointImage: '#c8142f', lens: '#4a7fc8', source: '#f59e0b', hybrid: '#9b7dd4' },
@@ -105,7 +110,7 @@ const LINE_ART_ROLES = [
 ];
 // Copy just the color fields of a named palette (dropping the display name).
 function paletteColors(key) {
-  const p = LINE_ART_PALETTES[key] ?? LINE_ART_PALETTES.ink;
+  const p = LINE_ART_PALETTES[key] ?? LINE_ART_PALETTES.default;
   const out = {};
   for (const [role] of LINE_ART_ROLES) out[role] = p[role];
   return out;
@@ -350,8 +355,9 @@ const CONFIG_DEFAULTS = {
   Omega_m:            0.3,    // matter density; Omega_L = 1 − Omega_m
   showTimeDelays:     false,  // annotate point-source images with relative time delays (days)
   lineArt:            false,  // vector "Line art" render mode (flat palette, no raster)
-  lineArtPalette:     'ink',  // key into LINE_ART_PALETTES
+  lineArtPalette:     'default',  // key into LINE_ART_PALETTES
   lineArtFill:        true,   // fill lensed-image outlines (vs stroke only)
+  lineArtFillAlpha:   0.9,    // opacity of that fill (View tab -> "Fill alpha"), 0..1
   lineArtSmooth:      true,   // curvature-aware Chaikin smoothing of the vector curves
   // Annotation ink (View tab -> Annotation color). Auto snaps to white/black with
   // the page theme; off pins annotColor instead.
@@ -474,16 +480,18 @@ function _numStep(v) {
 }
 
 // Make a number <input> draggable: click-drag left/right scrubs the value (step scaled
-// to its magnitude), clamped to [lo,hi]; a <2px move is treated as a click so typing and
-// the spinner still work. onChange(v) receives each new value.
-function _attachScrub(inp, { lo = -Infinity, hi = Infinity, onChange }) {
+// to its magnitude, or fixed if `step` is given), clamped to [lo,hi]; a <2px move is
+// treated as a click so typing and the spinner still work. onChange(v) receives each new
+// value. Pass `step` for a bounded quantity (e.g. a 0..1 alpha), where the magnitude-
+// scaled step would crawl near zero and change feel across the range.
+function _attachScrub(inp, { lo = -Infinity, hi = Infinity, step: fixedStep = null, onChange }) {
   if (!inp) return;
   inp.classList.add('sl-scrub');
   let dragging = false, moved = false, startX = 0, startY = 0, startVal = 0, step = 0.01, startSig = null;
   inp.addEventListener('pointerdown', e => {
     if (e.button !== 0) return;
     startVal = parseFloat(inp.value) || 0;
-    step = _numStep(startVal || 1);
+    step = fixedStep ?? _numStep(startVal || 1);
     startSig = _sceneSig();
     startX = e.clientX; startY = e.clientY; dragging = true; moved = false;
     beginAction();
@@ -752,6 +760,7 @@ function configToYaml() {
   y += `lineArtPalette: ${state.lineArtPalette}\n`;
   y += `lineArtColors: ${LINE_ART_ROLES.map(([r]) => state.lineArtColors[r]).join(' ')}\n`;
   y += `lineArtFill: ${state.lineArtFill}\n`;
+  y += `lineArtFillAlpha: ${state.lineArtFillAlpha}\n`;
   y += `lineArtSmooth: ${state.lineArtSmooth}\n`;
   y += `annotAuto: ${state.annotAuto}\n`;
   y += `annotColor: ${state.annotColor}\n`;
@@ -1033,6 +1042,7 @@ function loadConfigFromYaml(yaml) {
       LINE_ART_ROLES.forEach(([role], i) => { if (COLOR_RE.test(cols[i])) state.lineArtColors[role] = cols[i]; });
     }
     state.lineArtFill    = _bool(cfg.lineArtFill,    CONFIG_DEFAULTS.lineArtFill);
+    state.lineArtFillAlpha = _clampNum(cfg.lineArtFillAlpha, 0, 1, CONFIG_DEFAULTS.lineArtFillAlpha);
     state.lineArtSmooth  = _bool(cfg.lineArtSmooth,  CONFIG_DEFAULTS.lineArtSmooth);
     state.annotAuto      = _bool(cfg.annotAuto,      CONFIG_DEFAULTS.annotAuto);
     state.annotColor     = COLOR_RE.test(cfg.annotColor) ? cfg.annotColor : CONFIG_DEFAULTS.annotColor;
@@ -4077,8 +4087,19 @@ function renderViewPanel() {
             <label title="Curvature-aware smoothing: rounds off sampling staircase while preserving genuine cusps"><input type="checkbox" id="sl-lineart-smooth" ${state.lineArtSmooth?'checked':''}> Smooth</label>
           </div>
           <div class="sl-lineart-colors" title="Override any color from the chosen palette; re-selecting a palette resets them">
-            ${LINE_ART_ROLES.map(([role, label]) =>
-              `<label class="sl-la-color"><span>${label}</span><input type="color" data-la-color="${role}" value="${lineArtPalette()[role]}"></label>`).join('')}
+            ${(() => {
+              const cells = LINE_ART_ROLES.map(([role, label]) =>
+                `<label class="sl-la-color"><span>${label}</span><input type="color" data-la-color="${role}" value="${lineArtPalette()[role]}"></label>`);
+              // Opacity of the image fill. Spliced in after "Image line" so that in the
+              // two-column grid it lands in the cell directly under "Image fill".
+              cells.splice(3, 0,
+                `<label class="sl-la-color" title="Opacity of the lensed-image fill (0 = clear, 1 = solid). Drag left/right to scrub.">
+                  <span>Fill alpha</span>
+                  <input type="number" class="sl-la-num sl-scrub" id="sl-lineart-fillalpha" min="0" max="1" step="0.05"
+                         value="${state.lineArtFillAlpha}" ${state.lineArtFill ? '' : 'disabled'}>
+                </label>`);
+              return cells.join('');
+            })()}
           </div>
         </div>` : '' }
       </div>
@@ -4230,8 +4251,16 @@ function renderViewPanel() {
     renderSidebar();                                        // refresh the color pickers to the new palette
     redraw();
   });
-  document.getElementById('sl-lineart-fill')?.addEventListener('change', e => { state.lineArtFill = e.target.checked; redraw(); });
+  document.getElementById('sl-lineart-fill')?.addEventListener('change', e => { state.lineArtFill = e.target.checked; renderSidebar(); redraw(); });
   document.getElementById('sl-lineart-smooth')?.addEventListener('change', e => { state.lineArtSmooth = e.target.checked; redraw(); });
+  const _faInp = document.getElementById('sl-lineart-fillalpha');
+  if (_faInp) {
+    const setFillAlpha = v => { state.lineArtFillAlpha = _clampNum(v, 0, 1, state.lineArtFillAlpha); redraw(); };
+    _faInp.addEventListener('input',  e => setFillAlpha(parseFloat(e.target.value)));
+    // Fixed 0.01 step: alpha is bounded to [0,1], so the magnitude-scaled default
+    // would crawl near 0 and give the box a different feel at each end of its range.
+    _attachScrub(_faInp, { lo: 0, hi: 1, step: 0.01, onChange: setFillAlpha });
+  }
   document.querySelectorAll('[data-la-color]').forEach(inp =>
     inp.addEventListener('input', e => { state.lineArtColors[e.target.dataset.laColor] = e.target.value; redraw(); }));
   document.getElementById('sl-annot-auto')?.addEventListener('change', e => {
@@ -4456,6 +4485,8 @@ function renderExportPanel() {
       <div class="sl-capture-row" style="margin-top:6px">
         <button class="sl-capture-btn" id="sl-svg-btn" ${state.lineArt ? '' : 'disabled'}
                 title="${state.lineArt ? 'Export the Line art view as a scalable vector SVG' : 'Enable Line art (View tab) to export a vector SVG'}">Save SVG (line art)</button>
+        <button class="sl-capture-btn ${recState.svgBg ? 'active' : ''}" id="sl-svg-bg-btn" ${state.lineArt ? '' : 'disabled'}
+                title="Include the palette background in the saved SVG (off = transparent background)">Background</button>
       </div>
 
       <div class="sl-hybrid-section" style="margin-top:8px">
@@ -4544,6 +4575,10 @@ function renderExportPanel() {
   document.getElementById('sl-prog-section-hdr')?.addEventListener('click', () => { _progExpanded = !_progExpanded; renderSidebar(); });
   document.getElementById('sl-snapshot-btn')?.addEventListener('click', captureSnapshot);
   document.getElementById('sl-svg-btn')?.addEventListener('click', exportLineArtSVG);
+  document.getElementById('sl-svg-bg-btn')?.addEventListener('click', e => {
+    recState.svgBg = !recState.svgBg;
+    e.currentTarget.classList.toggle('active', recState.svgBg);
+  });
   document.getElementById('sl-rec-btn')?.addEventListener('click', () => { recState.active ? stopRecording() : startRecording(); });
   document.getElementById('sl-rec-fps')?.addEventListener('change', e => { recState.fps = parseInt(e.target.value, 10); });
   document.getElementById('sl-rec-format')?.addEventListener('change', e => { recState.useGif = e.target.value === 'gif'; });
@@ -5256,7 +5291,7 @@ function drawLineArtBase(W, H, dpr) {
         overlayCtx.moveTo(x0, y0);
         for (let i = 1; i < poly.length; i++) { const [px, py] = toPixel(poly[i][0], poly[i][1]); overlayCtx.lineTo(px, py); }
       }
-      if (state.lineArtFill) { overlayCtx.fillStyle = pal.imageFill; overlayCtx.globalAlpha = 0.9; overlayCtx.fill('evenodd'); overlayCtx.globalAlpha = 1; }
+      if (state.lineArtFill) { overlayCtx.fillStyle = pal.imageFill; overlayCtx.globalAlpha = state.lineArtFillAlpha; overlayCtx.fill('evenodd'); overlayCtx.globalAlpha = 1; }
       overlayCtx.strokeStyle = pal.imageStroke; overlayCtx.lineWidth = strokeW; overlayCtx.stroke();
     }
   }
@@ -6123,8 +6158,9 @@ function buildLineArtSVGString() {
 
   const parts = [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${S}" height="${S}" viewBox="0 0 ${S} ${S}">`,
-    `<rect width="${S}" height="${S}" fill="${pal.bg}"/>`,
   ];
+  // The "Background" toggle in the Capture tab; off leaves the canvas transparent.
+  if (recState.svgBg) parts.push(`<rect width="${S}" height="${S}" fill="${pal.bg}"/>`);
 
   // Uniform-disc lensed-image outlines.
   planes.forEach((plane, idx) => {
@@ -6139,7 +6175,7 @@ function buildLineArtSVGString() {
       if (state.lineArtSmooth) polys = smoothPolylines(polys);
       const d = polys.map(pathD).join(' ');
       if (!d) continue;
-      const fill = state.lineArtFill ? `fill="${pal.imageFill}" fill-opacity="0.9" fill-rule="evenodd"` : 'fill="none"';
+      const fill = state.lineArtFill ? `fill="${pal.imageFill}" fill-opacity="${state.lineArtFillAlpha}" fill-rule="evenodd"` : 'fill="none"';
       parts.push(`<path d="${d}" ${fill} stroke="${pal.imageStroke}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>`);
     }
   });
@@ -6367,6 +6403,10 @@ const recState = {
   // Committed keyframes that will animate simultaneously
   progObjects:    [],    // [{ objId, planeId, initialPos:{cx,cy}, finalPos:{cx,cy}, label }]
   progDuration:   3.0,
+  // "Background" toggle beside Save SVG: whether the exported SVG carries an
+  // opaque palette-colored backing rect, or leaves the canvas transparent so the
+  // art can be dropped onto another background (as the homepage hero SVGs are).
+  svgBg:          true,
 };
 
 function updateRecordingIndicator() {

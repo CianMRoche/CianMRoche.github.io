@@ -1114,11 +1114,18 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   white-space: nowrap;
   transition: background 0.1s, color 0.1s;
 }
-.sl-capture-btn:hover { background: var(--bg-soft); }
+.sl-capture-btn:hover:not(:disabled) { background: var(--bg-soft); }
 .sl-capture-btn.recording {
   border-color: var(--bad);
   color: var(--bad);
 }
+/* Toggle-style capture button (e.g. the SVG "Background" switch) when switched on */
+.sl-capture-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.sl-capture-btn:disabled { opacity: 0.45; cursor: default; }
 .sl-capture-fps {
   font-size: 12px;
   padding: 3px 5px;
@@ -1211,6 +1218,29 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   background: transparent;
   cursor: pointer;
 }
+/* "Fill alpha" number box: sized to match the colour swatches it shares the grid
+   with, so the column of controls lines up. Drag-to-scrub comes from .sl-scrub. */
+.sl-la-color input.sl-la-num {
+  width: 36px;
+  height: 20px;
+  flex: 0 0 auto;
+  padding: 1px 3px;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 11px;
+  text-align: center;
+  -moz-appearance: textfield;
+}
+/* Drop the spinners: at 36px they would leave no room for the number, and the
+   drag-scrub plus typing cover both ways of setting it. */
+.sl-la-color input.sl-la-num::-webkit-outer-spin-button,
+.sl-la-color input.sl-la-num::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.sl-la-color input.sl-la-num:disabled { opacity: 0.45; cursor: default; }
 
 /* Annotation-ink row: "Auto" toggle + swatch, sitting in the section header. */
 .sl-annot-auto {
