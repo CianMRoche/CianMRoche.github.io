@@ -370,6 +370,8 @@ const CONFIG_DEFAULTS = {
   bgOffX:             0.0,    // pan, in half-viewport widths (+ moves the image right)
   bgOffY:             0.0,    // pan, in half-viewport heights (+ moves the image up)
   bgBright:           1.0,    // brightness multiplier
+  bgColor:            '#000000', // empty-field colour behind everything, stored as
+                              // the dark-mode display value (black = the old field)
   bgSkyLock:          false,  // false = fixed to the viewport; true = zooms with the FOV
   bgHidden:           false,  // eye toggle: keep the loaded image but stop drawing it
   // Detector model (View tab → Instrument). instrPixel / instrPsfFwhm are only
@@ -772,6 +774,7 @@ function configToYaml() {
   y += `bgOffX: ${+state.bgOffX.toFixed(4)}\n`;
   y += `bgOffY: ${+state.bgOffY.toFixed(4)}\n`;
   y += `bgBright: ${+state.bgBright.toFixed(4)}\n`;
+  y += `bgColor: ${state.bgColor}\n`;
   y += `bgSkyLock: ${state.bgSkyLock}\n`;
   y += `bgHidden: ${state.bgHidden}\n`;
   y += `instrument: ${state.instrument}\n`;
@@ -1062,6 +1065,7 @@ function loadConfigFromYaml(yaml) {
     state.bgOffX    = _clampNum(cfg.bgOffX,  -BG_OFF_MAX, BG_OFF_MAX, CONFIG_DEFAULTS.bgOffX);
     state.bgOffY    = _clampNum(cfg.bgOffY,  -BG_OFF_MAX, BG_OFF_MAX, CONFIG_DEFAULTS.bgOffY);
     state.bgBright  = _clampNum(cfg.bgBright,  0, BG_BRIGHT_MAX, CONFIG_DEFAULTS.bgBright);
+    state.bgColor   = COLOR_RE.test(cfg.bgColor) ? cfg.bgColor : CONFIG_DEFAULTS.bgColor;
     state.bgSkyLock = _bool(cfg.bgSkyLock, CONFIG_DEFAULTS.bgSkyLock);
     state.bgHidden  = _bool(cfg.bgHidden,  CONFIG_DEFAULTS.bgHidden);
     // Detector model.
@@ -1105,7 +1109,7 @@ function defaultParams(model) {
   if (model === 'exponential') return { sigma: 0.05, q: 0.40, phi: 0, amplitude: 2.20, color: '#ffffff' };
   if (model === 'point')       return { sigma: 0.08, q: 1.0, phi: 0, amplitude: 1.0, color: '#ffffff' };
   if (model === 'pointsource') return { sigma: 0.05, amplitude: 1.0, color: '#ffffff' };
-  if (model === 'pastedimage') return { sigma: 1.0, amplitude: 1.0, angSize: 0 };
+  if (model === 'pastedimage') return { sigma: 1.0, amplitude: 1.0, angSize: 0, edgeBlend: 0 };
   return {};
 }
 
@@ -3326,6 +3330,71 @@ function syncBackdrop() {
     angSize: state.bgAngSize,
     invert:  glCanvasInverted(),
   } : null;
+  // The field colour applies whether or not a picture is loaded, so it lives outside
+  // the bgOpts branch. Stored as the dark-mode display value and handed over as-is,
+  // exactly like source colours: in light theme the canvas's CSS invert flips it
+  // along with everything else. That keeps black meaning "the plain empty field"
+  // (which the invert turns white in light theme, as it always has), and it makes a
+  // matched field and pasted image agree on screen in either theme, since both take
+  // the same as-is path.
+  renderer.fieldColor = _hexRgb01(state.bgColor) ?? [0, 0, 0];
+}
+
+// What the Field color picker should show: the stored value is the dark-mode one, so
+// in light theme show its complement, which is what actually appears on screen.
+function _bgColorDisplay() {
+  return glCanvasInverted() ? invertHexColor(state.bgColor) : state.bgColor;
+}
+
+// #rrggbb -> [r,g,b] in 0-1, or null if it isn't a hex colour.
+function _hexRgb01(hex) {
+  const m = /^#([0-9a-fA-F]{6})$/.exec(hex ?? '');
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255];
+}
+
+// Average colour of a canvas's outermost ring of pixels, as #rrggbb (null if it
+// cannot be read). Backs the Background section's "Match image" button: setting the
+// field to the picture's own border colour is what stops the source rectangle's edge
+// reading as an edge, since there is then nothing for it to be a step between.
+function _borderAverageHex(cvs) {
+  const w = cvs?.width, h = cvs?.height;
+  if (!w || !h) return null;
+  // A ring a few pixels deep rather than the single outermost row: photographs often
+  // carry a compression fringe or a stray dark scan line right at the boundary.
+  const d = Math.max(1, Math.min(8, Math.floor(Math.min(w, h) * 0.02)));
+  let r = 0, g = 0, b = 0, n = 0;
+  try {
+    const ctx = cvs.getContext('2d', { willReadFrequently: true });
+    const acc = (x, y, sw, sh) => {
+      if (sw <= 0 || sh <= 0) return;
+      const px = ctx.getImageData(x, y, sw, sh).data;
+      for (let i = 0; i < px.length; i += 4) {
+        const a = px[i + 3] / 255;      // weight by alpha: skip transparent padding
+        if (a === 0) continue;
+        r += px[i] * a; g += px[i + 1] * a; b += px[i + 2] * a; n += a;
+      }
+    };
+    acc(0, 0, w, d); acc(0, h - d, w, d);                       // top and bottom bands
+    acc(0, d, d, h - 2 * d); acc(w - d, d, d, h - 2 * d);       // left and right, no corners
+  } catch (_) {
+    return null;   // a tainted canvas cannot be read back
+  }
+  if (!n) return null;
+  const hx = v => Math.round(Math.min(255, v / n)).toString(16).padStart(2, '0');
+  return `#${hx(r)}${hx(g)}${hx(b)}`;
+}
+
+// The pasted image the "Match image" button should sample: the selected one if a
+// pasted-image object is selected, else the first one anywhere in the scene.
+function _matchablePastedCanvas() {
+  const sel = selectedObj();
+  if (sel?.model === 'pastedimage' && sel.pasteCanvas) return sel.pasteCanvas;
+  for (const pl of state.planes)
+    for (const o of pl.objects)
+      if (o.model === 'pastedimage' && o.pasteCanvas) return o.pasteCanvas;
+  return null;
 }
 
 // Push the Instrument selection into the renderer. Null when off, so a scene that
@@ -3951,6 +4020,7 @@ function backgroundSectionHtml() {
           </button>
           ${infoSection('sl-bg-info', `
             An uploaded image replaces the empty field behind the lensed image and sits behind the lensed light, which covers it where the image is bright. The picture looks the same in either theme; every other plot element still follows the light / dark theme (<b>D</b>) as usual.<br><br>
+            <b>Field color</b> sets the empty field itself, with or without a picture loaded, and also fills the margins a <b>Contain</b> fit leaves over. It is the companion to a pasted-image source: match the two and the rectangular boundary of the pasted image stops being visible. <b>Match image</b> does that in one click, by averaging the colour around the border of the pasted image; the source's own <b>Edge blend</b> then softens whatever is left.<br><br>
             <b>Fit</b>: the image panel is square. <b>Cover</b> fills it and crops the long axis, <b>Contain</b> fits the whole image and leaves the rest empty, <b>Stretch</b> distorts it to the square, <b>Tile</b> fits it and mirror-repeats to fill.<br><br>
             <b>Zoom</b> and <b>Offset X / Y</b> then frame it by hand (offsets are in half-panel widths). <b>Brightness</b> fades the picture toward the empty field (0) or past its supplied brightness (above 1), and affects the backdrop only. <b>Zoom with FOV</b> pins the backdrop to the sky instead of the viewport, so zooming the field magnifies it too.<br><br>
             The eye button takes the picture off the plot without unloading it. Config files save the framing, and the file name only for the images shipped with the site (as the <b>Image recreation</b> preset does); a picture you upload yourself is not saved.`)}
@@ -3964,6 +4034,13 @@ function backgroundSectionHtml() {
           ${has ? `<div class="sl-bg-file" title="${_escHtml(state.bgName)}">${_escHtml(state.bgName)} · ${state.bgCanvas.width}×${state.bgCanvas.height}</div>` : ''}
           ${inertNote ? `<p class="sl-muted-note" style="margin:6px 0 0">${inertNote}</p>` : ''}
           <div class="sl-global-input" style="margin-top:8px">
+            <label title="Colour of the empty field behind the lensed image and behind (or around) the backdrop picture">Field color</label>
+            <input type="color" id="sl-bg-color" class="sl-color-input" value="${_bgColorDisplay()}"
+                   style="flex:0 0 auto;width:44px;height:22px" title="Colour of the empty field">
+            <button class="sl-rec-mini-btn" id="sl-bg-match" style="margin-left:auto" ${_matchablePastedCanvas() ? '' : 'disabled'}
+                    title="Set the field to the average colour around the border of the pasted image, so the source rectangle's edge stops reading as a step">Match image</button>
+          </div>
+          <div class="sl-global-input">
             <label>Fit</label>
             <select id="sl-bg-fit" style="flex:1 1 auto;min-width:0" ${dis}>
               <option value="cover"   ${state.bgFit==='cover'  ?'selected':''}>Cover (crop)</option>
@@ -4410,6 +4487,23 @@ function renderViewPanel() {
   _bgSlider('sl-bg-offx',   'bgOffX');
   _bgSlider('sl-bg-offy',   'bgOffY');
   _bgSlider('sl-bg-bright', 'bgBright');
+  document.getElementById('sl-bg-color')?.addEventListener('input', e => {
+    // Stored as the dark-mode value, like source colours: in light theme the canvas
+    // is CSS-inverted, so the picker shows the complement and we invert back here.
+    state.bgColor = glCanvasInverted() ? invertHexColor(e.target.value) : e.target.value;
+    redraw();
+  });
+  document.getElementById('sl-bg-match')?.addEventListener('click', () => {
+    // Measured off the image's raw pixels, and stored without theme correction: the
+    // field and the pasted image both reach the screen through the same as-is path,
+    // so equal stored values look equal in either theme.
+    // No record(): the undo snapshot covers scene content only, so a view setting
+    // like this has nothing to restore and would just push an empty entry.
+    const hex = _borderAverageHex(_matchablePastedCanvas());
+    if (!hex) return;
+    state.bgColor = hex;
+    renderSidebar(); redraw();
+  });
   document.getElementById('sl-bg-skylock')?.addEventListener('change', e => {
     state.bgSkyLock = e.target.checked;
     // Anchor to the field of view on screen now, so switching the lock on never
@@ -4756,6 +4850,7 @@ function sourceParamRows(obj, showAttach) {
       '<p style="font-size:11px;color:var(--muted);font-style:italic;margin-top:6px;grid-column:1/-1">Use the image button in the plane header to load an image, or Ctrl+V with this object selected</p>';
     return sliderRowLog('Scale', 'sigma', 0.05, 4.0, p.sigma ?? 1.0)
          + sliderRow('Brightness', 'amplitude', 0.1, 5.0, 0.1, p.amplitude ?? 1.0)
+         + sliderRow('Edge blend', 'edgeBlend', 0, 1, 0.02, p.edgeBlend ?? 0)
          + objFooter(obj, showAttach)
          + hint;
   }

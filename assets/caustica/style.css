@@ -1040,7 +1040,8 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   flex-shrink: 0;
   transition: color 0.1s, border-color 0.1s;
 }
-.sl-rec-mini-btn:hover { color: var(--fg); border-color: var(--fg-soft); }
+.sl-rec-mini-btn:hover:not(:disabled) { color: var(--fg); border-color: var(--fg-soft); }
+.sl-rec-mini-btn:disabled { opacity: 0.45; cursor: default; }
 .sl-rec-mini-clear { color: var(--bad); border-color: transparent; }
 .sl-rec-mini-clear:hover { border-color: var(--bad); background: transparent; }
 

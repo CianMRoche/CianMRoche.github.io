@@ -15,6 +15,7 @@
 //   r.clearPastedTexture(objId)         — call when object is deleted
 //   r.setBackdrop(canvas | null)        — background image behind the lensed view
 //   r.bgOpts = { fit, zoom, offX, offY, bright, skyLock, angSize } | null
+//   r.fieldColor = [r,g,b] (0-1, already theme-corrected) | null for black
 //   r.detectorOpts = { pixel, psfFwhm, psfOn } | null   — instrument pixel model
 //   r.detectorInfo                      — { applied, nPix, ss, samples, pixel } after a draw
 //   r.resize()
@@ -95,6 +96,9 @@ uniform vec3  u_srcColor    [${MAX_OBJECTS}]; // tint for analytical sources (1,
 
 // Per-source pasted-image slot (-1 = not a pasted image, 0-3 = texture slot).
 uniform int   u_pastedSlot  [${MAX_OBJECTS}];
+// Extra edge feather per pasted image, in source-UV units ("Edge blend"): 0 leaves
+// the rectangle's own antialiased border, larger values dissolve it into the field.
+uniform float u_pastedFeather[${MAX_OBJECTS}];
 // Four independent texture samplers + their image sizes in arcsec.
 // Sampler arrays cannot be dynamically indexed in GLSL ES; use if-else.
 uniform sampler2D u_pastedTex0;
@@ -117,6 +121,10 @@ uniform vec2  u_bgOffset;  // pan, in texture units
 uniform float u_bgBright;  // brightness multiplier
 uniform int   u_bgTile;    // 1 = wrap the texture instead of letterboxing
 uniform int   u_bgInvert;  // 1 = pre-invert, cancelling the canvas's CSS invert
+// The empty field behind everything. Black by this shader's convention (the
+// light-theme CSS invert turns it white); the Background section can set a colour
+// instead, pre-inverted on the CPU so it appears as picked in either theme.
+uniform vec3  u_fieldColor;
 
 // ── Lens deflection angles ────────────────────────────────────────────────────
 
@@ -418,10 +426,14 @@ float fermatPotential(vec2 theta, int targetIdx) {
 }
 
 // ── Pasted image sampling ─────────────────────────────────────────────────────
-// Returns the pasted image color (RGB) for source idx at source-plane
-// position beta.  Uses an if-else chain to avoid dynamic sampler indexing.
+// Returns the pasted image for source idx at source-plane position beta, as
+// premultiply-ready colour in .rgb and its geometric footprint in .a (1 inside the
+// rectangle, feathered across the border, 0 outside). Coverage is the footprint
+// rather than the brightness because a photograph is opaque wherever it exists: its
+// dark regions have to hide the backdrop, not let it show through. Uses an if-else
+// chain to avoid dynamic sampler indexing.
 
-vec3 samplePasted(int idx, vec2 beta) {
+vec4 samplePasted(int idx, vec2 beta) {
   int  slot = u_pastedSlot[idx];
   vec2 sz;
   if      (slot == 0) sz = u_pastedSz0;
@@ -431,20 +443,33 @@ vec3 samplePasted(int idx, vec2 beta) {
 
   vec2 uv = (beta - u_srcCenter[idx]) / sz + 0.5;
   uv.y = 1.0 - uv.y;  // WebGL textures: first data row (canvas top) is at t=0
-  if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0))))
-    return vec3(0.0);
 
+  // Sample from a clamped UV and mask afterwards, rather than returning early when
+  // outside the image. These fetches are mipmapped, and a mipmapped fetch reached
+  // through non-uniform control flow has undefined derivatives: in the 2x2 quads
+  // straddling the border the LOD collapsed toward the 1x1 mip, which is the whole
+  // image's average colour, and that painted bright square blocks along every edge.
+  // sampleBackdrop() masks rather than branches for exactly the same reason.
+  vec2 cuv = clamp(uv, 0.0, 1.0);
   vec4 col;
-  if      (slot == 0) col = texture(u_pastedTex0, uv);
-  else if (slot == 1) col = texture(u_pastedTex1, uv);
-  else if (slot == 2) col = texture(u_pastedTex2, uv);
-  else                col = texture(u_pastedTex3, uv);
+  if      (slot == 0) col = texture(u_pastedTex0, cuv);
+  else if (slot == 1) col = texture(u_pastedTex1, cuv);
+  else if (slot == 2) col = texture(u_pastedTex2, cuv);
+  else                col = texture(u_pastedTex3, cuv);
 
-  // Smooth fade at edges to avoid hard border artifacts.
-  vec2 edgeDist = min(uv, 1.0 - uv);
-  float fade = smoothstep(0.0, 0.015, min(edgeDist.x, edgeDist.y));
+  // Edge feather. The base width follows the on-screen UV gradient, so the border
+  // stays about a pixel and a half soft whatever the local magnification: a width
+  // fixed in source UV (as this was) is a broad smear where the image is stretched
+  // along an arc and a hard, aliased staircase where it is demagnified.
+  // u_pastedFeather adds the "Edge blend" amount on top to dissolve the rectangle
+  // into the field. Capped so a strongly demagnified image cannot feather itself
+  // out of existence.
+  vec2 w = min(fwidth(uv) * 1.5 + u_pastedFeather[idx], vec2(0.45));
+  // smoothstep with edge0 = 0 already returns 0 for the negative distances outside
+  // the rectangle, so this doubles as the hard cut the early return used to do.
+  vec2 f = smoothstep(vec2(0.0), max(w, vec2(1e-6)), min(uv, 1.0 - uv));
 
-  return u_srcParams[idx].w * col.rgb * fade;
+  return vec4(u_srcParams[idx].w * col.rgb, f.x * f.y);
 }
 
 // ── Background image ──────────────────────────────────────────────────────────
@@ -462,7 +487,7 @@ vec3 samplePasted(int idx, vec2 beta) {
 // supplied) rather than a fade to black in one theme and to white in the other.
 
 vec3 sampleBackdrop() {
-  if (u_bgOn == 0) return vec3(0.0);
+  if (u_bgOn == 0) return u_fieldColor;
   vec2 uv = (v_uv - 0.5) * u_bgScale + 0.5 + u_bgOffset;
   uv.y = 1.0 - uv.y;  // WebGL textures: first data row (image top) is at t=0
   vec3 col = texture(u_bgTex, uv).rgb;
@@ -470,9 +495,10 @@ vec3 sampleBackdrop() {
   col *= u_bgBright;
   if (u_bgTile == 1) return col;
   // Mask (rather than branch) outside the image, so the mipmapped fetch above
-  // stays in uniform control flow and its derivatives remain well defined.
+  // stays in uniform control flow and its derivatives remain well defined. The
+  // letterbox margins a Contain fit leaves over fall back to the field colour.
   vec2 inside = step(vec2(0.0), uv) * step(uv, vec2(1.0));
-  return col * inside.x * inside.y;
+  return mix(u_fieldColor, col, inside.x * inside.y);
 }
 
 // ── Analytical source brightness (white) ──────────────────────────────────────
@@ -755,12 +781,15 @@ void main() {
     return;
   }
 
-  vec3 colorOut = vec3(0.0);
+  vec3  colorOut    = vec3(0.0);
+  float pastedCover = 0.0;   // geometric footprint of the pasted images, see below
   for (int si = 0; si < MAX_OBJECTS; si++) {
     if (si >= u_numSources) break;
     vec2 beta = traceToPlane(theta, u_srcPlaneIdx[si]);
     if (u_srcModel[si] == 3) {
-      colorOut += samplePasted(si, beta);
+      vec4 p = samplePasted(si, beta);
+      colorOut   += p.rgb * p.a;
+      pastedCover = max(pastedCover, p.a);
     } else {
       colorOut += u_srcColor[si] * analyticalBrightness(si, beta);
     }
@@ -780,7 +809,11 @@ void main() {
   // every pixel, so the Brightness slider would shift the lensed image too (and
   // un-clip arcs that the sum had saturated). Applied after the stretch, so the
   // brightness curve shapes only the lensed light and not the supplied picture.
+  // A pasted image covers by its footprint instead, so its shadows stay its own
+  // rather than letting the backdrop bleed up through them; brightness-as-coverage
+  // is kept for the analytic sources, whose light really does fade to nothing.
   float cover = clamp(max(max(colorOut.r, colorOut.g), colorOut.b), 0.0, 1.0);
+  cover = max(cover, pastedCover);
   fragColor = vec4(clamp(colorOut + sampleBackdrop() * (1.0 - cover), 0.0, 1.0), 1.0);
 }`;
 
@@ -894,6 +927,9 @@ export class Renderer {
     // arguments so every existing call site picks the backdrop up unchanged.
     this._bg     = null;
     this.bgOpts  = null;   // { fit, zoom, offX, offY, bright, skyLock, angSize }
+    // Empty-field colour, [r,g,b] in 0-1, pre-inverted by the caller when the
+    // canvas is CSS-inverted. Null keeps the shader's black-is-empty convention.
+    this.fieldColor = null;
 
     // Detector model (View tab → Instrument): bin the lensed image onto an
     // instrument's pixel grid, optionally convolving with its PSF first. Built
@@ -1251,6 +1287,7 @@ export class Renderer {
     const srcParams   = new Float32Array(MAX_OBJECTS * 4);
     const srcColor    = new Float32Array(MAX_OBJECTS * 3).fill(1); // default white
     const pastedSlot  = new Int32Array(MAX_OBJECTS).fill(-1);
+    const pastedFeather = new Float32Array(MAX_OBJECTS);   // 0 for every other model
     // Texture slots: collect up to MAX_PASTED pasted-image sources.
     const slotEntries = [null, null, null, null]; // { tex, w, h } per slot
     let pastedCount = 0;
@@ -1292,6 +1329,10 @@ export class Renderer {
           // old fov-relative sizing (0 sentinel).
           const angSize = (obj.params.angSize > 0) ? obj.params.angSize : 0;
           slotEntries[slot] = cached ? { ...cached, scale: obj.params.sigma ?? 1.0, angSize } : null;
+          // "Edge blend" is a 0-1 control; map it onto a feather in source-UV units.
+          // 0.4 at the top of the range reaches most of the way to the centre from
+          // each side, enough to read as a full vignette without erasing the image.
+          pastedFeather[si] = 0.4 * Math.min(1, Math.max(0, obj.params.edgeBlend ?? 0));
         }
         si++;
       }
@@ -1303,6 +1344,7 @@ export class Renderer {
     gl.uniform4fv(_locs.u_srcParams,    srcParams);
     gl.uniform3fv(_locs.u_srcColor,     srcColor);
     gl.uniform1iv(_locs.u_pastedSlot,   pastedSlot);
+    gl.uniform1fv(_locs.u_pastedFeather, pastedFeather);
 
     // Bind texture slots 0-3 and set size uniforms.
     const szLocs = [_locs.u_pastedSz0, _locs.u_pastedSz1, _locs.u_pastedSz2, _locs.u_pastedSz3];
@@ -1337,6 +1379,8 @@ export class Renderer {
     gl.uniform1f (_locs.u_bgBright, bg ? bg.bright : 1);
     gl.uniform1i (_locs.u_bgTile,   bg && bg.tile   ? 1 : 0);
     gl.uniform1i (_locs.u_bgInvert, bg && bg.invert ? 1 : 0);
+    // Set whether or not a picture is loaded: it is the field behind everything.
+    gl.uniform3fv(_locs.u_fieldColor, this.fieldColor ?? [0, 0, 0]);
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
 
@@ -1427,6 +1471,7 @@ export class Renderer {
       u_vizMode:      u('u_vizMode'),
       u_vizSrcIdx:    u('u_vizSrcIdx'),
       u_isDark:       u('u_isDark'),
+      u_pastedFeather: u('u_pastedFeather'),
       u_D_obs:        u('u_D_obs'),
       u_D_btwn:       u('u_D_btwn'),
       u_chi:          u('u_chi'),
@@ -1459,6 +1504,7 @@ export class Renderer {
       u_bgBright:     u('u_bgBright'),
       u_bgTile:       u('u_bgTile'),
       u_bgInvert:     u('u_bgInvert'),
+      u_fieldColor:   u('u_fieldColor'),
       u_saddlePhi:    u('u_saddlePhi'),
       u_nSaddle:      u('u_nSaddle'),
       u_fermatBeta:   u('u_fermatBeta'),
