@@ -852,6 +852,7 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
 /* Full-width items inside hybrid body */
 .sl-hybrid-body .sl-select,
 .sl-hybrid-body .sl-shape-toggle,
+.sl-hybrid-body .sl-param-check,
 .sl-hybrid-body .sl-checkbox-row { grid-column: 1 / -1; }
 .sl-hybrid-body .sl-param-row { display: contents; }
 .sl-hybrid-body input[type="range"] { width: 100%; min-width: 0; }
@@ -1149,6 +1150,21 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
 }
 .sl-shape-toggle input { accent-color: var(--accent); flex-shrink: 0; }
 .sl-shape-toggle:hover { color: var(--fg-soft); }
+
+/* Boolean parameter row (e.g. a pasted image's "Apply brightness stretch") —
+   same full-width shape as the "Show shape" toggle, but it writes to params. */
+.sl-param-check {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  margin-top: 3px;
+}
+.sl-param-check input { accent-color: var(--accent); flex-shrink: 0; }
+.sl-param-check:hover { color: var(--fg-soft); }
 
 /* Object-controls footer: Show-shape toggle (left) + Attach button (right-justified). */
 .sl-obj-footer {

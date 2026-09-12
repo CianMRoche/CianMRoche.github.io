@@ -1109,7 +1109,9 @@ function defaultParams(model) {
   if (model === 'exponential') return { sigma: 0.05, q: 0.40, phi: 0, amplitude: 2.20, color: '#ffffff' };
   if (model === 'point')       return { sigma: 0.08, q: 1.0, phi: 0, amplitude: 1.0, color: '#ffffff' };
   if (model === 'pointsource') return { sigma: 0.05, amplitude: 1.0, color: '#ffffff' };
-  if (model === 'pastedimage') return { sigma: 1.0, amplitude: 1.0, angSize: 0, edgeBlend: 0 };
+  // stretch: false keeps a photograph's supplied tones (the brightness stretch is
+  // meant for the analytic sources' faint light and washes a picture out).
+  if (model === 'pastedimage') return { sigma: 1.0, amplitude: 1.0, contrast: 1.0, saturation: 1.0, angSize: 0, edgeBlend: 0, stretch: false };
   return {};
 }
 
@@ -3871,14 +3873,22 @@ function renderScenePanel() {
           redraw();
         });
       });
-      document.getElementById('sl-obj-panel').querySelectorAll('[data-hybrid-section="lens"] input[type="checkbox"]').forEach(inp => {
+      // :not([data-param-bool]) — the only other checkbox in a section is the
+      // "Show shape" toggle; a param checkbox writes to params instead.
+      document.getElementById('sl-obj-panel').querySelectorAll('[data-hybrid-section="lens"] input[type="checkbox"]:not([data-param-bool])').forEach(inp => {
         inp.addEventListener('change', () => { lensObj.showShape = inp.checked; redraw(); });
       });
-      document.getElementById('sl-obj-panel').querySelectorAll('[data-hybrid-section="src"] input[type="checkbox"]').forEach(inp => {
+      document.getElementById('sl-obj-panel').querySelectorAll('[data-hybrid-section="src"] input[type="checkbox"]:not([data-param-bool])').forEach(inp => {
         inp.addEventListener('change', () => { srcObj.showShape = inp.checked; redraw(); });
+      });
+      document.getElementById('sl-obj-panel').querySelectorAll('[data-hybrid-section="src"] input[type="checkbox"][data-param-bool]').forEach(inp => {
+        inp.addEventListener('change', () => { srcObj.params[inp.dataset.paramBool] = inp.checked; redraw(); });
       });
     } else {
       document.getElementById('sl-show-shape')?.addEventListener('change', e => { obj.showShape = e.target.checked; redraw(); });
+      document.getElementById('sl-obj-panel').querySelectorAll('input[type="checkbox"][data-param-bool]').forEach(inp => {
+        inp.addEventListener('change', () => { obj.params[inp.dataset.paramBool] = inp.checked; redraw(); });
+      });
       document.getElementById('sl-attach-partner')?.addEventListener('click', () => attachPartner(obj, pl));
       document.getElementById('sl-model-select')?.addEventListener('change', e => {
         obj.model = e.target.value; obj.params = defaultParams(obj.model);
@@ -4865,9 +4875,13 @@ function sourceParamRows(obj, showAttach) {
   if (obj.model === 'pastedimage') {
     const hint = obj.pasteCanvas ? '' :
       '<p style="font-size:11px;color:var(--muted);font-style:italic;margin-top:6px;grid-column:1/-1">Use the image button in the plane header to load an image, or Ctrl+V with this object selected</p>';
+    const stretchRow = `<label class="sl-param-check" title="Run the picture through the View tab's brightness stretch along with the analytic sources. Off (the default) shows its supplied tones, since a photograph is already display-encoded and the stretch washes it out."><input type="checkbox" data-param-bool="stretch" ${p.stretch === true ? 'checked' : ''}> Apply brightness stretch</label>`;
     return sliderRowLog('Scale', 'sigma', 0.05, 4.0, p.sigma ?? 1.0)
          + sliderRow('Brightness', 'amplitude', 0.1, 5.0, 0.1, p.amplitude ?? 1.0)
+         + sliderRow('Contrast', 'contrast', 0.3, 2.5, 0.05, p.contrast ?? 1.0)
+         + sliderRow('Saturation', 'saturation', 0, 2, 0.05, p.saturation ?? 1.0)
          + sliderRow('Edge blend', 'edgeBlend', 0, 1, 0.02, p.edgeBlend ?? 0)
+         + stretchRow
          + objFooter(obj, showAttach)
          + hint;
   }

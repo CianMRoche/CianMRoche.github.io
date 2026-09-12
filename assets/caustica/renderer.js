@@ -99,6 +99,15 @@ uniform int   u_pastedSlot  [${MAX_OBJECTS}];
 // Extra edge feather per pasted image, in source-UV units ("Edge blend"): 0 leaves
 // the rectangle's own antialiased border, larger values dissolve it into the field.
 uniform float u_pastedFeather[${MAX_OBJECTS}];
+// 1 = run this pasted image through the surface-brightness stretch along with the
+// analytic sources; 0 (the default) = composite its supplied tones as-is, the way
+// the backdrop is treated. A photograph's values are already display-encoded, so
+// the stretch (sqrt by default) lifts its midtones and washes it out.
+uniform int   u_pastedStretch[${MAX_OBJECTS}];
+// Per-pasted-image tone: x = contrast about mid grey, y = saturation about luma.
+// Both 1 = the picture as supplied. Applied to the texel before Brightness scales
+// it, so they shape the picture itself rather than the light it contributes.
+uniform vec2  u_pastedTone   [${MAX_OBJECTS}];
 // Four independent texture samplers + their image sizes in arcsec.
 // Sampler arrays cannot be dynamically indexed in GLSL ES; use if-else.
 uniform sampler2D u_pastedTex0;
@@ -469,7 +478,16 @@ vec4 samplePasted(int idx, vec2 beta) {
   // the rectangle, so this doubles as the hard cut the early return used to do.
   vec2 f = smoothstep(vec2(0.0), max(w, vec2(1e-6)), min(uv, 1.0 - uv));
 
-  return vec4(u_srcParams[idx].w * col.rgb, f.x * f.y);
+  // Tone controls. Saturation pulls the colour toward its Rec. 709 luma (0 = grey,
+  // >1 = more vivid); contrast expands it about mid grey, which is what deepens the
+  // shadows a photograph loses when it is composited against an empty field. Both
+  // run before Brightness so raising contrast cannot be undone by the amplitude.
+  vec3 c = col.rgb;
+  float luma = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  c = mix(vec3(luma), c, u_pastedTone[idx].y);
+  c = clamp((c - 0.5) * u_pastedTone[idx].x + 0.5, 0.0, 1.0);
+
+  return vec4(u_srcParams[idx].w * c, f.x * f.y);
 }
 
 // ── Background image ──────────────────────────────────────────────────────────
@@ -781,14 +799,16 @@ void main() {
     return;
   }
 
-  vec3  colorOut    = vec3(0.0);
+  vec3  colorOut    = vec3(0.0);  // light that goes through the brightness stretch
+  vec3  asIs        = vec3(0.0);  // pasted images opted out of it, added afterwards
   float pastedCover = 0.0;   // geometric footprint of the pasted images, see below
   for (int si = 0; si < MAX_OBJECTS; si++) {
     if (si >= u_numSources) break;
     vec2 beta = traceToPlane(theta, u_srcPlaneIdx[si]);
     if (u_srcModel[si] == 3) {
       vec4 p = samplePasted(si, beta);
-      colorOut   += p.rgb * p.a;
+      if (u_pastedStretch[si] == 1) colorOut += p.rgb * p.a;
+      else                          asIs     += p.rgb * p.a;
       pastedCover = max(pastedCover, p.a);
     } else {
       colorOut += u_srcColor[si] * analyticalBrightness(si, beta);
@@ -803,6 +823,9 @@ void main() {
     vizWarp(colorOut.g, u_vizMin, u_vizMax, u_vizScale, u_vizScaleParam),
     vizWarp(colorOut.b, u_vizMin, u_vizMax, u_vizScale, u_vizScaleParam)
   );
+  // Opted-out pasted images join after the warp, so their supplied tones survive
+  // intact while analytic light still adds on top of them.
+  colorOut = clamp(colorOut + asIs, 0.0, 1.0);
   // Composite the backdrop UNDER the lensed light, using the source brightness as
   // its own coverage: a fully lit pixel hides the backdrop completely, an empty
   // one shows it in full. A plain sum would instead add the backdrop's value to
@@ -1288,6 +1311,8 @@ export class Renderer {
     const srcColor    = new Float32Array(MAX_OBJECTS * 3).fill(1); // default white
     const pastedSlot  = new Int32Array(MAX_OBJECTS).fill(-1);
     const pastedFeather = new Float32Array(MAX_OBJECTS);   // 0 for every other model
+    const pastedStretch = new Int32Array(MAX_OBJECTS);     // 0 = tones as supplied
+    const pastedTone    = new Float32Array(MAX_OBJECTS * 2).fill(1); // contrast, saturation
     // Texture slots: collect up to MAX_PASTED pasted-image sources.
     const slotEntries = [null, null, null, null]; // { tex, w, h } per slot
     let pastedCount = 0;
@@ -1333,6 +1358,9 @@ export class Renderer {
           // 0.4 at the top of the range reaches most of the way to the centre from
           // each side, enough to read as a full vignette without erasing the image.
           pastedFeather[si] = 0.4 * Math.min(1, Math.max(0, obj.params.edgeBlend ?? 0));
+          pastedStretch[si] = obj.params.stretch === true ? 1 : 0;
+          pastedTone[si * 2]     = obj.params.contrast   ?? 1.0;
+          pastedTone[si * 2 + 1] = obj.params.saturation ?? 1.0;
         }
         si++;
       }
@@ -1345,6 +1373,8 @@ export class Renderer {
     gl.uniform3fv(_locs.u_srcColor,     srcColor);
     gl.uniform1iv(_locs.u_pastedSlot,   pastedSlot);
     gl.uniform1fv(_locs.u_pastedFeather, pastedFeather);
+    gl.uniform1iv(_locs.u_pastedStretch, pastedStretch);
+    gl.uniform2fv(_locs.u_pastedTone,    pastedTone);
 
     // Bind texture slots 0-3 and set size uniforms.
     const szLocs = [_locs.u_pastedSz0, _locs.u_pastedSz1, _locs.u_pastedSz2, _locs.u_pastedSz3];
@@ -1472,6 +1502,8 @@ export class Renderer {
       u_vizSrcIdx:    u('u_vizSrcIdx'),
       u_isDark:       u('u_isDark'),
       u_pastedFeather: u('u_pastedFeather'),
+      u_pastedStretch: u('u_pastedStretch'),
+      u_pastedTone:    u('u_pastedTone'),
       u_D_obs:        u('u_D_obs'),
       u_D_btwn:       u('u_D_btwn'),
       u_chi:          u('u_chi'),
