@@ -1536,6 +1536,11 @@ function buildDOM() {
           <select class="sl-select sl-topbar-preset" id="sl-preset-select" aria-label="Load a preset scene">
             <option value="" selected>Presets…</option>
             ${PRESETS.map(p => `<option value="${p.file}">${p.name}</option>`).join('')}
+            <!-- Parked selection while the menu is open, so re-picking the preset
+                 that is already loaded still fires a change event and reloads it.
+                 Hidden from the list; its label is set to whatever it stands in
+                 for, so the closed box never flickers to blank. -->
+            <option value="__reopen__" hidden></option>
           </select>
           <button class="sl-demo-btn sl-topbar-overflow" id="sl-save-config" title="Download the current scene as a YAML file">↓ Save</button>
           <button class="sl-demo-btn sl-topbar-overflow" id="sl-load-config" title="Load a scene from a YAML file">↑ Load</button>
@@ -1571,6 +1576,9 @@ function buildDOM() {
             <canvas id="sl-gl-canvas"></canvas>
             <canvas class="sl-overlay" id="sl-overlay"></canvas>
             <div class="sl-rec-dot" id="sl-rec-dot" style="display:none"></div>
+            <!-- Encoding notice: shown after recording stops, while the GIF or
+                 WebM is still being assembled into a downloadable file. -->
+            <div class="sl-rec-status" id="sl-rec-status" role="status" aria-live="polite" style="display:none"></div>
             <button class="sl-perf-warn" id="sl-perf-warn" style="display:none"
                     title="This scene is slow to redraw. Click for options." aria-label="Performance warning">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -1796,7 +1804,31 @@ function attachHandlers() {
     reader.readAsText(file);
     e.target.value = ''; // reset so same file can be loaded again
   });
-  document.getElementById('sl-preset-select').addEventListener('change', e => {
+  // Preset dropdown. A native select fires no change event when the user picks the
+  // option that is already selected, so choosing the loaded preset again would do
+  // nothing. Park the selection on a hidden stand-in while the menu is open: every
+  // real option then differs from it and reloads, which is what makes re-picking a
+  // preset reset the scene. Dismissing the menu puts the original choice back.
+  const _presetSel  = document.getElementById('sl-preset-select');
+  const _presetPark = _presetSel.querySelector('option[value="__reopen__"]');
+  let   _presetHeld = null;   // value parked away, or null when nothing is parked
+  const _unparkPreset = () => {
+    if (_presetHeld === null) return;
+    _presetSel.value = _presetHeld;
+    _presetHeld = null;
+  };
+  // pointerdown (not click) fires before the native menu opens, and covers touch.
+  _presetSel.addEventListener('pointerdown', () => {
+    const cur = _presetSel.selectedOptions[0];
+    if (!cur || cur.value === '__reopen__') return;
+    _presetHeld        = _presetSel.value;
+    _presetPark.textContent = cur.textContent;
+    _presetSel.value   = '__reopen__';
+  });
+  _presetSel.addEventListener('keydown', e => { if (e.key === 'Escape') _unparkPreset(); });
+  _presetSel.addEventListener('focusout', _unparkPreset);
+  _presetSel.addEventListener('change', e => {
+    _presetHeld = null;   // a real choice was made; nothing left to restore
     // Drop focus so subsequent keystrokes hit the app shortcuts, not the
     // select's native type-ahead (which would silently load another preset).
     e.target.blur();
@@ -4601,7 +4633,9 @@ function renderExportPanel() {
       <div class="sl-capture-row" style="margin-top:8px">
         <button class="sl-capture-btn" id="sl-snapshot-btn"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-1px;margin-right:4px"><path d="M8 2v8M4 7l4 4 4-4"/><line x1="2" y1="14" x2="14" y2="14"/></svg>Save PNG</button>
         <button class="sl-capture-btn ${recState.active ? 'recording' : ''}" id="sl-rec-btn"
-                title="Shortcut: R">${recState.active ? '■ Stop [R]' : '● Record [R]'}</button>
+                ${!recState.active && recState.encoding ? 'disabled' : ''}
+                title="${recState.encoding ? 'Preparing the file for download' : 'Shortcut: R'}">${
+                  recState.active ? '■ Stop [R]' : recState.encoding ? '⏳ Encoding…' : '● Record [R]'}</button>
       </div>
       <div class="sl-capture-row" style="margin-top:6px">
         <button class="sl-capture-btn" id="sl-svg-btn" ${state.lineArt ? '' : 'disabled'}
@@ -6387,7 +6421,7 @@ function removeFromProgram(objId) {
 // For GIF frames are timestamped in metadata so slow computation doesn't affect
 // playback speed; for WebM critical curves are suppressed to maintain real-time pacing.
 function startProgrammaticRecording() {
-  if (recState.active || recState.progObjects.length === 0) return;
+  if (recState.active || recState.encoding || recState.progObjects.length === 0) return;
 
   const fps          = recState.fps;
   const totalFrames  = Math.max(2, Math.round(recState.progDuration * fps));
@@ -6471,13 +6505,16 @@ function startProgrammaticRecording() {
     } else {
       // All frames done: finalize.
       recState.active = false;
-      updateRecordingIndicator();
       clearTimeout(recState.autoStopTimer);
       recState.autoStopTimer = null;
-      if (recState.useGif) {
-        recState.gifObj?.render();
+      if (recState.useGif && recState.gifObj) {
+        beginExport('Encoding GIF');
+        recState.gifObj.render();
+      } else if (!recState.useGif && recState.recorder) {
+        beginExport('Saving WebM');
+        recState.recorder.stop();
       } else {
-        recState.recorder?.stop();
+        updateRecordingIndicator();
       }
     }
   };
@@ -6487,7 +6524,8 @@ function startProgrammaticRecording() {
       const gif = new GIF({ workers: 2, quality: 10, workerScript: 'gif.worker.js',
                             width: lc.width, height: lc.height });
       recState.gifObj = gif;
-      gif.on('finished', blob => downloadBlob(blob, 'caustica-prog.gif'));
+      gif.on('progress', p => setExportProgress(p));
+      gif.on('finished', blob => { downloadBlob(blob, 'caustica-prog.gif'); endExport(); });
       doFrame();
     };
     if (!window.GIF) {
@@ -6503,6 +6541,7 @@ function startProgrammaticRecording() {
     recorder.onstop = () => {
       downloadBlob(new Blob(recState.chunks, { type: 'video/webm' }), 'caustica-prog.webm');
       recState.chunks = [];
+      endExport();
     };
     recorder.start(200);
     _compositeToLive();
@@ -6520,6 +6559,10 @@ const recState = {
   recorder:  null,
   chunks:    [],
   gifObj:    null,
+  // Post-recording encode: { label, pct } while a GIF/WebM is being assembled for
+  // download, null otherwise. GIF encoding can take many seconds in its workers,
+  // long after the recording indicator has gone, so it needs to be visible.
+  encoding:  null,
   liveCanvas: null,
   rafId:     null,
   frameInterval: null,
@@ -6540,13 +6583,46 @@ function updateRecordingIndicator() {
   if (dot) dot.style.display = recState.active ? '' : 'none';
   const btn = document.getElementById('sl-rec-btn');
   if (btn) {
-    btn.textContent = recState.active ? '■ Stop [R]' : '● Record [R]';
+    btn.textContent = recState.active ? '■ Stop [R]'
+                    : recState.encoding ? '⏳ Encoding…'
+                    : '● Record [R]';
     btn.classList.toggle('recording', recState.active);
+    btn.disabled = !recState.active && !!recState.encoding;
   }
+  _updateExportStatus();
+}
+
+// The encoding notice over the image. Text only, so progress updates during a GIF
+// encode cost nothing: the pill is part of the static image-wrap DOM and survives
+// a sidebar re-render.
+function _updateExportStatus() {
+  const el = document.getElementById('sl-rec-status');
+  if (!el) return;
+  const enc = recState.encoding;
+  el.style.display = enc ? '' : 'none';
+  if (!enc) return;
+  el.textContent = enc.pct >= 0 ? `${enc.label} ${Math.round(enc.pct * 100)}%…` : `${enc.label}…`;
+}
+
+// Recording has stopped but the file is not ready yet.
+function beginExport(label) {
+  recState.encoding = { label, pct: -1 };
+  updateRecordingIndicator();
+}
+function setExportProgress(pct) {
+  if (!recState.encoding) return;
+  recState.encoding.pct = pct;
+  _updateExportStatus();
+}
+// The download has been handed to the browser.
+function endExport() {
+  if (!recState.encoding) return;
+  recState.encoding = null;
+  updateRecordingIndicator();
 }
 
 function startRecording() {
-  if (recState.active) return;
+  if (recState.active || recState.encoding) return;   // still writing the last file
   const fps = recState.fps;
 
   // Create the live composite canvas once.
@@ -6577,12 +6653,18 @@ function stopRecording() {
   recState.rafId = null;
   recState.frameInterval = null;
   recState.autoStopTimer = null;
-  updateRecordingIndicator();
 
-  if (recState.useGif) {
-    recState.gifObj?.render();
+  // Announce the encode only when there is really an encoder to wait on: if gif.js
+  // failed to load there is no 'finished' event coming, and the notice would never
+  // clear. beginExport() refreshes the indicator; otherwise do it here.
+  if (recState.useGif && recState.gifObj) {
+    beginExport('Encoding GIF');
+    recState.gifObj.render();
+  } else if (!recState.useGif && recState.recorder) {
+    beginExport('Saving WebM');
+    recState.recorder.stop();
   } else {
-    recState.recorder?.stop();
+    updateRecordingIndicator();
   }
 }
 
@@ -6627,6 +6709,7 @@ function _startWebMRecording(fps, liveCanvas) {
     const blob = new Blob(recState.chunks, { type: 'video/webm' });
     downloadBlob(blob, 'caustica.webm');
     recState.chunks = [];
+    endExport();
   };
   recorder.start(200); // collect data every 200ms
   // First composite immediately so the stream isn't blank.
@@ -6664,7 +6747,8 @@ function _initGifEncoder(fps, liveCanvas) {
   });
   recState.gifObj = gif;
 
-  gif.on('finished', blob => downloadBlob(blob, 'caustica.gif'));
+  gif.on('progress', p => setExportProgress(p));
+  gif.on('finished', blob => { downloadBlob(blob, 'caustica.gif'); endExport(); });
 
   const delay = Math.round(1000 / fps);
   recState.frameInterval = setInterval(() => {
