@@ -1,0 +1,97 @@
+fov: 9.259638327704623
+zMax: 3
+vizMode: 0
+vizScale0: 1 0.5 0 1 0
+vizScale1: 0 0.5 0 2 0
+vizScale2: 0 0.5 0 0.5 0
+vizScale3: 4 0.5 1 30 0
+vizScale5: 0 0.5 0 2 0
+showCritCurves: false
+showCaustics: false
+showMarkers: false
+showLegend: true
+showColorbar: true
+showScaleBar: true
+showRuler: false
+critGridN: 512
+psGridN: 300
+renderScale: auto
+critZs: null
+contourSpacing: 1
+contourScale: linear
+H0: 70
+Omega_m: 0.3
+showTimeDelays: false
+lineArt: false
+lineArtPalette: default
+lineArtColors: #0d1117 #93c5fd #93c5fd #93c5fd #fbbf24 #93c5fd #7bbfcc #fbbf24 #b09ac8
+lineArtFill: true
+lineArtFillAlpha: 0.9
+lineArtSmooth: true
+annotAuto: true
+annotColor: #ffffff
+bgFit: cover
+bgZoom: 1
+bgOffX: 0
+bgOffY: 0
+bgBright: 1
+bgColor: #000000
+bgSkyLock: false
+bgHidden: false
+instrument: off
+instrPixel: 0.05
+instrPsfFwhm: 0.1
+instrPsf: true
+instrHidden: false
+fermatUseSourcePos: false
+fermatBetaX: -0.153993
+fermatBetaY: 0.225173
+fermatSrcPlaneZ: 2.6700
+planes:
+  - z: 0.500
+    objects:
+      - type: source
+        model: pastedimage
+        cx: -0.00402
+        cy: -0.00085
+        hidden: false
+        showShape: false
+        image: 'demo_elliptical.png'
+        params:
+          sigma: 2.262863
+          amplitude: 1
+          contrast: 1
+          saturation: 1
+          angSize: 9.259638
+          edgeBlend: 0
+          stretch: false
+  - z: 0.500
+    objects:
+      - type: lens
+        model: epl
+        cx: -0.1
+        cy: 0.21
+        hidden: false
+        showShape: false
+        params:
+          b: 1.887991
+          q: 0.75
+          phi: 1.05
+          gamma: 2.15
+  - z: 2.670
+    objects:
+      - type: source
+        model: pastedimage
+        cx: -0.23
+        cy: 0.23
+        hidden: false
+        showShape: false
+        image: 'demo_spiral.jpg'
+        params:
+          sigma: 0.126597
+          amplitude: 0.5
+          contrast: 2.4
+          saturation: 1.45
+          angSize: 9.259638
+          edgeBlend: 1
+          stretch: false

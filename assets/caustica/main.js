@@ -802,6 +802,9 @@ function configToYaml() {
       y += `        hidden: ${obj.hidden}\n`;
       y += `        showShape: ${obj.showShape === true}\n`;
       if (obj.hybridId) y += `        hybridId: '${obj.hybridId}'\n`;
+      // Pasted pixels are never written into a config, but a picture that came
+      // from the site's own preset directory can be named so it loads again.
+      if (obj.imageSrc) y += `        image: '${obj.imageSrc}'\n`;
       y += `        params:\n`;
       for (const [k, v] of Object.entries(obj.params)) {
         if (typeof v === 'string')       y += `          ${k}: '${v.replace(/'/g, "''")}'\n`;
@@ -888,6 +891,7 @@ const PRESETS = [
   { file: 'butterfly_caustic.yaml', name: 'Butterfly Caustic' },
   { file: 'group.yaml',         name: 'Galaxy group' },
   { file: 'image_recreation.yaml', name: 'Image recreation' },
+  { file: 'realistic.yaml',     name: 'Realistic' },
   { file: 'line_art.yaml',      name: 'Line art' },
 ];
 
@@ -965,6 +969,9 @@ function loadConfigFromYaml(yaml) {
           hidden:   o.hidden === true,
           showShape: o.showShape === true,
           ...(typeof o.hybridId === 'string' && /^[a-z0-9-]+$/.test(o.hybridId) ? { hybridId: o.hybridId } : {}),
+          // Same one-directory allowlist as bgImage: a config can only name an
+          // image the site itself ships, never an arbitrary address.
+          ...(model === 'pastedimage' && isPresetBgName(o.image) ? { imageSrc: o.image } : {}),
           params: Object.keys(params).length ? params : defaultParams(model),
         };
       })
@@ -975,6 +982,13 @@ function loadConfigFromYaml(yaml) {
     for (const _pl of state.planes)
       for (const _o of _pl.objects)
         if (_o.model === 'pastedimage' && !(_o.params.angSize > 0)) _o.params.angSize = state.fov;
+    // Fetch the textures for any pasted image the config named (the Realistic
+    // preset does). One generation per config load, so images still in flight when
+    // the next scene arrives are dropped rather than landing on the wrong objects.
+    const _imgGen = ++_pastedLoadGen;
+    for (const _pl of state.planes)
+      for (const _o of _pl.objects)
+        if (_o.imageSrc) _loadPastedFromSite(_o, _imgGen);
     // Prefer a pure (non-hybrid) source as the initial selection. A hybrid lens is a
     // poor default focus, and selecting it would hijack the Fermat β_s through its
     // partner source (see _doRedraw). Fall back to the first object when none exists.
@@ -1362,6 +1376,7 @@ function copySelectedObject() {
       type: o.type, model: o.model, cx: o.cx, cy: o.cy,
       params: { ...o.params }, showShape: o.showShape, hidden: o.hidden,
       pasteCanvas: o.pasteCanvas || null,   // pastedimage: preserve the image
+      imageSrc:    o.imageSrc || null,      // ...and where it came from, if named
     })),
   };
   return true;
@@ -1387,6 +1402,7 @@ function pasteCopiedObject() {
     // A pasted image is stored per-object id, so register a texture for the copy.
     if (spec.model === 'pastedimage' && spec.pasteCanvas) {
       o.pasteCanvas = spec.pasteCanvas;
+      if (spec.imageSrc) o.imageSrc = spec.imageSrc;
       renderer?.setPastedTexture(o.id, spec.pasteCanvas);
     }
     if (!firstId) firstId = o.id;
@@ -3270,6 +3286,7 @@ function _applyImageFile(file, obj) {
     cvs.getContext('2d').drawImage(img, 0, 0);
     URL.revokeObjectURL(url);
     record();  // async load lands outside any pointer gesture, so snapshot here
+    delete obj.imageSrc;   // these pixels are the user's, not the named site image
     // Freeze the source's angular size at the current FOV so later zooming does not
     // rescale it (unlike analytic sources, whose size is an absolute arcsec param).
     obj.params.angSize = state.fov;
@@ -3340,6 +3357,31 @@ function _applyBackgroundFile(file) {
   };
   img.onerror = () => { URL.revokeObjectURL(url); showToast('Could not read that image.'); };
   img.src = url;
+}
+
+// Textures for pasted-image sources named by a config (`image:` on the object).
+// Pixels are never stored in a config, so this is how a preset arrives with its
+// pictures in place; the name resolves against the same fixed preset directory as
+// bgImage, which keeps the fetch same-origin (a cross-origin image taints the
+// canvas and WebGL then refuses to upload it).
+let _pastedLoadGen = 0;
+
+function _loadPastedFromSite(obj, gen) {
+  const img = new Image();
+  img.onload = () => {
+    if (gen !== _pastedLoadGen) return;   // a newer config arrived meanwhile
+    const cvs = document.createElement('canvas');
+    cvs.width  = img.naturalWidth  || img.width;
+    cvs.height = img.naturalHeight || img.height;
+    cvs.getContext('2d').drawImage(img, 0, 0);
+    obj.pasteCanvas = cvs;
+    renderer?.setPastedTexture(obj.id, cvs);
+    renderPlaneCard(); renderSidebar(); redraw();
+  };
+  img.onerror = () => {
+    if (gen === _pastedLoadGen) showToast(`Could not load image “${obj.imageSrc}”.`);
+  };
+  img.src = BG_IMAGE_BASE + obj.imageSrc;
 }
 
 // Load a background image shipped with the site, named by a config file.
