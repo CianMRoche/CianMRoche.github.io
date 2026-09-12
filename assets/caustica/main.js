@@ -1402,6 +1402,18 @@ function selectedObj() {
   return pl ? (pl.objects.find(o => o.id === state.selectedObjId) ?? null) : null;
 }
 
+// The pasted-image object the current selection stands for. A hybrid is selected
+// through its lens half, so an image paste aimed at a hybrid's source has to look
+// across the pair rather than only at the selected object.
+function selectedPastedImageObj() {
+  const pl = selectedPlane(); if (!pl) return null;
+  const sel = pl.objects.find(o => o.id === state.selectedObjId) ?? null;
+  if (!sel) return null;
+  if (sel.model === 'pastedimage') return sel;
+  const partner = hybridPartner(pl, sel);
+  return partner?.model === 'pastedimage' ? partner : null;
+}
+
 // Pasted images are stored per-object on obj.pasteCanvas (HTMLCanvasElement|null).
 let activeTab = 'scene'; // 'scene' | 'view' | 'data' | 'export'
 
@@ -1858,9 +1870,14 @@ function attachHandlers() {
   document.getElementById('sl-plane-next').addEventListener('click', () => selectPlaneOffset(1));
   document.getElementById('sl-plane-file').addEventListener('change', e => {
     const pl = selectedPlane();
-    const target = pl?.objects.find(o => o.model === 'pastedimage');
+    const target = selectedPastedImageObj() ?? pl?.objects.find(o => o.model === 'pastedimage');
     const file = e.target.files?.[0];
-    if (file && target) { state.selectedObjId = target.id; _applyImageFile(file, target); }
+    if (file && target) {
+      // Leave a hybrid selected through its lens half; only re-select for a
+      // standalone pasted-image object elsewhere on the plane.
+      if (!target.hybridId) state.selectedObjId = target.id;
+      _applyImageFile(file, target);
+    }
     e.target.value = '';
   });
   attachPlaneCardHandlers(document.getElementById('sl-plane-canvas'));
@@ -2004,8 +2021,8 @@ function attachHandlers() {
   //  1. A pastedimage object is selected AND the clipboard holds an image → load it.
   //  2. Otherwise, paste a copy of the internally-copied object (Cmd/Ctrl+C).
   document.addEventListener('paste', e => {
-    const obj = selectedObj();
-    if (obj && obj.model === 'pastedimage') {
+    const obj = selectedPastedImageObj();
+    if (obj) {
       const items = e.clipboardData?.items;
       if (items) {
         for (const item of items) {
@@ -3386,11 +3403,11 @@ function _borderAverageHex(cvs) {
   return `#${hx(r)}${hx(g)}${hx(b)}`;
 }
 
-// The pasted image the "Match image" button should sample: the selected one if a
-// pasted-image object is selected, else the first one anywhere in the scene.
+// The pasted image the "Match image" button should sample: the selected one (or
+// the pasted-image half of a selected hybrid), else the first one in the scene.
 function _matchablePastedCanvas() {
-  const sel = selectedObj();
-  if (sel?.model === 'pastedimage' && sel.pasteCanvas) return sel.pasteCanvas;
+  const sel = selectedPastedImageObj();
+  if (sel?.pasteCanvas) return sel.pasteCanvas;
   for (const pl of state.planes)
     for (const o of pl.objects)
       if (o.model === 'pastedimage' && o.pasteCanvas) return o.pasteCanvas;
