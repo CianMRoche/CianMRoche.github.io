@@ -1,15 +1,15 @@
-fov: 6
+fov: 3.5339238575702185
 zMax: 3
-vizMode: 0
+vizMode: 7
 vizScale0: 1 0.5 0 1 0
-vizScale1: 0 0.5 0 2 0
-vizScale2: 0 0.5 0 0.5 0
-vizScale3: 4 0.5 1 30 0
-vizScale5: 0 0.5 0 2 0
-showCritCurves: false
+vizScale1: 4 0.5 0.3 10 0
+vizScale2: 4 0.5 0.3 1 0
+vizScale3: 4 0.5 3 100 4
+vizScale5: 0 8 0 2 0
+showCritCurves: true
 showCaustics: true
 curveTypes: true
-curveTypeShow: tangential
+curveTypeShow: radial
 showStretch: false
 showMarkers: true
 showLegend: true
@@ -18,8 +18,8 @@ showColorbar: true
 showScaleBar: true
 showRuler: false
 critGridN: 512
-psGridN: 150
-renderScale: 1x
+psGridN: 300
+renderScale: auto
 critZs: null
 contourSpacing: 1
 contourScale: linear
@@ -48,45 +48,32 @@ instrPsfFwhm: 0.1
 instrPsf: false
 instrHidden: false
 fermatUseSourcePos: true
-fermatBetaX: -0.00502
-fermatBetaY: 0.14454
-fermatSrcPlaneZ: 2.0000
+fermatBetaX: 0.544387
+fermatBetaY: -0.248311
+fermatSrcPlaneZ: 1.5000
 planes:
   - z: 0.500
     objects:
       - type: lens
         model: nie
-        cx: 0
-        cy: 0
-        hidden: false
-        showShape: true
-        params:
-          b: 2.93765
-          q: 0.35
-          phi: 0.029
-          rc: 0.026265
-  - z: 0.500
-    objects:
-      - type: lens
-        model: nie
-        cx: 0.00129
-        cy: 0.00213
-        hidden: false
-        showShape: true
-        params:
-          b: 2.910717
-          q: 0.65
-          phi: 1.6
-          rc: 0.017206
-  - z: 2.000
-    objects:
-      - type: source
-        model: pointsource
-        cx: -0.00502
-        cy: 0.14454
+        cx: -0.09566
+        cy: -0.07676
         hidden: false
         showShape: false
         params:
-          sigma: 0.063246
+          b: 2.679168
+          q: 0.7
+          phi: 0.4
+          rc: 0.076568
+  - z: 1.500
+    objects:
+      - type: source
+        model: pointsource
+        cx: 0.54439
+        cy: -0.24831
+        hidden: false
+        showShape: false
+        params:
+          sigma: 0.0342
           amplitude: 1
-          color: '#e8fff1'
+          color: '#ffffff'

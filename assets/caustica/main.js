@@ -59,6 +59,7 @@ let _progExpanded     = false;
 let _cmapExpanded     = false;
 let _bgExpanded       = false;
 let _instrExpanded    = false;
+let _curvesExpanded   = false;
 
 // Invert a 6-digit hex colour (#rrggbb → complement).
 function invertHexColor(hex) {
@@ -72,6 +73,42 @@ function invertHexColor(hex) {
 // Critical curves: hot pink; Caustics: lime green.
 const CRIT_COLOR = 'rgba(248, 113, 196, 0.95)';
 const CAUS_COLOR = 'rgba(134, 239, 172, 0.95)';
+// Parity-map region fills for image types I (minimum) / II (saddle) / III (maximum).
+// Dark: the hero blue #93c5fd mixed into the page background at 4 / 34 / 62%, so depth
+// rises I → II → III. Light: hue marks parity, lens blue #4a7fc8 for the positive types
+// (I at 6%, III at 48%) and source amber #f59e0b for the saddle (24%).
+// Must match renderer.js computeViz() (u_vizMode == 7).
+const PARITY_COLORS = {
+  dark:  { 1: '#121820', 2: '#3b4e65', 3: '#6081a6' },
+  light: { 1: '#f4f7fc', 2: '#fde8c4', 3: '#a8c2e5' },
+};
+// Parity view: a + or − over an image dot, in black or white, whichever contrasts
+// with the dot's own colour. r is the dot radius in CSS px.
+function drawParitySign(ctx, x, y, r, sign, dotColor) {
+  const arm = r * 0.55;
+  ctx.save();
+  ctx.strokeStyle = hexLuma(dotColor) > 0.5 ? '#000000' : '#ffffff';
+  ctx.lineWidth   = Math.max(1.5, r * 0.26);
+  ctx.lineCap     = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x - arm, y); ctx.lineTo(x + arm, y);
+  if (sign > 0) { ctx.moveTo(x, y - arm); ctx.lineTo(x, y + arm); }
+  ctx.stroke();
+  ctx.restore();
+}
+// Sign of det A at image-plane point (x, y), tracing to plane index tIdx of `sorted`:
+// +1 positive parity (Type I or III), −1 negative (Type II).
+function imageParity(x, y, sorted, dist, tIdx) {
+  const h = state.fov * 0.002;
+  const tr = (u, v) => traceRay(u, v, sorted, dist, tIdx);
+  const px = tr(x + h, y), mx = tr(x - h, y), py = tr(x, y + h), my = tr(x, y - h);
+  const det = (px[0] - mx[0]) * (py[1] - my[1]) - (py[0] - my[0]) * (px[1] - mx[1]);
+  return det < 0 ? -1 : 1;
+}
+function parityColor(type) {
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  return PARITY_COLORS[dark ? 'dark' : 'light'][type];
+}
 
 // ── Line-art mode palettes ────────────────────────────────────────────────────
 // Flat, minimal schemes for the vector "Line art" View mode. Each maps the scene's
@@ -336,11 +373,15 @@ function reportObjectCap() {
 const CONFIG_DEFAULTS = {
   fov:                4.0,
   zMax:               3.0,
-  vizMode:            0,      // 0=surface brightness, 1=κ, 2=γ, 3=|μ|, 4=signed μ, 5=|α|, 6=φ (Fermat)
+  vizMode:            0,      // 0=surface brightness, 1=κ, 2=γ, 3=|μ|, 4=signed μ, 5=|α|, 6=φ (Fermat), 7=parity
   showCritCurves:     false,
   showCaustics:       false,
+  curveTypes:         true,   // draw radial curves/caustics dotted and label both types in the legend
+  curveTypeShow:      'both', // with curveTypes on: 'both' | 'tangential' | 'radial'
+  showStretch:        false,  // stretch whiskers: direction and strength of image distortion
   showMarkers:        true,
   showLegend:         true,
+  legendBg:           false,  // translucent panel behind the legend so overlays under it stay legible
   showColorbar:       true,
   showRuler:          false,  // ruler tool + its measurement lines (off by default; View toggle or the L key enables it)
   critGridN:          512,
@@ -386,6 +427,7 @@ const CONFIG_DEFAULTS = {
 // Ranges for the background-image controls, shared by the View-tab sliders and
 // the config loader so a hand-edited file can't push them out of bounds.
 const BG_FITS       = ['cover', 'contain', 'stretch', 'tile'];
+const CURVE_TYPE_SHOWS = ['both', 'tangential', 'radial'];
 const BG_ZOOM_MIN   = 0.25, BG_ZOOM_MAX = 5;
 const BG_OFF_MAX    = 1;
 const BG_BRIGHT_MAX = 2;
@@ -748,7 +790,8 @@ function configToYaml() {
     y += `vizScale${m}: ${v.scale} ${v.param} ${v.min} ${v.max} ${v.palette ?? 0}\n`;
   }
   y += `showCritCurves: ${state.showCritCurves}\nshowCaustics: ${state.showCaustics}\n`;
-  y += `showMarkers: ${state.showMarkers}\nshowLegend: ${state.showLegend}\nshowColorbar: ${state.showColorbar}\n`;
+  y += `curveTypes: ${state.curveTypes}\ncurveTypeShow: ${state.curveTypeShow}\nshowStretch: ${state.showStretch}\n`;
+  y += `showMarkers: ${state.showMarkers}\nshowLegend: ${state.showLegend}\nlegendBg: ${state.legendBg}\nshowColorbar: ${state.showColorbar}\n`;
   y += `showScaleBar: ${state.showScaleBar}\n`;
   y += `showRuler: ${state.showRuler}\n`;
   y += `critGridN: ${state.critGridN}\npsGridN: ${state.psGridN}\n`;
@@ -883,10 +926,10 @@ const BG_IMAGE_BASE = PRESET_BASE;
 const BG_IMAGE_RE   = /^[A-Za-z0-9_.-]+\.(png|jpe?g|webp|gif|avif)$/i;
 const isPresetBgName = n => typeof n === 'string' && BG_IMAGE_RE.test(n) && !n.includes('..');
 const PRESETS = [
-  { file: 'two-plane.yaml',     name: 'Multiplane' },
-  { file: 'compound-lens.yaml', name: 'Uniform Source' },
-  { file: 'single-sie.yaml',    name: 'Point Source' },
-  { file: 'fermat-demo.yaml',   name: 'Fermat surface demo' },
+  { file: 'uniform_source.yaml', name: 'Uniform Source' },
+  { file: 'point_source.yaml',  name: 'Point Source' },
+  { file: 'fermat-demo.yaml',   name: 'Fermat surface' },
+  { file: 'parity.yaml',        name: 'Parity' },
   { file: 'zigzag.yaml',        name: 'ZigZag Lens' },
   { file: 'butterfly_caustic.yaml', name: 'Butterfly Caustic' },
   { file: 'group.yaml',         name: 'Galaxy group' },
@@ -1022,8 +1065,12 @@ function loadConfigFromYaml(yaml) {
     const _bool = (v, d) => (typeof v === 'boolean') ? v : d;
     state.showCritCurves = _bool(cfg.showCritCurves, CONFIG_DEFAULTS.showCritCurves);
     state.showCaustics   = _bool(cfg.showCaustics,   CONFIG_DEFAULTS.showCaustics);
+    state.curveTypes     = _bool(cfg.curveTypes,     CONFIG_DEFAULTS.curveTypes);
+    state.curveTypeShow  = CURVE_TYPE_SHOWS.includes(cfg.curveTypeShow) ? cfg.curveTypeShow : CONFIG_DEFAULTS.curveTypeShow;
+    state.showStretch    = _bool(cfg.showStretch,    CONFIG_DEFAULTS.showStretch);
     state.showMarkers    = _bool(cfg.showMarkers,    CONFIG_DEFAULTS.showMarkers);
     state.showLegend     = _bool(cfg.showLegend,     CONFIG_DEFAULTS.showLegend);
+    state.legendBg       = _bool(cfg.legendBg,       CONFIG_DEFAULTS.legendBg);
     state.showColorbar   = _bool(cfg.showColorbar,   CONFIG_DEFAULTS.showColorbar);
     state.showScaleBar    = _bool(cfg.showScaleBar,    CONFIG_DEFAULTS.showScaleBar);
     state.showRuler      = _bool(cfg.showRuler, CONFIG_DEFAULTS.showRuler);
@@ -1212,7 +1259,14 @@ function lensPlaneCount() {
     if (p.objects.some(o => !o.hidden && o.type === 'lens')) zs.add(Math.round(p.z / 1e-4));
   return zs.size;
 }
-function timeDelaysAvailable() { return lensPlaneCount() >= 1; }
+// Time delays annotate point-source images, so they need a visible point source
+// on a plane behind at least one visible lens.
+function timeDelaysAvailable() {
+  const lensZ = firstLensPlaneZ();
+  if (lensZ === null) return false;
+  return state.planes.some(p => p.z > lensZ &&
+    p.objects.some(o => !o.hidden && o.type === 'source' && o.model === 'pointsource'));
+}
 // Redshift of the first (lowest-z) plane holding a visible lens; null if none. state.planes
 // is kept sorted by z, so find() returns the nearest lens plane to the observer.
 function firstLensPlaneZ() {
@@ -1664,6 +1718,7 @@ function buildDOM() {
                 <option value="3">Magnification |μ|</option>
                 <option value="5">Deflection |α|</option>
                 <option value="6">Fermat potential φ</option>
+                <option value="7">Parity</option>
               </select>
             </div>
             <div class="sl-overlay-chips" id="sl-overlay-chips">
@@ -1952,8 +2007,8 @@ function attachHandlers() {
   // Zoom cluster + wheel + pinch.
   attachZoomHandlers(document.getElementById('sl-image-wrap'));
 
-  const _VIZ_LABELS ={ '0':'Lensed image','1':'Convergence κ','2':'Shear γ','3':'Magnification |μ|','5':'Deflection |α|','6':'Fermat potential φ' };
-  const _VIZ_LABELS_SHORT = { '0':'[I] Lensed image','1':'[K] Convergence κ','2':'[G] Shear γ','3':'[M] Magnification |μ|','5':'[A] Deflection |α|','6':'[T] Fermat potential φ' };
+  const _VIZ_LABELS ={ '0':'Lensed image','1':'Convergence κ','2':'Shear γ','3':'Magnification |μ|','5':'Deflection |α|','6':'Fermat potential φ','7':'Parity' };
+  const _VIZ_LABELS_SHORT = { '0':'[I] Lensed image','1':'[K] Convergence κ','2':'[G] Shear γ','3':'[M] Magnification |μ|','5':'[A] Deflection |α|','6':'[T] Fermat potential φ','7':'[P] Parity' };
   function _setVizOptionLabels(withShortcuts) {
     const sel = document.getElementById('sl-viz-mode');
     if (!sel) return;
@@ -1963,7 +2018,7 @@ function attachHandlers() {
   document.getElementById('sl-viz-mode')?.addEventListener('mousedown', () => _setVizOptionLabels(true));
   document.getElementById('sl-viz-mode')?.addEventListener('change', e => {
     _setVizOptionLabels(false);
-    e.target.blur();  // keep letter shortcuts (K/G/M/A/I/T) from hitting the select's type-ahead
+    e.target.blur();  // keep letter shortcuts (K/G/M/A/I/T/P) from hitting the select's type-ahead
     setVizMode(parseInt(e.target.value, 10));
   });
   document.getElementById('sl-viz-mode')?.addEventListener('blur', () => _setVizOptionLabels(false));
@@ -2264,7 +2319,7 @@ function attachHandlers() {
       return;
     }
     // Visualization mode shortcuts: toggle on/off; pressing the same key again returns to image.
-    const VIZ_KEYS = { k: 1, K: 1, g: 2, G: 2, m: 3, M: 3, a: 5, A: 5, i: 0, I: 0, t: 6, T: 6 };
+    const VIZ_KEYS = { k: 1, K: 1, g: 2, G: 2, m: 3, M: 3, a: 5, A: 5, i: 0, I: 0, t: 6, T: 6, p: 7, P: 7 };
     if (e.key in VIZ_KEYS) {
       setVizMode(VIZ_KEYS[e.key]);
       return;
@@ -2496,7 +2551,7 @@ function setVizMode(mode) {
 
 // Step to the previous/next visualization mode, wrapping around. The order
 // matches the on-canvas dropdown (image, κ, γ, |μ|, |α|, Fermat φ).
-const VIZ_CYCLE = [0, 1, 2, 3, 5, 6];
+const VIZ_CYCLE = [0, 1, 2, 3, 5, 6, 7];
 function cycleVizMode(dir) {
   const i = VIZ_CYCLE.indexOf(state.vizMode);
   setVizMode(VIZ_CYCLE[((i < 0 ? 0 : i) + dir + VIZ_CYCLE.length) % VIZ_CYCLE.length]);
@@ -2560,6 +2615,7 @@ const SHORTCUTS = [
   ['I', 'Show lensed image (exit any quantity map)'],
   ['K / G / M / A', 'Convergence κ / Shear γ / Magnification |μ| / Deflection |α| map'],
   ['T', 'Fermat potential φ contour map'],
+  ['P', 'Parity map (image types I / II / III)'],
   ['H', 'Hide / show the selected object'],
   ['O', 'Clear all objects from the selected plane'],
   ['X', 'Delete the selected plane'],
@@ -4189,7 +4245,7 @@ function renderViewPanel() {
   const tdAvail = timeDelaysAvailable();
   const tdTitle = tdAvail
     ? 'Annotate each point-source image with its arrival-time delay in days, relative to the first-arriving image (needs a point source with 2+ images). Uses the full multiplane arrival-time surface, so it works for one or several lens planes. Scales with H₀ and Ω_m in the Settings tab.'
-    : 'Time delays need at least one lens plane in front of the source.';
+    : 'Time delays need a point source behind at least one lens.';
 
   el.innerHTML = `
     <div class="sl-panel">
@@ -4203,9 +4259,13 @@ function renderViewPanel() {
         <div class="sl-view-hdr">
           <span class="sl-panel-title" style="flex:1">Display</span>
           ${infoSection('sl-display-info', `
-            <b>FOV</b>: field of view (arcsec).<br>
-            <b>z<sub>s</sub> ref</b>: source redshift used by the quantity maps and critical curves; <b>Auto</b> tracks the highest source plane.<br><br>
-            <b>Positions</b> marks each object, <b>Colorbar</b> applies to quantity maps only. <b>Critical curves</b> / <b>Caustics</b> also toggle with <b>C</b> and the <b>Ruler</b> (distances &amp; angles) with <b>L</b>. <b>Time delays</b> label point-source image arrival times and need a point source behind a lens.`)}
+            <b>FOV</b>: field of view (″).<br>
+            <b>z<sub>s</sub> ref</b>: source redshift for the quantity maps and curves. <b>Auto</b> uses the highest source plane.<br>
+            <b>Legend</b>, <b>Scale bar</b>, <b>Colorbar</b>: on-image keys (the colorbar for quantity maps only). <b>Legend BG</b>: panel behind the legend.<br>
+            <b>Positions</b>: object markers.<br>
+            <b>Stretch</b>: whiskers along the local image distortion, longer where it is stronger.<br>
+            <b>Ruler</b> (<b>L</b>): measure distances and angles.<br>
+            <b>Time delays</b>: arrival times of point-source images, in days. Needs a point source behind a lens.`)}
         </div>
         <div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
           <div class="sl-global-input">
@@ -4222,22 +4282,52 @@ function renderViewPanel() {
             <input type="number" id="sl-crit-zs-gen" min="0.1" max="15" step="0.1" value="${ezs.toFixed(2)}" ${auto?'disabled':''}>
           </div>
           <div class="sl-checkbox-row">
-            <label><input type="checkbox" id="sl-show-markers" ${state.showMarkers?'checked':''}> Positions</label>
             <label><input type="checkbox" id="sl-show-legend"  ${state.showLegend ?'checked':''}> Legend</label>
+            <label class="${state.showLegend?'':'sl-label-disabled'}" title="Translucent panel behind the legend"><input type="checkbox" id="sl-legend-bg" ${state.legendBg?'checked':''} ${state.showLegend?'':'disabled'}> Legend BG</label>
           </div>
           <div class="sl-checkbox-row">
+            <label><input type="checkbox" id="sl-show-markers" ${state.showMarkers?'checked':''}> Positions</label>
             <label><input type="checkbox" id="sl-show-scalebar" ${state.showScaleBar?'checked':''}> Scale bar</label>
-            <label title="${state.vizMode===0?'The lensed image has no colorbar; pick a quantity map to use one':''}"><input type="checkbox" id="sl-show-colorbar" ${state.showColorbar?'checked':''} ${state.vizMode===0?'disabled':''}> Colorbar</label>
           </div>
           <div class="sl-checkbox-row">
-            <label><input type="checkbox" id="sl-show-crit" ${state.showCritCurves?'checked':''}> Critical curves</label>
-            <label><input type="checkbox" id="sl-show-caus" ${state.showCaustics   ?'checked':''}> Caustics</label>
+            <label title="${state.vizMode===0||state.vizMode===7?'This view has no colorbar; pick a quantity map to use one':''}"><input type="checkbox" id="sl-show-colorbar" ${state.showColorbar?'checked':''} ${state.vizMode===0||state.vizMode===7?'disabled':''}> Colorbar</label>
+            <label title="Whiskers along the direction images are stretched; longer means more distorted"><input type="checkbox" id="sl-show-stretch" ${state.showStretch?'checked':''}> Stretch</label>
           </div>
           <div class="sl-checkbox-row">
             <label title="Measure distances and angles on the image (key L also enables the ruler)"><input type="checkbox" id="sl-show-ruler" ${state.showRuler?'checked':''}> Ruler</label>
             <label class="${tdAvail?'':'sl-label-disabled'}" title="${tdTitle}"><input type="checkbox" id="sl-show-td" ${state.showTimeDelays?'checked':''} ${tdAvail?'':'disabled'}> Time delays</label>
           </div>
         </div>
+      </div>
+
+      <div class="sl-hybrid-section">
+        <div class="sl-view-hdr" style="padding:0">
+          <button class="sl-hybrid-hdr" id="sl-curves-section-hdr" style="flex:1">
+            <span class="sl-hybrid-arrow">${_curvesExpanded?'▼':'▶'}</span>
+            <span class="sl-panel-title" style="flex:1">Critical curves</span>
+          </button>
+          ${infoSection('sl-curves-info', `
+            <b>Critical curves</b> / <b>Caustics</b> (<b>C</b>): where magnification diverges, in the image and source planes.<br>
+            <b>Curve types</b>: radial curves dotted, tangential solid. <b>Show</b> picks one type.`)}
+        </div>
+        ${_curvesExpanded ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
+          <div class="sl-checkbox-row">
+            <label><input type="checkbox" id="sl-show-crit" ${state.showCritCurves?'checked':''}> Critical curves</label>
+            <label><input type="checkbox" id="sl-show-caus" ${state.showCaustics   ?'checked':''}> Caustics</label>
+          </div>
+          <div class="sl-checkbox-row">
+            <label title="Draw radial critical curves and caustics dotted, tangential ones solid, with a legend entry for each"><input type="checkbox" id="sl-curve-types" ${state.curveTypes?'checked':''}> Curve types</label>
+          </div>
+          ${state.curveTypes ? `
+          <div class="sl-global-input" style="margin-top:6px">
+            <label style="min-width:0">Show</label>
+            <select id="sl-curve-type-show" style="flex:1 1 auto;min-width:0">
+              <option value="both"       ${state.curveTypeShow==='both'      ?'selected':''}>Tangential + radial</option>
+              <option value="tangential" ${state.curveTypeShow==='tangential'?'selected':''}>Tangential only</option>
+              <option value="radial"     ${state.curveTypeShow==='radial'    ?'selected':''}>Radial only</option>
+            </select>
+          </div>` : ''}
+        </div>` : ''}
       </div>
 
       ${instrumentSectionHtml()}
@@ -4411,11 +4501,15 @@ function renderViewPanel() {
     updateRulerUI(); redraw();
   });
   document.getElementById('sl-show-markers')?.addEventListener('change',e => { state.showMarkers = e.target.checked; redraw(); });
-  document.getElementById('sl-show-legend')?.addEventListener('change', e => { state.showLegend  = e.target.checked; redraw(); });
+  document.getElementById('sl-show-legend')?.addEventListener('change', e => { state.showLegend  = e.target.checked; renderSidebar(); redraw(); });
+  document.getElementById('sl-legend-bg')?.addEventListener('change', e => { state.legendBg = e.target.checked; redraw(); });
   document.getElementById('sl-show-scalebar')?.addEventListener('change', e => { state.showScaleBar = e.target.checked; redraw(); });
   document.getElementById('sl-show-colorbar')?.addEventListener('change', e => { state.showColorbar = e.target.checked; _updateColorbar(); redraw(); });
   document.getElementById('sl-show-crit')?.addEventListener('change', e => { state.showCritCurves = e.target.checked; redraw(); });
   document.getElementById('sl-show-caus')?.addEventListener('change', e => { state.showCaustics   = e.target.checked; redraw(); });
+  document.getElementById('sl-curve-types')?.addEventListener('change', e => { state.curveTypes = e.target.checked; renderSidebar(); redraw(); });
+  document.getElementById('sl-curve-type-show')?.addEventListener('change', e => { state.curveTypeShow = e.target.value; redraw(); });
+  document.getElementById('sl-show-stretch')?.addEventListener('change', e => { state.showStretch = e.target.checked; redraw(); });
   document.getElementById('sl-show-td')?.addEventListener('change', e => { state.showTimeDelays = e.target.checked; redraw(); });
   document.getElementById('sl-lineart')?.addEventListener('change', e => {
     state.lineArt = e.target.checked;
@@ -4530,6 +4624,7 @@ function renderViewPanel() {
   document.getElementById('sl-bg-section-hdr')?.addEventListener('click', () => { _bgExpanded = !_bgExpanded; renderSidebar(); });
 
   document.getElementById('sl-instr-section-hdr')?.addEventListener('click', () => { _instrExpanded = !_instrExpanded; renderSidebar(); });
+  document.getElementById('sl-curves-section-hdr')?.addEventListener('click', () => { _curvesExpanded = !_curvesExpanded; renderSidebar(); });
 
   // ── Instrument section ─────────────────────────────────────────────────────
   document.getElementById('sl-instr')?.addEventListener('change', e => {
@@ -4747,7 +4842,7 @@ function renderExportPanel() {
         <span class="sl-panel-title">DATA (CSV)</span>
         ${infoSection('sl-csv-info', `
           Exports the most recently computed overlays, with positions in arcseconds.<br><br>
-          <b>Curves</b>: critical-curve and caustic segments, one row per segment, labelled <code>critical</code> or <code>caustic</code>, at the source redshift they were computed for.<br><br>
+          <b>Curves</b>: critical-curve and caustic segments, one row per segment, labelled <code>critical</code> or <code>caustic</code> and <code>tangential</code> or <code>radial</code>, at the source redshift they were computed for.<br><br>
           <b>Image positions</b>: the numerically solved point-source image positions.<br><br>
           Buttons enable once the corresponding overlay has been computed at least once (show critical curves, or add a point source).`)}
       </div>
@@ -4758,9 +4853,10 @@ function renderExportPanel() {
     </div>`);
   document.getElementById('sl-csv-curves')?.addEventListener('click', () => {
     const c = state._lastCurves; if (!c) return;
-    const rows = ['curve,x0_arcsec,y0_arcsec,x1_arcsec,y1_arcsec'];
-    for (const [[x0, y0], [x1, y1]] of c.crit) rows.push(`critical,${x0},${y0},${x1},${y1}`);
-    for (const [[x0, y0], [x1, y1]] of c.caus) rows.push(`caustic,${x0},${y0},${x1},${y1}`);
+    const rows = ['curve,type,x0_arcsec,y0_arcsec,x1_arcsec,y1_arcsec'];
+    const type = i => c.radial?.[i] ? 'radial' : 'tangential';
+    c.crit.forEach(([[x0, y0], [x1, y1]], i) => rows.push(`critical,${type(i)},${x0},${y0},${x1},${y1}`));
+    c.caus.forEach(([[x0, y0], [x1, y1]], i) => rows.push(`caustic,${type(i)},${x0},${y0},${x1},${y1}`));
     _downloadCSV(`caustica-curves-zs${c.zs.toFixed(2)}.csv`, rows);
   });
   document.getElementById('sl-csv-images')?.addEventListener('click', () => {
@@ -5144,17 +5240,56 @@ function effectiveCritZs() {
 
 // Compute critical curves for an arbitrary z_s (inserts a virtual source plane
 // if no existing source plane sits at that redshift).
-function computeCritCurvesForZs(planes, dist, zs, fovArcsec, gridN) {
+// { planes, dist, idx } for ray tracing to redshift zs: an existing source plane
+// there if there is one, else a virtual (empty) plane inserted at zs.
+function planesForZs(planes, dist, zs) {
   const sorted = [...planes].sort((a, b) => a.z - b.z);
-  // Look for a source plane already at zs.
-  let idx = sorted.findIndex(p => { const t = planeEffectiveType(p); return (t === 'source' || t === 'hybrid') && Math.abs(p.z - zs) < 0.005; });
-  if (idx >= 0) return computeCriticalCurves(sorted, dist, idx, fovArcsec, gridN);
-  // Insert a virtual (empty) source plane at zs and recompute distances.
-  const vp       = { id: -1, z: zs, objects: [] };
+  const idx = sorted.findIndex(p => { const t = planeEffectiveType(p); return (t === 'source' || t === 'hybrid') && Math.abs(p.z - zs) < 0.005; });
+  if (idx >= 0) return { planes: sorted, dist, idx };
+  const vp        = { id: -1, z: zs, objects: [] };
   const augmented = [...sorted, vp].sort((a, b) => a.z - b.z);
-  const augDist   = precomputeDistances(augmented);
-  const augIdx    = augmented.indexOf(vp);
-  return computeCriticalCurves(augmented, augDist, augIdx, fovArcsec, gridN);
+  return { planes: augmented, dist: precomputeDistances(augmented), idx: augmented.indexOf(vp) };
+}
+
+function computeCritCurvesForZs(planes, dist, zs, fovArcsec, gridN) {
+  const t = planesForZs(planes, dist, zs);
+  return computeCriticalCurves(t.planes, t.dist, t.idx, fovArcsec, gridN);
+}
+
+// Stretch whiskers on an n×n grid of cell centres across the field. At each point
+// the image of a small circular source is an ellipse whose major axis is the right
+// singular vector of A = ∂β/∂θ with the smaller singular value. Returns
+// [{ x, y, dx, dy, s }] with (dx, dy) that unit direction and s = 1 − σmin/σmax
+// (0 = undistorted, → 1 at a critical curve).
+function computeStretchField(planes, dist, zs, fov, n) {
+  const t = planesForZs(planes, dist, zs);
+  const cell = fov / n, h = fov * 0.002, out = [];
+  const tr = (x, y) => traceRay(x, y, t.planes, t.dist, t.idx);
+  for (let iy = 0; iy < n; iy++) for (let ix = 0; ix < n; ix++) {
+    const x = -fov / 2 + (ix + 0.5) * cell, y = -fov / 2 + (iy + 0.5) * cell;
+    const px = tr(x + h, y), mx = tr(x - h, y), py = tr(x, y + h), my = tr(x, y - h);
+    const a11 = (px[0] - mx[0]) / (2*h), a12 = (py[0] - my[0]) / (2*h);
+    const a21 = (px[1] - mx[1]) / (2*h), a22 = (py[1] - my[1]) / (2*h);
+    // AᵀA = [[p, q], [q, r]]; its smaller eigenvalue is σmin², eigenvector the stretch axis.
+    const p = a11*a11 + a21*a21, q = a11*a12 + a21*a22, r = a12*a12 + a22*a22;
+    const m = (p + r) / 2, d = Math.sqrt(Math.max(((p - r) / 2) ** 2 + q*q, 0));
+    const lmin = Math.max(m - d, 0), lmax = m + d;
+    if (!(lmax > 0)) continue;
+    let dx = q, dy = lmin - p;                       // (AᵀA − lmin·I) v = 0
+    if (Math.hypot(dx, dy) < 1e-12) { dx = lmin - r; dy = q; }
+    const len = Math.hypot(dx, dy);
+    if (len < 1e-12) continue;                       // isotropic: no preferred axis
+    out.push({ x, y, dx: dx / len, dy: dy / len, s: 1 - Math.sqrt(lmin / lmax) });
+  }
+  return out;
+}
+
+// Split curve segments by type. `radial` holds one flag per segment (from
+// computeCriticalCurves); `show` is 'both' | 'tangential' | 'radial'.
+function splitCurveTypes(segs, radial, show) {
+  const tan = [], rad = [];
+  segs.forEach((sg, i) => (radial[i] ? rad : tan).push(sg));
+  return { tan: show === 'radial' ? [] : tan, rad: show === 'tangential' ? [] : rad };
 }
 
 // ── Overlay: critical curves, caustics, position markers, legend ──────────────
@@ -5528,7 +5663,10 @@ function drawOverlay() {
   const needFermatPts = !hideOv && state.fermatPoints && state.fermatPoints.length > 0;
   const needRuler = !hideOv && state.showRuler && ((state.rulers && state.rulers.length) || state.rulerDraft);
   const needScale = state.showScaleBar && !hideOv;
-  if (!needCurve && !showMk && !needEllipse && !needPointSources && !needFermatPts && !needRuler && !needScale) return;
+  const needStretch = state.showStretch && state.dist && hasLens;
+  const needParityLegend = state.vizMode === 7 && state.showLegend && !hideOv;
+  if (!needCurve && !showMk && !needEllipse && !needPointSources && !needFermatPts && !needRuler && !needScale
+      && !needStretch && !needParityLegend) return;
 
   const Wl = W/dpr, Hl = H/dpr;
   overlayCtx.save();
@@ -5544,22 +5682,36 @@ function drawOverlay() {
   // first lens, ≥2 images. Reference = first-arriving image (Fermat minimum); others +Δt.
   const _tdOn = state.showTimeDelays && !hideOv && timeDelaysAvailable();
   const _tdFirstLensZ = _tdOn ? firstLensPlaneZ() : null;
+  // Parity view: mark each image + or − by the sign of det A at its position.
+  const _parityDots = state.vizMode === 7 && !_pal;
+  const _paritySeen = new Map();   // 'pos' | 'neg' → a dot colour, for the legend
+  const _sortedPl = _parityDots ? [...state.planes].sort((a, b) => a.z - b.z) : null;
   for (const plane of state.planes) {
     for (const obj of plane.objects) {
       if (obj.type !== 'source' || obj.model !== 'pointsource' || obj.hidden) continue;
       const imagePositions = findPointSourceImages(obj, plane);
       for (const [tx, ty] of imagePositions) _psAll.push({ src: obj.id, x: tx, y: ty });
-      const r_px = Math.max((obj.params.sigma ?? 0.05) / state.fov * Wl, 2.5);
+      // In the parity view the dot must be big enough to carry its +/− sign.
+      const r_px = Math.max((obj.params.sigma ?? 0.05) / state.fov * Wl, _parityDots ? 7 : 2.5);
       const dark = document.documentElement.getAttribute('data-theme') === 'dark';
       const storedColor = obj.params.color ?? '#ffffff';
       const col = dark ? storedColor : invertHexColor(storedColor);
       overlayCtx.fillStyle = _pal ? _pal.pointImage : col;
       overlayCtx.globalAlpha = _pal ? 1 : (obj.params.amplitude ?? 1.0);
+      const tIdx = _parityDots ? _sortedPl.findIndex(p => p.id === plane.id) : -1;
       for (const [tx, ty] of imagePositions) {
         const [px, py] = toPixel(tx, ty);
         overlayCtx.beginPath();
         overlayCtx.arc(px, py, r_px, 0, Math.PI * 2);
         overlayCtx.fill();
+        if (_parityDots) {
+          const sign = imageParity(tx, ty, _sortedPl, state.dist, tIdx);
+          const k = sign > 0 ? 'pos' : 'neg';
+          if (!_paritySeen.has(k)) _paritySeen.set(k, col);
+          overlayCtx.globalAlpha = 1;
+          drawParitySign(overlayCtx, px, py, r_px, sign, col);
+          overlayCtx.globalAlpha = obj.params.amplitude ?? 1.0;
+        }
       }
       overlayCtx.globalAlpha = 1;
 
@@ -5746,6 +5898,7 @@ function drawOverlay() {
 
   // ── 2. Critical curves / caustics ────────────────────────────────────────────
   let critSegs = [], causSegs = [];
+  const _curveTypesDrawn = new Set();   // 'critT' | 'critR' | 'causT' | 'causR', for the legend
   if (needCurve) {
     // Sample 30% wider than the display FOV so rings near the edge are found in
     // full rather than cut off at the grid boundary.  The display filter below
@@ -5756,7 +5909,7 @@ function drawOverlay() {
     );
     critSegs = res.critSegments;
     causSegs = res.causticSegments;
-    state._lastCurves = { zs: effectiveCritZs(), crit: critSegs, caus: causSegs };
+    state._lastCurves = { zs: effectiveCritZs(), crit: critSegs, caus: causSegs, radial: res.critRadial };
 
     overlayCtx.lineWidth = _pal ? Math.max(1.3, Math.min(Wl, Hl) / 450) : 1.3;
     if (_pal) { overlayCtx.lineJoin = 'round'; overlayCtx.lineCap = 'round'; }
@@ -5769,6 +5922,22 @@ function drawOverlay() {
         overlayCtx.stroke();
       }
     }
+    // Radial curves: dotted. Chained into polylines first so the dot spacing runs
+    // continuously along the curve instead of restarting on every tiny segment.
+    function drawDotted(segs, color) {
+      const lw = overlayCtx.lineWidth;
+      overlayCtx.save();
+      overlayCtx.strokeStyle = color;
+      overlayCtx.lineWidth   = lw * 1.6;
+      overlayCtx.lineCap     = 'round';
+      overlayCtx.setLineDash([0.01, lw * 3.2]);
+      for (const poly of chainSegments(segs)) {
+        overlayCtx.beginPath();
+        poly.forEach(([x, y], i) => { const [px, py] = toPixel(x, y); i ? overlayCtx.lineTo(px, py) : overlayCtx.moveTo(px, py); });
+        overlayCtx.stroke();
+      }
+      overlayCtx.restore();
+    }
 
     const _h = state.fov / 2;
     const MIN_CRIT_SEGS = 50;
@@ -5779,23 +5948,74 @@ function drawOverlay() {
     const isRealCurve = critSegs.length >= MIN_CRIT_SEGS;
 
     // Clip to the visible image area for display.
-    const critFiltered = critSegs.filter(([[x0,y0],[x1,y1]]) =>
+    // (The type flags are filtered alongside so they stay aligned with the segments.)
+    const critKeep = critSegs.map(([[x0,y0],[x1,y1]]) =>
       (Math.abs(x0) <= _h && Math.abs(y0) <= _h) ||
       (Math.abs(x1) <= _h && Math.abs(y1) <= _h));
-    const causFiltered = causSegs.filter(([[x0,y0],[x1,y1]]) =>
+    const causKeep = causSegs.map(([[x0,y0],[x1,y1]]) =>
       Math.abs(x0) < _h*2.5 && Math.abs(y0) < _h*2.5 &&
       Math.abs(x1) < _h*2.5 && Math.abs(y1) < _h*2.5);
+    const critFiltered = critSegs.filter((_, i) => critKeep[i]);
+    const causFiltered = causSegs.filter((_, i) => causKeep[i]);
 
     if (isRealCurve) {
-      if (state.showCritCurves) drawSegs(critFiltered, _pal ? _pal.critical : CRIT_COLOR);
-      if (state.showCaustics)   drawSegs(causFiltered, _pal ? _pal.caustic : CAUS_COLOR);
+      const critCol = _pal ? _pal.critical : CRIT_COLOR, causCol = _pal ? _pal.caustic : CAUS_COLOR;
+      const draw = (segs, radial, col, which) => {
+        if (!state.curveTypes) { drawSegs(segs, col); return; }
+        const t = splitCurveTypes(segs, radial, state.curveTypeShow);
+        drawSegs(t.tan, col); drawDotted(t.rad, col);
+        if (t.tan.length) _curveTypesDrawn.add(which + 'T');
+        if (t.rad.length) _curveTypesDrawn.add(which + 'R');
+      };
+      if (state.showCritCurves) draw(critFiltered, res.critRadial.filter((_, i) => critKeep[i]), critCol, 'crit');
+      if (state.showCaustics)   draw(causFiltered, res.causticRadial.filter((_, i) => causKeep[i]), causCol, 'caus');
     }
+  }
+
+  // ── 2b. Stretch whiskers ──────────────────────────────────────────────────────
+  if (needStretch) {
+    const n = Math.max(12, Math.min(32, Math.round(Math.min(Wl, Hl) / 28)));
+    const cellPx = Math.min(Wl, Hl) / n;
+    overlayCtx.save();
+    overlayCtx.strokeStyle = annotColors().label;
+    overlayCtx.globalAlpha = 0.75;
+    overlayCtx.lineWidth   = 1.3;
+    overlayCtx.lineCap     = 'round';
+    overlayCtx.beginPath();
+    for (const w of computeStretchField(state.planes, state.dist, effectiveCritZs(), state.fov, n)) {
+      const half = 0.45 * cellPx * w.s;
+      if (half < 0.4) continue;
+      const [cx, cy] = toPixel(w.x, w.y);
+      overlayCtx.moveTo(cx - w.dx * half, cy + w.dy * half);   // screen y points down
+      overlayCtx.lineTo(cx + w.dx * half, cy - w.dy * half);
+    }
+    overlayCtx.stroke();
+    overlayCtx.restore();
   }
 
   // ── 3. Legend (top-left) ─────────────────────────────────────────────────────
   const legendItems = [];
-  if (state.showCritCurves && hasLens) legendItems.push({ color: _pal ? _pal.critical : CRIT_COLOR, label: 'Critical curves', isLine: true });
-  if (state.showCaustics   && hasLens) legendItems.push({ color: _pal ? _pal.caustic : CAUS_COLOR, label: 'Caustics',        isLine: true });
+  const _critCol = _pal ? _pal.critical : CRIT_COLOR, _causCol = _pal ? _pal.caustic : CAUS_COLOR;
+  if (state.curveTypes) {
+    // One entry per type actually drawn (a point mass, for one, has no radial curve).
+    const typed = [
+      ['critT', _critCol, 'Tangential critical',  'isLine'],
+      ['critR', _critCol, 'Radial critical',      'isDotted'],
+      ['causT', _causCol, 'Tangential caustic',   'isLine'],
+      ['causR', _causCol, 'Radial caustic',       'isDotted'],
+    ];
+    for (const [k, color, label, kind] of typed)
+      if (_curveTypesDrawn.has(k)) legendItems.push({ color, label, [kind]: true });
+  } else {
+    if (state.showCritCurves && hasLens) legendItems.push({ color: _critCol, label: 'Critical curves', isLine: true });
+    if (state.showCaustics   && hasLens) legendItems.push({ color: _causCol, label: 'Caustics',        isLine: true });
+  }
+  if (state.vizMode === 7 && !state.lineArt) {
+    for (const [t, label] of [[1, 'Type I (minimum)'], [2, 'Type II (saddle)'], [3, 'Type III (maximum)']])
+      legendItems.push({ color: parityColor(t), label, isSwatch: true });
+    if (_paritySeen.has('pos')) legendItems.push({ color: _paritySeen.get('pos'), label: 'Positive-parity image', isParity: +1 });
+    if (_paritySeen.has('neg')) legendItems.push({ color: _paritySeen.get('neg'), label: 'Negative-parity image', isParity: -1 });
+  }
   if (showMk) {
     const hasLensObj   = state.planes.some(p => p.objects.some(o => o.type === 'lens'   && !o.hybridId));
     const hasSrcObj    = state.planes.some(p => p.objects.some(o => o.type === 'source' && !o.hybridId));
@@ -5818,12 +6038,25 @@ function drawOverlay() {
     const _mob  = window.innerWidth <= 640;
     const lx = 8, ly = 8;
     const lineH = _mob ? 20 : 28, padV = _mob ? 7 : 11, padH = _mob ? 10 : 14;
-    const boxW  = _mob ? 150 : 220, boxH = legendItems.length * lineH + 2 * padV;
+    const boxH  = legendItems.length * lineH + 2 * padV;
     const _A    = annotColors();
 
     overlayCtx.font         = `${_mob ? 12 : 18}px system-ui, -apple-system, sans-serif`;
     overlayCtx.textBaseline = 'middle';
     overlayCtx.textAlign    = 'left';
+
+    if (state.legendBg) {
+      // Sized to the widest label; the shade opposes the ink so text stays legible.
+      const textOff = _mob ? 22 : 33;
+      const boxW = 2 * padH + textOff + Math.max(...legendItems.map(it => overlayCtx.measureText(it.label).width));
+      overlayCtx.save();
+      overlayCtx.fillStyle = _A.light ? 'rgba(13,17,23,0.72)' : 'rgba(255,255,255,0.78)';
+      overlayCtx.beginPath();
+      if (overlayCtx.roundRect) overlayCtx.roundRect(lx, ly, boxW, boxH, 6);
+      else                      overlayCtx.rect(lx, ly, boxW, boxH);
+      overlayCtx.fill();
+      overlayCtx.restore();
+    }
 
     legendItems.forEach((item, i) => {
       const iy = ly + padV + i * lineH + lineH / 2;
@@ -5837,6 +6070,24 @@ function drawOverlay() {
         overlayCtx.setLineDash(_mob ? [4, 3] : [6, 4]);
         overlayCtx.beginPath(); overlayCtx.moveTo(ix, iy); overlayCtx.lineTo(ix + iconW, iy); overlayCtx.stroke();
         overlayCtx.setLineDash([]);
+      } else if (item.isDotted) {
+        overlayCtx.save();
+        overlayCtx.strokeStyle = item.color; overlayCtx.lineWidth = _mob ? 2.5 : 3.5;
+        overlayCtx.lineCap = 'round';
+        overlayCtx.setLineDash([0.01, _mob ? 5 : 7]);
+        overlayCtx.beginPath(); overlayCtx.moveTo(ix + 1, iy); overlayCtx.lineTo(ix + iconW, iy); overlayCtx.stroke();
+        overlayCtx.restore();
+      } else if (item.isParity) {
+        const r = dotR + 1;
+        overlayCtx.fillStyle = item.color;
+        overlayCtx.beginPath(); overlayCtx.arc(ix + iconW / 2, iy, r, 0, Math.PI * 2); overlayCtx.fill();
+        drawParitySign(overlayCtx, ix + iconW / 2, iy, r, item.isParity, item.color);
+      } else if (item.isSwatch) {
+        const sz = _mob ? 11 : 15;
+        overlayCtx.fillStyle = item.color;
+        overlayCtx.fillRect(ix + (iconW - sz) / 2, iy - sz / 2, sz, sz);
+        overlayCtx.strokeStyle = 'rgba(128,128,128,0.6)'; overlayCtx.lineWidth = 1;
+        overlayCtx.strokeRect(ix + (iconW - sz) / 2, iy - sz / 2, sz, sz);
       } else if (item.isDot) {
         overlayCtx.fillStyle = item.color;
         drawShapeMarker(overlayCtx, item.markerType, ix + iconW / 2, iy, dotR);
@@ -5878,6 +6129,15 @@ function drawOverlay() {
       const bx     = Wl - boxW - 8;
       const by     = Hl - boxH - 44;   // 44px clears the scale bar in the bottom-right corner
 
+      if (state.legendBg) {
+        overlayCtx.save();
+        overlayCtx.fillStyle = A.light ? 'rgba(13,17,23,0.72)' : 'rgba(255,255,255,0.78)';
+        overlayCtx.beginPath();
+        if (overlayCtx.roundRect) overlayCtx.roundRect(bx, by, boxW, boxH, 6);
+        else                      overlayCtx.rect(bx, by, boxW, boxH);
+        overlayCtx.fill();
+        overlayCtx.restore();
+      }
       overlayCtx.textBaseline = 'middle';
       overlayCtx.textAlign    = 'left';
       for (let i = 0; i < legendTypes.length; i++) {
@@ -6389,13 +6649,23 @@ function buildLineArtSVGString() {
     const clip = (segs, m) => segs.filter(([[x0,y0],[x1,y1]]) =>
       (Math.abs(x0)<=_h*m && Math.abs(y0)<=_h*m) || (Math.abs(x1)<=_h*m && Math.abs(y1)<=_h*m));
     if (res.critSegments.length >= 50) {
-      const emit = (segs, color) => {
+      const emit = (segs, color, dotted = false) => {
         let ps = chainSegments(segs); if (state.lineArtSmooth) ps = smoothPolylines(ps);
         const d = ps.map(pathD).join(' ');
-        if (d) parts.push(`<path d="${d}" fill="none" stroke="${color}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>`);
+        const style = dotted ? `stroke-width="${(sw * 1.6).toFixed(2)}" stroke-dasharray="0.01 ${(sw * 3.2).toFixed(2)}"` : `stroke-width="${sw}"`;
+        if (d) parts.push(`<path d="${d}" fill="none" stroke="${color}" ${style} stroke-linejoin="round" stroke-linecap="round"/>`);
       };
-      if (state.showCaustics)   emit(clip(res.causticSegments, 2.5), pal.caustic);
-      if (state.showCritCurves) emit(clip(res.critSegments, 1),   pal.critical);
+      // Same split as the on-screen overlay: radial curves dotted when Curve types is on.
+      const emitTyped = (segs, radial, m, color) => {
+        const keep = segs.map(([[x0,y0],[x1,y1]]) =>
+          (Math.abs(x0)<=_h*m && Math.abs(y0)<=_h*m) || (Math.abs(x1)<=_h*m && Math.abs(y1)<=_h*m));
+        const kept = segs.filter((_, i) => keep[i]);
+        if (!state.curveTypes) { emit(kept, color); return; }
+        const t = splitCurveTypes(kept, radial.filter((_, i) => keep[i]), state.curveTypeShow);
+        emit(t.tan, color); emit(t.rad, color, true);
+      };
+      if (state.showCaustics)   emitTyped(res.causticSegments, res.causticRadial, 2.5, pal.caustic);
+      if (state.showCritCurves) emitTyped(res.critSegments,    res.critRadial,    1,   pal.critical);
     }
   }
 

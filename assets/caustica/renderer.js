@@ -65,7 +65,7 @@ uniform float u_vizScaleParam; // γ for power, softening a for asinh
 uniform float u_vizMin;        // lower data limit mapped to colorbar 0
 uniform float u_vizMax;        // upper data limit mapped to colorbar 1
 uniform int   u_colormap;      // palette: 0=default 1=viridis 2=inferno 3=plasma 4=turbo 5=gray
-uniform int   u_vizMode;      // 0=surface brightness, 1=κ, 2=γ, 3=|μ|, 4=signed μ, 5=|α|, 6=φ (Fermat)
+uniform int   u_vizMode;      // 0=surface brightness, 1=κ, 2=γ, 3=|μ|, 4=signed μ, 5=|α|, 6=φ (Fermat), 7=parity
 uniform int   u_vizSrcIdx;    // target plane index for visualization Jacobian
 uniform int   u_isDark;       // 1 = dark theme, 0 = light theme
 uniform float u_saddlePhi[8]; // φ values at Type-II saddle images (Fermat mode)
@@ -778,6 +778,18 @@ vec3 computeViz(vec2 theta) {
   if (u_vizMode == 3) { // |magnification|
     float mu = 1.0 / max(abs(detJ), 0.001);
     return applyColormap(vizWarp(mu, u_vizMin, u_vizMax, u_vizScale, u_vizScaleParam));
+  }
+  if (u_vizMode == 7) { // parity: image type I (det>0, tr>0), II (det<0), III (det>0, tr<0)
+    // Colours must match PARITY_COLORS in main.js (the legend swatches).
+    float trJ = A11 + A22;
+    if (u_isDark == 1) {
+      if (detJ < 0.0) return vec3(0.231, 0.306, 0.396);           // #3b4e65
+      return trJ > 0.0 ? vec3(0.071, 0.094, 0.125)                 // #121820
+                       : vec3(0.376, 0.506, 0.651);                // #6081a6
+    }
+    if (detJ < 0.0) return vec3(0.992, 0.910, 0.769);             // #fde8c4
+    return trJ > 0.0 ? vec3(0.957, 0.969, 0.988)                   // #f4f7fc
+                     : vec3(0.659, 0.761, 0.898);                  // #a8c2e5
   }
   if (u_vizMode == 4) { // signed magnification: diverging
     float muS = clamp(1.0 / detJ, -8.0, 8.0);

@@ -219,6 +219,11 @@ export function traceRay(thetaX, thetaY, planes, dist, targetIdx) {
 // [[x0,y0],[x1,y1]] segment pairs (arcsec, image plane and source plane).
 // Adjacent marching-squares cells share edge crossing points, so drawing
 // the segments produces visually connected curves.
+//
+// Also returns critRadial / causticRadial: one boolean per segment, true for the
+// radial branch. Where det A = 0 one eigenvalue of A vanishes and the other equals
+// tr A, so tr A > 0 marks the tangential curve (1−κ−γ = 0, the other eigenvalue 2γ)
+// and tr A < 0 the radial one (1−κ+γ = 0). This holds for asymmetric multiplane A too.
 
 // Trace a uniform gridN×gridN grid of image-plane rays to sourcePlaneIdx and
 // return the source-plane positions β(θ). Shared by the critical-curve and
@@ -246,8 +251,9 @@ export function computeCriticalCurves(planes, dist, sourcePlaneIdx, fovArcsec, g
   const bx   = g0.bx, by = g0.by, step = g0.step, half = g0.half;
   gridN      = g0.gridN;   // adopt the actual grid size when a precomputed grid is supplied
 
-  // Jacobian det via central differences (border stays 0).
+  // Jacobian det and trace via central differences (border stays 0).
   const det = new Float32Array(gridN * gridN);
+  const tr  = new Float32Array(gridN * gridN);
   for (let iy = 1; iy < gridN - 1; iy++) {
     for (let ix = 1; ix < gridN - 1; ix++) {
       const dbxdx = (bx[iy*gridN + ix+1] - bx[iy*gridN + ix-1]) / (2*step);
@@ -255,12 +261,14 @@ export function computeCriticalCurves(planes, dist, sourcePlaneIdx, fovArcsec, g
       const dbydx = (by[iy*gridN + ix+1] - by[iy*gridN + ix-1]) / (2*step);
       const dbydy = (by[(iy+1)*gridN + ix] - by[(iy-1)*gridN + ix]) / (2*step);
       det[iy*gridN+ix] = dbxdx * dbydy - dbxdy * dbydx;
+      tr [iy*gridN+ix] = dbxdx + dbydy;
     }
   }
 
   // Marching squares on (gridN-1)×(gridN-1) cells.
   const critSegments    = [];
   const causticSegments = [];
+  const critRadial      = [];   // per segment: true = radial, false = tangential
 
   for (let iy = 0; iy < gridN - 1; iy++) {
     for (let ix = 0; ix < gridN - 1; ix++) {
@@ -270,7 +278,7 @@ export function computeCriticalCurves(planes, dist, sourcePlaneIdx, fovArcsec, g
       // Skip cells with any zero-det corner (border or degenerate).
       if (d00 === 0 || d10 === 0 || d01 === 0 || d11 === 0) continue;
 
-      const imgPts = [], srcPts = [];
+      const imgPts = [], srcPts = [], trs = [];
 
       function edgeCrossing(da, db, ix_a, iy_a, ix_b, iy_b) {
         if (Math.sign(da) === Math.sign(db)) return;
@@ -281,6 +289,7 @@ export function computeCriticalCurves(planes, dist, sourcePlaneIdx, fovArcsec, g
         const sy = by[iy_a*gridN+ix_a] * (1-t) + by[iy_b*gridN+ix_b] * t;
         imgPts.push([x, y]);
         srcPts.push([sx, sy]);
+        trs.push(tr[iy_a*gridN+ix_a] * (1-t) + tr[iy_b*gridN+ix_b] * t);
       }
 
       edgeCrossing(d00, d10,  ix,   iy,   ix+1, iy  ); // bottom
@@ -291,17 +300,53 @@ export function computeCriticalCurves(planes, dist, sourcePlaneIdx, fovArcsec, g
       if (imgPts.length === 2) {
         critSegments.push([imgPts[0], imgPts[1]]);
         causticSegments.push([srcPts[0], srcPts[1]]);
+        critRadial.push(trs[0] + trs[1] < 0);
       } else if (imgPts.length === 4) {
         // Saddle: two segments connecting pairs 0-1 and 2-3.
         critSegments.push([imgPts[0], imgPts[1]]);
         critSegments.push([imgPts[2], imgPts[3]]);
         causticSegments.push([srcPts[0], srcPts[1]]);
         causticSegments.push([srcPts[2], srcPts[3]]);
+        critRadial.push(trs[0] + trs[1] < 0, trs[2] + trs[3] < 0);
       }
     }
   }
 
-  return { critSegments, causticSegments };
+  // Drop radial loops only a few cells across. A singular centre (point mass, steep
+  // EPL) leaves one of about 9 segments at any grid size: a finite-difference artefact,
+  // not a curve. Genuine radial curves (cored NIE, EPL with γ < 2, the SIE's softened
+  // core that maps onto its radial cut) resolve into many more.
+  const drop = _smallRadialLoops(critSegments, critRadial, 12);
+  if (drop.size) {
+    const keep = (_, i) => !drop.has(i);
+    return {
+      critSegments:    critSegments.filter(keep),
+      causticSegments: causticSegments.filter(keep),
+      critRadial:      critRadial.filter(keep),
+      causticRadial:   critRadial.filter(keep),
+    };
+  }
+  // Caustic segment i is the image of critical segment i, so they share the flag.
+  return { critSegments, causticSegments, critRadial, causticRadial: critRadial };
+}
+
+// Indices of radial segments in connected components of fewer than minSegs segments.
+function _smallRadialLoops(segs, radial, minSegs) {
+  const key = p => `${Math.round(p[0] * 1e4)},${Math.round(p[1] * 1e4)}`;
+  const parent = new Map();
+  const find = k => { while (parent.get(k) !== k) { parent.set(k, parent.get(parent.get(k))); k = parent.get(k); } return k; };
+  const add  = k => { if (!parent.has(k)) parent.set(k, k); };
+  segs.forEach((sg, i) => {
+    if (!radial[i]) return;
+    const a = key(sg[0]), b = key(sg[1]);
+    add(a); add(b);
+    parent.set(find(a), find(b));
+  });
+  const count = new Map();
+  segs.forEach((sg, i) => { if (radial[i]) { const r = find(key(sg[0])); count.set(r, (count.get(r) ?? 0) + 1); } });
+  const drop = new Set();
+  segs.forEach((sg, i) => { if (radial[i] && count.get(find(key(sg[0]))) < minSegs) drop.add(i); });
+  return drop;
 }
 
 // ── Uniform-disc lensed-image outlines ──────────────────────────────────────

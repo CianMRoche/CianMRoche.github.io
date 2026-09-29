@@ -23,9 +23,9 @@ OS or browser screenshot of the whole interface.
 
 | Preset | Scene |
 |---|---|
-| `single-sie.yaml` | One SIE lens (z=0.5) + Gaussian source (z=1.5). UI overview, source profiles. |
-| `compound-lens.yaml` | Main SIE + off-centre companion SIE + external shear (z=0.5) + source (z=1.5). Quantity maps, palettes, critical curves. |
-| `two-plane.yaml` | SIE at z=0.4 and z=0.8 + source at z=1.6. Multiplane figure. |
+| `point_source.yaml` | One NIE lens (z=0.5) + point source (z=1.5). UI overview, source profiles. |
+| `uniform_source.yaml` | Main NIE + off-centre companion SIE (z=0.5) + uniform disc source (z=1.5). Quantity maps, palettes, critical curves. |
+| `zigzag.yaml` | Lens planes at z=0.18 and z=1.89 + point source at z=2.38. Multiplane figure. |
 | `fermat-demo.yaml` | SIE (z=0.5) + uniform circle source (z=1.5), source pinned for Fermat. Fermat pair. |
 
 ## Figures
@@ -35,15 +35,15 @@ e.g. `mu-dark.png` + `mu-light.png`.
 
 | Figure | Preset | Viz mode | Overlays / notes | Base filename(s) |
 |---|---|---|---|---|
-| UI overview (top) | `single-sie` | Lensed image (`I`) | OS screenshot of the whole app | `ui` |
-| Multiplane (§3) | `two-plane` | Lensed image (`I`) | none | `multiplane` |
-| Plane timeline (§3, companion) | `two-plane` | n/a | OS/region screenshot of the redshift timeline + plane setup controls (wider than tall) | `plane-timeline` |
-| Quantities gallery (§4) | `compound-lens` | `K`, `G`, `M` in turn | one PNG per mode | `kappa`, `gamma`, `mu` |
-| Colormap palettes (§4) | `compound-lens` | Magnification (`M`) | Color Map section: set Colormap to Default, Viridis, Turbo | `cmap-default`, `cmap-viridis`, `cmap-turbo` |
+| UI overview (top) | `point_source` | Lensed image (`I`) | OS screenshot of the whole app | `ui` |
+| Multiplane (§3) | `zigzag` | Lensed image (`I`) | none | `multiplane` |
+| Plane timeline (§3, companion) | `zigzag` | n/a | OS/region screenshot of the redshift timeline + plane setup controls (wider than tall) | `plane-timeline` |
+| Quantities gallery (§4) | `uniform_source` | `K`, `G`, `M` in turn | one PNG per mode | `kappa`, `gamma`, `mu` |
+| Colormap palettes (§4) | `uniform_source` | Magnification (`M`) | Color Map section: set Colormap to Default, Viridis, Turbo | `cmap-default`, `cmap-viridis`, `cmap-turbo` |
 | Fermat surface (§4, left) | `fermat-demo` | Fermat (`T`) | markers I/II/III shown automatically | `fermat` |
 | Fermat images (§4, right) | `fermat-demo` | Lensed image (`I`) | same scene; the uniform circle source lenses into images at the marker positions | `fermat-images` |
-| Critical curves (§7) | `compound-lens` | Lensed image (`I`) | press `C` to show critical curves + caustics | `crit` |
-| Source types (§6) | `single-sie` | Lensed image (`I`) | swap the source model: Point source, Gaussian, Pasted image (for the last, select the Pasted image model and Ctrl+V an image) | `src-pointsource`, `src-gaussian`, `src-pasted` |
+| Critical curves (§7) | `uniform_source` | Lensed image (`I`) | press `C` to show critical curves + caustics | `crit` |
+| Source types (§6) | `point_source` | Lensed image (`I`) | swap the source model: Point source, Gaussian, Pasted image (for the last, select the Pasted image model and Ctrl+V an image) | `src-pointsource`, `src-gaussian`, `src-pasted` |
 
 The Fermat pair is meant to be read together: keep the same field of view for both so the markers on
 the left line up with the lensed images on the right.

@@ -1,4 +1,4 @@
-fov: 6
+fov: 4.15881430341121
 zMax: 3
 vizMode: 0
 vizScale0: 1 0.5 0 1 0
@@ -6,10 +6,10 @@ vizScale1: 0 0.5 0 2 0
 vizScale2: 0 0.5 0 0.5 0
 vizScale3: 4 0.5 1 30 0
 vizScale5: 0 0.5 0 2 0
-showCritCurves: false
+showCritCurves: true
 showCaustics: true
 curveTypes: true
-curveTypeShow: tangential
+curveTypeShow: both
 showStretch: false
 showMarkers: true
 showLegend: true
@@ -18,17 +18,17 @@ showColorbar: true
 showScaleBar: true
 showRuler: false
 critGridN: 512
-psGridN: 150
-renderScale: 1x
+psGridN: 300
+renderScale: auto
 critZs: null
 contourSpacing: 1
 contourScale: linear
 H0: 70
 Omega_m: 0.3
-showTimeDelays: false
+showTimeDelays: true
 lineArt: false
-lineArtPalette: default
-lineArtColors: #0d1117 #93c5fd #93c5fd #93c5fd #fbbf24 #93c5fd #7bbfcc #fbbf24 #b09ac8
+lineArtPalette: mint
+lineArtColors: #ffffff #22c9ad #0e8f79 #141414 #8a9199 #0e8f79 #4a7fc8 #f59e0b #9b7dd4
 lineArtFill: true
 lineArtFillAlpha: 0.9
 lineArtSmooth: true
@@ -47,10 +47,10 @@ instrPixel: 0.05
 instrPsfFwhm: 0.1
 instrPsf: false
 instrHidden: false
-fermatUseSourcePos: true
-fermatBetaX: -0.00502
-fermatBetaY: 0.14454
-fermatSrcPlaneZ: 2.0000
+fermatUseSourcePos: false
+fermatBetaX: 0.130641
+fermatBetaY: 0.113207
+fermatSrcPlaneZ: 1.5000
 planes:
   - z: 0.500
     objects:
@@ -59,34 +59,21 @@ planes:
         cx: 0
         cy: 0
         hidden: false
-        showShape: true
+        showShape: false
         params:
-          b: 2.93765
-          q: 0.35
-          phi: 0.029
-          rc: 0.026265
-  - z: 0.500
-    objects:
-      - type: lens
-        model: nie
-        cx: 0.00129
-        cy: 0.00213
-        hidden: false
-        showShape: true
-        params:
-          b: 2.910717
-          q: 0.65
-          phi: 1.6
-          rc: 0.017206
-  - z: 2.000
+          b: 3.10456
+          q: 0.75
+          phi: 0.5
+          rc: 0.2
+  - z: 1.500
     objects:
       - type: source
         model: pointsource
-        cx: -0.00502
-        cy: 0.14454
+        cx: 0.13064
+        cy: 0.11321
         hidden: false
         showShape: false
         params:
-          sigma: 0.063246
+          sigma: 0.05
           amplitude: 1
-          color: '#e8fff1'
+          color: '#ffffff'
