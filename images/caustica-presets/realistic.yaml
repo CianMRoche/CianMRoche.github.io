@@ -8,8 +8,12 @@ vizScale3: 4 0.5 1 30 0
 vizScale5: 0 0.5 0 2 0
 showCritCurves: false
 showCaustics: false
+curveTypes: true
+curveTypeShow: both
+showStretch: false
 showMarkers: false
 showLegend: true
+legendBg: false
 showColorbar: true
 showScaleBar: true
 showRuler: false
@@ -44,8 +48,8 @@ instrPsfFwhm: 0.1
 instrPsf: true
 instrHidden: false
 fermatUseSourcePos: false
-fermatBetaX: -0.153993
-fermatBetaY: 0.225173
+fermatBetaX: -0.23
+fermatBetaY: 0.23
 fermatSrcPlaneZ: 2.6700
 planes:
   - z: 0.500
@@ -68,16 +72,16 @@ planes:
   - z: 0.500
     objects:
       - type: lens
-        model: epl
+        model: nie
         cx: -0.1
         cy: 0.21
         hidden: false
         showShape: false
         params:
           b: 1.887991
-          q: 0.75
-          phi: 1.05
-          gamma: 2.15
+          q: 0.8
+          phi: 1.15
+          rc: 0.050576
   - z: 2.670
     objects:
       - type: source
@@ -89,9 +93,9 @@ planes:
         image: 'demo_spiral.jpg'
         params:
           sigma: 0.126597
-          amplitude: 0.5
-          contrast: 2.4
-          saturation: 1.45
+          amplitude: 0.6
+          contrast: 2.3
+          saturation: 1.55
           angSize: 9.259638
           edgeBlend: 1
           stretch: false
