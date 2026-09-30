@@ -4820,6 +4820,7 @@ function renderExportPanel() {
             <input type="number" id="sl-prog-duration" min="0.5" max="60" step="0.5" value="${recState.progDuration}"
                    class="sl-prog-dur-input">
             <span class="sl-muted-note">s</span>
+            <label class="sl-prog-loop" title="Play the motion forward, then back in reverse, so the recording loops with no jump. Doubles the length."><input type="checkbox" id="sl-prog-loop" ${recState.progLoop?'checked':''}> Loop</label>
           </div>
           <div class="sl-capture-row" style="margin-top:8px">
             <button class="sl-capture-btn" id="sl-prog-record"
@@ -4880,6 +4881,7 @@ function renderExportPanel() {
   document.getElementById('sl-prog-add')?.addEventListener('click', addToProgram);
   document.getElementById('sl-prog-clear-all')?.addEventListener('click', () => { recState.progObjects = []; renderSidebar(); });
   document.getElementById('sl-prog-duration')?.addEventListener('change', e => { recState.progDuration = parseFloat(e.target.value) || 3; });
+  document.getElementById('sl-prog-loop')?.addEventListener('change', e => { recState.progLoop = e.target.checked; });
   document.getElementById('sl-prog-record')?.addEventListener('click', startProgrammaticRecording);
   document.getElementById('sl-prog-list')?.querySelectorAll('.sl-prog-remove').forEach(btn => {
     btn.addEventListener('click', () => removeFromProgram(btn.dataset.id));
@@ -6736,7 +6738,11 @@ function startProgrammaticRecording() {
   if (recState.active || recState.encoding || recState.progObjects.length === 0) return;
 
   const fps          = recState.fps;
-  const totalFrames  = Math.max(2, Math.round(recState.progDuration * fps));
+  const fwdFrames    = Math.max(2, Math.round(recState.progDuration * fps));
+  // Loop: after the forward pass (t = 0 … 1) play frames N−2 … 1 back down, so the
+  // sequence wraps onto frame 0 without repeating either endpoint.
+  const loop         = recState.progLoop;
+  const totalFrames  = loop ? 2 * fwdFrames - 2 : fwdFrames;
   const frameDelayMs = 1000 / fps;
 
   // Build per-object animation data: resolve start positions now.
@@ -6772,7 +6778,8 @@ function startProgrammaticRecording() {
       invalidateDistances(); redraw();
       return;
     }
-    const t = totalFrames === 1 ? 1 : frame / (totalFrames - 1);
+    const k = frame < fwdFrames ? frame : totalFrames - frame;   // ping-pong index
+    const t = k / (fwdFrames - 1);
     for (const a of animations) {
       a.obj.cx = a.startCx + (a.endCx - a.startCx) * t;
       a.obj.cy = a.startCy + (a.endCy - a.startCy) * t;
@@ -6815,13 +6822,22 @@ function startProgrammaticRecording() {
       // GIF: go as fast as possible; WebM: pace to real time.
       setTimeout(doFrame, recState.useGif ? 0 : frameDelayMs);
     } else {
-      // All frames done: finalize.
+      // All frames done: finalize. A loop ends one frame short of the start, so
+      // put the objects back exactly where they began.
+      if (loop) {
+        for (const a of animations) {
+          a.obj.cx = a.startCx; a.obj.cy = a.startCy;
+          const _ap = hybridPartner(a.plane, a.obj);
+          if (_ap) { _ap.cx = a.obj.cx; _ap.cy = a.obj.cy; }
+        }
+        invalidateDistances(); redraw();
+      }
       recState.active = false;
       clearTimeout(recState.autoStopTimer);
       recState.autoStopTimer = null;
       if (recState.useGif && recState.gifObj) {
         beginExport('Encoding GIF');
-        recState.gifObj.render();
+        _renderGif(recState.gifObj);
       } else if (!recState.useGif && recState.recorder) {
         beginExport('Saving WebM');
         recState.recorder.stop();
@@ -6833,7 +6849,7 @@ function startProgrammaticRecording() {
 
   if (recState.useGif) {
     const _run = () => {
-      const gif = new GIF({ workers: 2, quality: 10, workerScript: 'gif.worker.js',
+      const gif = new GIF({ workers: 2, quality: GIF_QUALITY, workerScript: 'gif.worker.js',
                             width: lc.width, height: lc.height });
       recState.gifObj = gif;
       gif.on('progress', p => setExportProgress(p));
@@ -6884,6 +6900,7 @@ const recState = {
   // Committed keyframes that will animate simultaneously
   progObjects:    [],    // [{ objId, planeId, initialPos:{cx,cy}, finalPos:{cx,cy}, label }]
   progDuration:   3.0,
+  progLoop:       false,  // ping-pong: forward, then reversed, for a seamless loop
   // "Background" toggle beside Save SVG: whether the exported SVG carries an
   // opaque palette-colored backing rect, or leaves the canvas transparent so the
   // art can be dropped onto another background (as the homepage hero SVGs are).
@@ -6971,7 +6988,7 @@ function stopRecording() {
   // clear. beginExport() refreshes the indicator; otherwise do it here.
   if (recState.useGif && recState.gifObj) {
     beginExport('Encoding GIF');
-    recState.gifObj.render();
+    _renderGif(recState.gifObj);
   } else if (!recState.useGif && recState.recorder) {
     beginExport('Saving WebM');
     recState.recorder.stop();
@@ -7050,11 +7067,108 @@ function _startGifRecording(fps, liveCanvas) {
   }
 }
 
+// ── GIF palette ──────────────────────────────────────────────────────────────
+// Left to itself gif.js builds a fresh 256-colour palette for every frame, so a
+// small flat feature (a legend icon, a marker) lands on a slightly different
+// colour each frame and flickers. Instead, _renderGif() hands it ONE palette for
+// the whole recording: exact slots for the fixed interface colours, plus a
+// median-cut reduction of pixels sampled across all the frames. GIF_QUALITY is
+// only the per-frame NeuQuant sampling used if no shared palette could be built.
+const GIF_QUALITY = 1;
+
+// The colours the overlay draws flat, for the current theme and view: object
+// markers, curve colours, parity fills, source colours, annotation ink, line-art
+// roles. Each gets its own palette slot so it survives the reduction exactly.
+function _gifReservedColors() {
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const hexes = ['#000000', '#ffffff', annotInk(),
+    ...['lens', 'source', 'hybrid', 'empty'].map(typeColorHex),
+    '#f871c4', '#86efac'];                                   // CRIT_COLOR / CAUS_COLOR, opaque
+  if (state.vizMode === 7) hexes.push(...Object.values(PARITY_COLORS[dark ? 'dark' : 'light']));
+  if (state.vizMode === 6) hexes.push('#FF6B35', '#CC44FF', '#FFE600', '#1144DD');
+  if (state.lineArt) hexes.push(...Object.values(lineArtPalette()).filter(v => typeof v === 'string' && v.startsWith('#')));
+  for (const pl of state.planes) for (const o of pl.objects)
+    if (o.type === 'source' && o.model === 'pointsource' && o.params.color)
+      hexes.push(dark ? o.params.color : invertHexColor(o.params.color));
+  const seen = new Set(), out = [];
+  for (const hx of hexes) {
+    const m = /^#([0-9a-fA-F]{6})$/.exec(hx ?? '');
+    if (!m || seen.has(m[1].toLowerCase())) continue;
+    seen.add(m[1].toLowerCase());
+    const n = parseInt(m[1], 16);
+    out.push([(n >> 16) & 255, (n >> 8) & 255, n & 255]);
+  }
+  return out.slice(0, 64);
+}
+
+// One flat [r,g,b, …] palette (≤ 256 entries) for a list of RGBA frames: the reserved
+// colours, then median cut over up to ~300k pixels sampled evenly across frames.
+// Pixels already within a few levels of a reserved colour are left out of the cut,
+// so the free slots go to the rest of the image.
+function _buildGifPalette(frames, reserved) {
+  const nFree = 256 - reserved.length;
+  const pickN = Math.min(frames.length, 32);
+  const perFrame = Math.ceil(300000 / pickN);
+  const samples = [];
+  for (let f = 0; f < pickN; f++) {
+    const d = frames[Math.floor(f * frames.length / pickN)].data;
+    const nPix = d.length / 4;
+    const stride = Math.max(1, Math.floor(nPix / perFrame));
+    for (let p = 0; p < nPix; p += stride) {
+      const r = d[4*p], g = d[4*p+1], b = d[4*p+2];
+      let near = false;
+      for (const c of reserved) {
+        const dr = r - c[0], dg = g - c[1], db = b - c[2];
+        if (dr*dr + dg*dg + db*db < 12) { near = true; break; }
+      }
+      if (!near) samples.push((r << 16) | (g << 8) | b);
+    }
+  }
+  const ch = (v, k) => (v >> (16 - 8 * k)) & 255;
+  const stats = arr => {
+    const lo = [255, 255, 255], hi = [0, 0, 0];
+    for (const v of arr) for (let k = 0; k < 3; k++) { const c = ch(v, k); if (c < lo[k]) lo[k] = c; if (c > hi[k]) hi[k] = c; }
+    const rng = hi.map((h, k) => h - lo[k]);
+    const axis = rng.indexOf(Math.max(...rng));
+    return { arr, axis, score: rng[axis] * arr.length };
+  };
+  const boxes = samples.length ? [stats(samples)] : [];
+  while (boxes.length < nFree) {
+    let bi = -1;
+    for (let i = 0; i < boxes.length; i++) if (boxes[i].score > 0 && (bi < 0 || boxes[i].score > boxes[bi].score)) bi = i;
+    if (bi < 0) break;                                   // every box is a single colour
+    const { arr, axis } = boxes[bi];
+    arr.sort((a, b) => ch(a, axis) - ch(b, axis));
+    const mid = arr.length >> 1;
+    boxes.splice(bi, 1, stats(arr.slice(0, mid)), stats(arr.slice(mid)));
+  }
+  const pal = [];
+  for (const c of reserved) pal.push(c[0], c[1], c[2]);
+  for (const { arr } of boxes) {
+    let r = 0, g = 0, b = 0;
+    for (const v of arr) { r += ch(v, 0); g += ch(v, 1); b += ch(v, 2); }
+    pal.push(Math.round(r / arr.length), Math.round(g / arr.length), Math.round(b / arr.length));
+  }
+  return pal;
+}
+
+// Start the gif.js encode with a shared palette. Deferred a tick so the
+// "Encoding GIF" notice paints before the (synchronous) palette build.
+function _renderGif(gif) {
+  setTimeout(() => {
+    try {
+      if (gif.frames.length && gif.frames.every(f => f.data))
+        gif.setOption('globalPalette', _buildGifPalette(gif.frames, _gifReservedColors()));
+    } catch (e) { console.warn('Shared GIF palette failed; using per-frame palettes', e); }
+    gif.render();
+  }, 30);
+}
+
 function _initGifEncoder(fps, liveCanvas) {
   /* global GIF */
   const gif = new GIF({
     workers: 2,
-    quality: 10,
+    quality: GIF_QUALITY,
     workerScript: 'gif.worker.js',   // same-origin: no CSP issues
   });
   recState.gifObj = gif;

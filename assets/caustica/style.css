@@ -1000,6 +1000,14 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   gap: 5px;
   font-size: 12px;
 }
+.sl-prog-loop {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 12px;
+  color: var(--fg-soft);
+  cursor: pointer;
+}
 .sl-rec-prog-key {
   color: var(--muted);
   flex-shrink: 0;

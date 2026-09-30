@@ -782,7 +782,7 @@ Two output formats are offered, selected by the **Format** control:
 | Format | Encoder | Notes |
 |---|---|---|
 | WebM | Browser-native `MediaRecorder` | Fast and lightweight. During a programmatic animation, critical curves are omitted so the real-time encoder keeps accurate frame timing. |
-| GIF | Vendored `gif.js`, loaded on demand | Auto-looping and universally shareable, but slower to encode and limited to 256 colors. Programmatic animations include critical curves at full resolution. |
+| GIF | Vendored `gif.js`, loaded on demand | Auto-looping and universally shareable, but slower to encode and limited to 256 colors. All frames share one palette: exact entries for the fixed interface colours (markers, curves, parity fills, source and annotation colours) plus a median-cut reduction of pixels sampled across the whole recording, so colours do not flicker between frames. Programmatic animations include critical curves at full resolution. |
 
 The **Frame rate** control offers 5, 10, 15, 24, or 30 fps.
 
@@ -798,7 +798,7 @@ For smooth, reproducible motion without hand-dragging, use the **Programmatic** 
 
 1. Select an object, place it at its starting point, and click **Set** beside **Initial**; move it to its ending point and click **Set** beside **Final**.
 2. Click **Add to program**. Repeat for as many objects as you like.
-3. Set a **Duration** (0.5 to 60 s) and click **Record program**.
+3. Set a **Duration** (0.5 to 60 s) and click **Record program**. With **Loop** on, the motion plays forward and then back in reverse, so a looping GIF has no jump from the last frame to the first. This doubles the recording length, and the objects are returned to their initial positions afterwards.
 
 Every listed object is interpolated linearly and **simultaneously** from its initial to its final position over the duration, rendered frame by frame at the chosen frame rate (output `caustica-prog.webm` or `caustica-prog.gif`). Because the positions are computed rather than dragged, the animation is deterministic and free of the jitter of a hand-held drag.
 
@@ -890,7 +890,7 @@ The layout is a CSS grid: the stage (which letterboxes the square image using co
 
 ### `gif.js` + `gif.worker.js`
 
-A vendored local copy of the gif.js library.
+A vendored local copy of the gif.js library. `gif.worker.js` carries one local patch: `findClosestRGB` memoises its lookups, since with the shared palette from `_renderGif()` in `main.js` it would otherwise scan all 256 entries for every pixel.
 Loaded lazily (only when GIF recording is requested) via a dynamic `<script>` tag, avoiding cross-origin Web Worker restrictions that would arise from a CDN-hosted copy.
 
 ## References
