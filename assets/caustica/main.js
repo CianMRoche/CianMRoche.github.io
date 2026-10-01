@@ -6,6 +6,7 @@ import { precomputeDistances,
          computeDiscImageOutlines,
          traceSourceGrid,
          chainSegments,
+         chainCurves,
          smoothPolylines,
          angDiamDist,
          angDiamDistBetween,
@@ -385,6 +386,8 @@ const CONFIG_DEFAULTS = {
   showColorbar:       true,
   showRuler:          false,  // ruler tool + its measurement lines (off by default; View toggle or the L key enables it)
   critGridN:          512,
+  fovBuffer:          5,      // arcsec: critical curves are sampled over max(1.3 × FOV, this), so they
+                              // aren't cut off when zoomed in on the caustics (Quality & performance)
   psGridN:            300,    // point-source grid: sample points across the field
   renderScale:        'auto', // GL canvas DPR mode: 'auto' (cap 2×) | '1x' | 'native'
   showScaleBar:       true,   // dynamic angular scale bar at the bottom of the image
@@ -392,7 +395,7 @@ const CONFIG_DEFAULTS = {
   fermatUseSourcePos: false,  // when true, use lastFermatSource for Fermat β_s and source plane
   contourSpacing:     1.0,    // Fermat contour spacing multiplier (interval = 0.002·fov²·this)
   contourScale:       0,      // Fermat contour scale: 0=linear, 1=asinh (compress steep skirt)
-  imageNumberSpacing: 34,     // image-number grid spacing (screen px); a point sits on the centre
+  imageNumberSpacing: 39,     // image-number grid spacing (screen px); a point sits on the centre
   imageNumberSize:    14,     // image-number font size (screen px)
   H0:                 70,     // Hubble constant (km/s/Mpc); flat ΛCDM
   Omega_m:            0.3,    // matter density; Omega_L = 1 − Omega_m
@@ -430,6 +433,7 @@ const CONFIG_DEFAULTS = {
 // the config loader so a hand-edited file can't push them out of bounds.
 const BG_FITS       = ['cover', 'contain', 'stretch', 'tile'];
 const CURVE_TYPE_SHOWS = ['both', 'tangential', 'radial'];
+const FOV_BUFFER_MAX   = 60;   // arcsec, for the Quality & performance FOV buffer
 // Ranges (screen px) for the image-number controls, shared by the View tab and the loader.
 const IMAGE_NUMBER_SPACING = [12, 120];
 const IMAGE_NUMBER_SIZE    = [6, 40];
@@ -808,15 +812,15 @@ let _imageNumberCache = { key: '', counts: null };
 // view; row 0 of the result is the top row (j = K).
 function imageNumberCounts(d, K) {
   const zs  = effectiveCritZs();
-  const key = [_sceneSig(), state.fov, zs, state.critGridN, state.psGridN, d, K, state.H0, state.Omega_m].join('|');
+  const key = [_sceneSig(), state.fov, zs, state.critGridN, state.fovBuffer, state.psGridN, d, K, state.H0, state.Omega_m].join('|');
   if (_imageNumberCache.key === key) return _imageNumberCache.counts;
 
-  // Images of a source in view lie within one deflection of the view, and so do the
-  // critical curves of every caustic crossing it. Size that window from the largest
-  // deflection on a ring just outside the view (with a margin), and use it both for
-  // the critical curves, so every caustic in view closes into a loop even when the
-  // view is zoomed inside the Einstein ring, and for the solver's anchor search.
-  const t = planesForZs(state.planes, state.dist, zs);
+  // The caustics are the overlay's (viewCritCurves). The corner solves need a search
+  // window wider than the view: a source near the edge has an outer image about one
+  // deflection further out. Size it from the largest deflection on a ring just
+  // outside the view, with a margin.
+  const res = viewCritCurves();
+  const t   = planesForZs(state.planes, state.dist, zs);
   let aMax = 0;
   for (let i = 0; i < 64; i++) {
     const a = 2 * Math.PI * i / 64, x = state.fov * Math.cos(a), y = state.fov * Math.sin(a);
@@ -824,13 +828,17 @@ function imageNumberCounts(d, K) {
     aMax = Math.max(aMax, Math.hypot(x - bx, y - by));
   }
   const half = state.fov / Math.SQRT2 + 1.2 * aMax;
-  const res  = computeCritCurvesForZs(state.planes, state.dist, zs, Math.max(state.fov * 1.3, 2 * half), state.critGridN);
   // Closed loops only, each with its bounding box: a point outside the box has
   // winding 0 about that loop, which skips most of the grid.
-  const loops = chainSegments(res.causticSegments).filter(p =>
-    p.length > 3 && Math.hypot(p[0][0] - p[p.length - 1][0], p[0][1] - p[p.length - 1][1]) < 1e-6)
+  // Loops are chained along their critical curves (chainCurves), which stays reliable
+  // near cusps. A caustic smaller than about a pixel (a point mass's Einstein-ring
+  // caustic shrinks to a point) is left out.
+  const tiny = state.fov / 1000;
+  const loops = chainCurves(res.critSegments, res.causticSegments, res.step / 20)
+    .filter(c => c.closed).map(c => c.caus)
     .map(p => ({ p, x0: Math.min(...p.map(q => q[0])), x1: Math.max(...p.map(q => q[0])),
-                    y0: Math.min(...p.map(q => q[1])), y1: Math.max(...p.map(q => q[1])) }));
+                    y0: Math.min(...p.map(q => q[1])), y1: Math.max(...p.map(q => q[1])) }))
+    .filter(l => l.x1 - l.x0 > tiny || l.y1 - l.y0 > tiny);
   const k = (x, y) => {
     let total = 0;
     for (const { p, x0: bx0, x1: bx1, y0: by0, y1: by1 } of loops) {
@@ -847,8 +855,8 @@ function imageNumberCounts(d, K) {
     return total;
   };
 
-  // Anchor: n₀ = n − 2k at the four corners, by the point-source solver over the
-  // same wide window, which holds their outer images.
+  // Anchor: n₀ = n − 2k at the four corners, by the point-source solver over
+  // that wide window.
   const grid = imageSearchGrid(t.planes, t.dist, t.idx, half);
   const c = 0.45 * state.fov, votes = new Map();
   for (const [x, y] of [[-c, -c], [c, -c], [-c, c], [c, c]]) {
@@ -861,7 +869,7 @@ function imageNumberCounts(d, K) {
   for (let r = 0; r < m; r++)
     for (let q = 0; q < m; q++)
       counts[r * m + q] = Math.max(0, Math.min(255, n0 + 2 * k((q - K) * d, (K - r) * d)));
-  _imageNumberCache = { key, counts, critFov: Math.max(state.fov * 1.3, 2 * half) };
+  _imageNumberCache = { key, counts };
   return counts;
 }
 
@@ -913,7 +921,7 @@ function configToYaml() {
   y += `showMarkers: ${state.showMarkers}\nshowLegend: ${state.showLegend}\nlegendBg: ${state.legendBg}\nshowColorbar: ${state.showColorbar}\n`;
   y += `showScaleBar: ${state.showScaleBar}\n`;
   y += `showRuler: ${state.showRuler}\n`;
-  y += `critGridN: ${state.critGridN}\npsGridN: ${state.psGridN}\n`;
+  y += `critGridN: ${state.critGridN}\npsGridN: ${state.psGridN}\nfovBuffer: ${state.fovBuffer}\n`;
   y += `renderScale: ${state.renderScale}\n`;
   y += `critZs: ${state.critZs === null ? 'null' : state.critZs}\n`;
   y += `contourSpacing: ${state.contourSpacing}\n`;
@@ -1197,6 +1205,7 @@ function loadConfigFromYaml(yaml) {
     state.fermatUseSourcePos = _bool(cfg.fermatUseSourcePos, CONFIG_DEFAULTS.fermatUseSourcePos);
     // Numeric settings, validated against their allowed choices where applicable.
     state.critGridN     = [256, 512, 1024, 2048].includes(cfg.critGridN) ? cfg.critGridN : CONFIG_DEFAULTS.critGridN;
+    state.fovBuffer     = _clampNum(cfg.fovBuffer, 0, FOV_BUFFER_MAX, CONFIG_DEFAULTS.fovBuffer);
     state.renderScale   = ['auto', '1x', 'native'].includes(cfg.renderScale) ? cfg.renderScale : CONFIG_DEFAULTS.renderScale;
     if (PS_GRID_OPTIONS.includes(cfg.psGridN)) {
       state.psGridN = cfg.psGridN;
@@ -2555,6 +2564,7 @@ function renderQualityPanel() {
       ${infoSection('sl-perf-info', `
         <b>Critical curves</b>: how finely the field is sampled when tracing the curves and caustics. Higher is smoother, but slower to redraw.
         <a href="/caustica-documentation/#9-critical-curves-and-caustics" target="_blank" rel="noopener">Details</a><br><br>
+        <b>FOV buffer</b>: the smallest field the curves are traced over. Zoomed in on caustics, their critical curves can lie outside the view; this keeps them in range. Larger is coarser when zoomed in; 0 turns it off.<br><br>
         <b>Point source</b>: how finely the field is searched for point-source images. Finer catches faint or closely spaced ones.
         <a href="/caustica-documentation/#point-source" target="_blank" rel="noopener">Details</a><br><br>
         <b>Render scale</b>: how sharp the plot looks, and how big a saved PNG comes out. Auto suits almost everything; pick Native for a print figure, 1× to keep a heavy scene responsive.
@@ -2569,6 +2579,11 @@ function renderQualityPanel() {
         <option value="1024" ${state.critGridN===1024 ?'selected':''}>High (1024)</option>
         <option value="2048" ${state.critGridN===2048 ?'selected':''}>Very high (2048)</option>
       </select>
+    </div>
+    <div class="sl-global-input">
+      <label>FOV buffer</label>
+      <input type="number" id="sl-fov-buffer" min="0" max="${FOV_BUFFER_MAX}" step="0.5" value="${state.fovBuffer}">
+      <span class="sl-unit">″</span>
     </div>
     <div class="sl-global-input">
       <label>Point source</label>
@@ -2589,6 +2604,12 @@ function renderQualityPanel() {
     </div>
     </div>`;
   document.getElementById('sl-crit-res')?.addEventListener('change', e => { state.critGridN = parseInt(e.target.value, 10); redraw(); });
+  document.getElementById('sl-fov-buffer')?.addEventListener('change', e => {
+    const v = parseFloat(e.target.value);
+    state.fovBuffer = isFinite(v) ? Math.min(FOV_BUFFER_MAX, Math.max(0, v)) : CONFIG_DEFAULTS.fovBuffer;
+    e.target.value = state.fovBuffer;
+    redraw();
+  });
   document.getElementById('sl-ps-grid')?.addEventListener('change',  e => { state.psGridN = parseInt(e.target.value, 10); redraw(); });
   document.getElementById('sl-render-scale')?.addEventListener('change', e => { applyRenderScale(e.target.value); });
 
@@ -5422,8 +5443,8 @@ function planesForZs(planes, dist, zs) {
   return { planes: augmented, dist: precomputeDistances(augmented), idx: augmented.indexOf(vp) };
 }
 
-// Memoised over the last few calls: the overlay, the image-number map (which samples
-// a wider field) and the SVG export ask for the same curves, often every frame.
+// Memoised over the last few calls: the overlay, the image-number map and the SVG
+// export ask for the same curves, often every frame.
 const _critMemo = new Map();
 function computeCritCurvesForZs(planes, dist, zs, fovArcsec, gridN) {
   const key = [JSON.stringify(planes.map(p => [p.z, p.objects.map(o => [o.type, o.model, o.cx, o.cy, o.hidden, o.params])])),
@@ -5434,6 +5455,16 @@ function computeCritCurvesForZs(planes, dist, zs, fovArcsec, gridN) {
   _critMemo.set(key, res);
   if (_critMemo.size > 4) _critMemo.delete(_critMemo.keys().next().value);   // oldest first
   return res;
+}
+
+// Critical curves and caustics for the current view. They are sampled over 1.3 × FOV,
+// so rings near the edge are found in full, but never over less than the FOV buffer
+// (Quality & performance): zoomed in on the caustics, their critical curves can lie
+// well outside the view, and the buffer keeps them in range. The grid is the same
+// size either way, so a larger buffer means a coarser grid when zoomed in.
+function viewCritCurves() {
+  const fov = Math.max(state.fov * 1.3, state.fovBuffer);
+  return computeCritCurvesForZs(state.planes, state.dist, effectiveCritZs(), fov, state.critGridN);
 }
 
 // Stretch whiskers on an n×n grid of cell centres across the field. At each point
@@ -6093,15 +6124,9 @@ function drawOverlay() {
   let critSegs = [], causSegs = [];
   const _curveTypesDrawn = new Set();   // 'critT' | 'critR' | 'causT' | 'causR', for the legend
   if (needCurve) {
-    // Sample 30% wider than the display FOV so rings near the edge are found in
-    // full rather than cut off at the grid boundary.  The display filter below
-    // still clips what is actually drawn to the visible image area. The image-
-    // number map samples wider still (see imageNumberCounts), so that its caustics
-    // close even when zoomed in; draw those same caustics there.
-    const samplingFov = (_srcPlaneView && _imageNumberCache.critFov) || state.fov * 1.3;
-    const res = computeCritCurvesForZs(
-      state.planes, state.dist, effectiveCritZs(), samplingFov, state.critGridN
-    );
+    // Sampled wider than the view (viewCritCurves); the display filter below still
+    // clips what is actually drawn to the visible image area.
+    const res = viewCritCurves();
     critSegs = res.critSegments;
     causSegs = res.causticSegments;
     state._lastCurves = { zs: effectiveCritZs(), crit: critSegs, caus: causSegs, radial: res.critRadial };
@@ -6839,7 +6864,7 @@ function buildLineArtSVGString() {
 
   // Critical curves / caustics (chained + smoothed for clean vector paths).
   if ((state.showCritCurves || state.showCaustics) && planes.some(p => p.objects.some(o => o.type === 'lens'))) {
-    const res = computeCritCurvesForZs(planes, state.dist, effectiveCritZs(), samplingFov, state.critGridN);
+    const res = viewCritCurves();
     const _h  = fov / 2;
     const clip = (segs, m) => segs.filter(([[x0,y0],[x1,y1]]) =>
       (Math.abs(x0)<=_h*m && Math.abs(y0)<=_h*m) || (Math.abs(x1)<=_h*m && Math.abs(y1)<=_h*m));

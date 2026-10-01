@@ -265,52 +265,28 @@ export function computeCriticalCurves(planes, dist, sourcePlaneIdx, fovArcsec, g
     }
   }
 
-  // Marching squares on (gridN-1)×(gridN-1) cells.
   const critSegments    = [];
   const causticSegments = [];
   const critRadial      = [];   // per segment: true = radial, false = tangential
+  const out = { critSegments, causticSegments, critRadial };
 
-  for (let iy = 0; iy < gridN - 1; iy++) {
-    for (let ix = 0; ix < gridN - 1; ix++) {
-      const d00 = det[ iy   *gridN + ix  ],  d10 = det[ iy   *gridN + ix+1];
-      const d01 = det[(iy+1)*gridN + ix  ],  d11 = det[(iy+1)*gridN + ix+1];
+  // A cell is crossed when its corner dets are all nonzero (the border and
+  // degenerate nodes stay 0) and not all of one sign.
+  const crossed = (ix, iy) => {
+    const d00 = det[iy*gridN + ix], d10 = det[iy*gridN + ix+1];
+    const d01 = det[(iy+1)*gridN + ix], d11 = det[(iy+1)*gridN + ix+1];
+    if (d00 === 0 || d10 === 0 || d01 === 0 || d11 === 0) return false;
+    return !(Math.sign(d00) === Math.sign(d10) && Math.sign(d10) === Math.sign(d01) && Math.sign(d01) === Math.sign(d11));
+  };
+  const node = (ix, iy) => {
+    const k = iy*gridN + ix;
+    return { x: -half + ix*step, y: -half + iy*step, bx: bx[k], by: by[k], d: det[k], t: tr[k] };
+  };
 
-      // Skip cells with any zero-det corner (border or degenerate).
-      if (d00 === 0 || d10 === 0 || d01 === 0 || d11 === 0) continue;
-
-      const imgPts = [], srcPts = [], trs = [];
-
-      function edgeCrossing(da, db, ix_a, iy_a, ix_b, iy_b) {
-        if (Math.sign(da) === Math.sign(db)) return;
-        const t  = da / (da - db);
-        const x  = -half + (ix_a + (ix_b - ix_a) * t) * step;
-        const y  = -half + (iy_a + (iy_b - iy_a) * t) * step;
-        const sx = bx[iy_a*gridN+ix_a] * (1-t) + bx[iy_b*gridN+ix_b] * t;
-        const sy = by[iy_a*gridN+ix_a] * (1-t) + by[iy_b*gridN+ix_b] * t;
-        imgPts.push([x, y]);
-        srcPts.push([sx, sy]);
-        trs.push(tr[iy_a*gridN+ix_a] * (1-t) + tr[iy_b*gridN+ix_b] * t);
-      }
-
-      edgeCrossing(d00, d10,  ix,   iy,   ix+1, iy  ); // bottom
-      edgeCrossing(d10, d11,  ix+1, iy,   ix+1, iy+1); // right
-      edgeCrossing(d11, d01,  ix+1, iy+1, ix,   iy+1); // top
-      edgeCrossing(d01, d00,  ix,   iy+1, ix,   iy  ); // left
-
-      if (imgPts.length === 2) {
-        critSegments.push([imgPts[0], imgPts[1]]);
-        causticSegments.push([srcPts[0], srcPts[1]]);
-        critRadial.push(trs[0] + trs[1] < 0);
-      } else if (imgPts.length === 4) {
-        // Saddle: two segments connecting pairs 0-1 and 2-3.
-        critSegments.push([imgPts[0], imgPts[1]]);
-        critSegments.push([imgPts[2], imgPts[3]]);
-        causticSegments.push([srcPts[0], srcPts[1]]);
-        causticSegments.push([srcPts[2], srcPts[3]]);
-        critRadial.push(trs[0] + trs[1] < 0, trs[2] + trs[3] < 0);
-      }
-    }
-  }
+  for (let iy = 0; iy < gridN - 1; iy++)
+    for (let ix = 0; ix < gridN - 1; ix++)
+      if (crossed(ix, iy))
+        _marchCell(node(ix, iy), node(ix+1, iy), node(ix+1, iy+1), node(ix, iy+1), out);
 
   // Drop radial loops only a few cells across. A singular centre (point mass, steep
   // EPL) leaves one of about 9 segments at any grid size: a finite-difference artefact,
@@ -324,10 +300,37 @@ export function computeCriticalCurves(planes, dist, sourcePlaneIdx, fovArcsec, g
       causticSegments: causticSegments.filter(keep),
       critRadial:      critRadial.filter(keep),
       causticRadial:   critRadial.filter(keep),
+      step,
     };
   }
   // Caustic segment i is the image of critical segment i, so they share the flag.
-  return { critSegments, causticSegments, critRadial, causticRadial: critRadial };
+  // `step` is the grid spacing, for chaining tolerances.
+  return { critSegments, causticSegments, critRadial, causticRadial: critRadial, step };
+}
+
+// One marching-squares cell: corner nodes { x, y, bx, by, d, t } (θ, β, det A, tr A)
+// in the order (0,0), (1,0), (1,1), (0,1). Pushes its critical segment(s), caustic
+// segment(s) and radial flags onto out. Skips a cell with a zero-det corner.
+function _marchCell(n00, n10, n11, n01, out) {
+  if (n00.d === 0 || n10.d === 0 || n11.d === 0 || n01.d === 0) return;
+  const img = [], src = [], trs = [];
+  const edge = (a, b) => {
+    if (Math.sign(a.d) === Math.sign(b.d)) return;
+    const t = a.d / (a.d - b.d);
+    img.push([a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t]);
+    src.push([a.bx + (b.bx - a.bx) * t, a.by + (b.by - a.by) * t]);
+    trs.push(a.t + (b.t - a.t) * t);
+  };
+  edge(n00, n10);   // bottom
+  edge(n10, n11);   // right
+  edge(n11, n01);   // top
+  edge(n01, n00);   // left
+  for (let k = 0; k + 1 < img.length; k += 2) {   // 2 crossings, or a saddle's 4 as pairs 0-1, 2-3
+    if (img[k][0] === img[k + 1][0] && img[k][1] === img[k + 1][1]) continue;   // both at one corner
+    out.critSegments.push([img[k], img[k + 1]]);
+    out.causticSegments.push([src[k], src[k + 1]]);
+    out.critRadial.push(trs[k] + trs[k + 1] < 0);
+  }
 }
 
 // Indices of radial segments in connected components of fewer than minSegs segments.
@@ -483,6 +486,48 @@ export function chainSegments(segments, tol = 1e-4) {
     polylines.push(poly);
   }
   return polylines;
+}
+
+// Chain critical curves and their caustics together. Caustic segment i is the image
+// of critical segment i, so linking the critical segments, whose points are well
+// spread in the image plane, gives the caustics' topology too; chaining the caustics
+// on their own coordinates mislinks near cusps, where many points crowd together.
+// Returns [{ crit, caus, closed }] polylines (closed ones repeat their first point).
+export function chainCurves(critSegs, causSegs, tol = 1e-4) {
+  const key = (p) => `${Math.round(p[0] / tol)},${Math.round(p[1] / tol)}`;
+  const ends = new Map(), used = new Uint8Array(critSegs.length);
+  critSegs.forEach((sg, i) => {
+    for (const e of [0, 1]) {
+      const k = key(sg[e]);
+      if (!ends.has(k)) ends.set(k, []);
+      ends.get(k).push({ i, e });
+    }
+  });
+  const take = (k) => {
+    for (const ref of ends.get(k) ?? []) if (!used[ref.i]) return ref;
+    return null;
+  };
+  const out = [];
+  for (let i = 0; i < critSegs.length; i++) {
+    if (used[i]) continue;
+    used[i] = 1;
+    const crit = [critSegs[i][0], critSegs[i][1]], caus = [causSegs[i][0], causSegs[i][1]];
+    for (;;) {                                          // forward from the tail
+      const ref = take(key(crit[crit.length - 1]));
+      if (!ref) break;
+      used[ref.i] = 1;
+      crit.push(critSegs[ref.i][1 - ref.e]); caus.push(causSegs[ref.i][1 - ref.e]);
+    }
+    for (;;) {                                          // backward from the head
+      const ref = take(key(crit[0]));
+      if (!ref) break;
+      used[ref.i] = 1;
+      crit.unshift(critSegs[ref.i][1 - ref.e]); caus.unshift(causSegs[ref.i][1 - ref.e]);
+    }
+    const closed = crit.length > 3 && key(crit[0]) === key(crit[crit.length - 1]);
+    out.push({ crit, caus, closed });
+  }
+  return out;
 }
 
 function _turnCos(a, b, c) {
