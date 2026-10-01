@@ -815,19 +815,7 @@ function imageNumberCounts(d, K) {
   const key = [_sceneSig(), state.fov, zs, state.critGridN, state.fovBuffer, state.psGridN, d, K, state.H0, state.Omega_m].join('|');
   if (_imageNumberCache.key === key) return _imageNumberCache.counts;
 
-  // The caustics are the overlay's (viewCritCurves). The corner solves need a search
-  // window wider than the view: a source near the edge has an outer image about one
-  // deflection further out. Size it from the largest deflection on a ring just
-  // outside the view, with a margin.
-  const res = viewCritCurves();
-  const t   = planesForZs(state.planes, state.dist, zs);
-  let aMax = 0;
-  for (let i = 0; i < 64; i++) {
-    const a = 2 * Math.PI * i / 64, x = state.fov * Math.cos(a), y = state.fov * Math.sin(a);
-    const [bx, by] = traceRay(x, y, t.planes, t.dist, t.idx);
-    aMax = Math.max(aMax, Math.hypot(x - bx, y - by));
-  }
-  const half = state.fov / Math.SQRT2 + 1.2 * aMax;
+  const res = viewCritCurves();   // the overlay's caustics
   // Closed loops only, each with its bounding box: a point outside the box has
   // winding 0 about that loop, which skips most of the grid.
   // Loops are chained along their critical curves (chainCurves), which stays reliable
@@ -855,11 +843,37 @@ function imageNumberCounts(d, K) {
     return total;
   };
 
-  // Anchor: n₀ = n − 2k at the four corners, by the point-source solver over
-  // that wide window.
-  const grid = imageSearchGrid(t.planes, t.dist, t.idx, half);
-  const c = 0.45 * state.fov, votes = new Map();
-  for (const [x, y] of [[-c, -c], [c, -c], [-c, c], [c, c]]) {
+  // Anchor n₀ outside every caustic loop, where it is unambiguous. Inside an SIE's
+  // radial caustic (its cut) a source also has a faint central image from the
+  // lens's tiny numerical core, which the solver finds or misses depending on where
+  // its grid points fall, and a miss would shift every count by one. So solve at
+  // four sources just beyond the loops' combined extent (the view corners if there
+  // are no loops, as for a point mass), and take the value most of them give.
+  let anchors;
+  if (loops.length) {
+    const x0 = Math.min(...loops.map(l => l.x0)), x1 = Math.max(...loops.map(l => l.x1));
+    const y0 = Math.min(...loops.map(l => l.y0)), y1 = Math.max(...loops.map(l => l.y1));
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    const m  = 0.1 * Math.max(x1 - x0, y1 - y0, state.fov);
+    anchors = [[x1 + m, cy], [x0 - m, cy], [cx, y1 + m], [cx, y0 - m]];
+  } else {
+    const c = 0.45 * state.fov;
+    anchors = [[-c, -c], [c, -c], [-c, c], [c, c]];
+  }
+  // The solver's search window must hold the anchors' images, which lie up to about
+  // one deflection beyond them: size it from the largest deflection on a ring at the
+  // anchors' distance, with a margin.
+  const t  = planesForZs(state.planes, state.dist, zs);
+  const rA = Math.max(state.fov, ...anchors.map(([x, y]) => Math.hypot(x, y)));
+  let aMax = 0;
+  for (let i = 0; i < 64; i++) {
+    const a = 2 * Math.PI * i / 64, x = rA * Math.cos(a), y = rA * Math.sin(a);
+    const [bx, by] = traceRay(x, y, t.planes, t.dist, t.idx);
+    aMax = Math.max(aMax, Math.hypot(x - bx, y - by));
+  }
+  const grid = imageSearchGrid(t.planes, t.dist, t.idx, rA + 1.2 * aMax);
+  const votes = new Map();
+  for (const [x, y] of anchors) {
     const n0 = solveImages(grid, x, y).length - 2 * k(x, y);
     votes.set(n0, (votes.get(n0) ?? 0) + 1);
   }
