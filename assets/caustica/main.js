@@ -373,7 +373,7 @@ function reportObjectCap() {
 const CONFIG_DEFAULTS = {
   fov:                4.0,
   zMax:               3.0,
-  vizMode:            0,      // 0=surface brightness, 1=κ, 2=γ, 3=|μ|, 4=signed μ, 5=|α|, 6=φ (Fermat), 7=parity
+  vizMode:            0,      // 0=surface brightness, 1=κ, 2=γ, 3=|μ|, 4=signed μ, 5=|α|, 6=φ (Fermat), 7=parity, 8=image number
   showCritCurves:     false,
   showCaustics:       false,
   curveTypes:         true,   // draw radial curves/caustics dotted and label both types in the legend
@@ -392,6 +392,8 @@ const CONFIG_DEFAULTS = {
   fermatUseSourcePos: false,  // when true, use lastFermatSource for Fermat β_s and source plane
   contourSpacing:     1.0,    // Fermat contour spacing multiplier (interval = 0.002·fov²·this)
   contourScale:       0,      // Fermat contour scale: 0=linear, 1=asinh (compress steep skirt)
+  imageNumberSpacing: 34,     // image-number grid spacing (screen px); a point sits on the centre
+  imageNumberSize:    14,     // image-number font size (screen px)
   H0:                 70,     // Hubble constant (km/s/Mpc); flat ΛCDM
   Omega_m:            0.3,    // matter density; Omega_L = 1 − Omega_m
   showTimeDelays:     false,  // annotate point-source images with relative time delays (days)
@@ -428,6 +430,9 @@ const CONFIG_DEFAULTS = {
 // the config loader so a hand-edited file can't push them out of bounds.
 const BG_FITS       = ['cover', 'contain', 'stretch', 'tile'];
 const CURVE_TYPE_SHOWS = ['both', 'tangential', 'radial'];
+// Ranges (screen px) for the image-number controls, shared by the View tab and the loader.
+const IMAGE_NUMBER_SPACING = [12, 120];
+const IMAGE_NUMBER_SIZE    = [6, 40];
 const BG_ZOOM_MIN   = 0.25, BG_ZOOM_MAX = 5;
 const BG_OFF_MAX    = 1;
 const BG_BRIGHT_MAX = 2;
@@ -654,43 +659,51 @@ function findPointSourceImages(srcObj, srcPlane) {
   const sorted = [...state.planes].sort((a, b) => a.z - b.z);
   const tIdx   = sorted.findIndex(p => p.id === srcPlane.id);
   if (tIdx < 0) return [];
+  return solveImages(imageSearchGrid(sorted, state.dist, tIdx), srcObj.cx, srcObj.cy);
+}
 
-  const { cx: scx, cy: scy } = srcObj;
+// Stage 1's grid of β(θ). It does not depend on the source, so a caller solving for
+// many sources (the image-number map) traces it once and reuses it.
+// Grid density is a fixed number of points ACROSS the field, not an absolute
+// arcsec spacing, so the O(N²) cost cannot blow up as the FOV grows to cluster
+// scale. Hard-capped at PS_GRID_MAX as a backstop against pathological configs.
+// (Final image positions come from Newton-Raphson refinement, so they don't
+// shift with grid density — only the completeness of faint-image detection does.)
+// `half` is the half-width of the searched image-plane window; the default covers the
+// view, which is enough for the image dots (images outside it are not drawn).
+function imageSearchGrid(planes, dist, tIdx, half = Math.max(state.fov * 1.1, 3.0) / 2) {
+  const N     = Math.min(Math.max(Math.round(state.psGridN ?? 300), 32), PS_GRID_MAX);
+  const step  = 2 * half / (N - 1);
+  const BX = new Float64Array(N * N), BY = new Float64Array(N * N);
+  for (let iy = 0; iy < N; iy++) {
+    for (let ix = 0; ix < N; ix++) {
+      const [bx, by] = traceRay(-half + ix * step, -half + iy * step, planes, dist, tIdx);
+      BX[iy * N + ix] = bx; BY[iy * N + ix] = by;
+    }
+  }
+  return { planes, dist, tIdx, N, step, half, BX, BY };
+}
+
+// Image positions of a point source at (scx, scy), from a grid made by imageSearchGrid.
+function solveImages(grid, scx, scy) {
+  const { planes, dist, tIdx, N, step, half, BX, BY } = grid;
 
   // F(θ) = β(θ) − source: the function whose zeros are image positions.
   function evalF(x, y) {
-    const [bx, by] = traceRay(x, y, sorted, state.dist, tIdx);
+    const [bx, by] = traceRay(x, y, planes, dist, tIdx);
     return [bx - scx, by - scy];
   }
 
   // ── Stage 1: coarse sign-change grid for starting guesses ──────────────
-  // Grid density is a fixed number of points ACROSS the field, not an absolute
-  // arcsec spacing, so the O(N²) cost cannot blow up as the FOV grows to cluster
-  // scale. Hard-capped at PS_GRID_MAX as a backstop against pathological configs.
-  // (Final image positions come from Newton-Raphson refinement, so they don't
-  // shift with grid density — only the completeness of faint-image detection does.)
-  const RANGE = Math.max(state.fov * 1.1, 3.0);
-  const N     = Math.min(Math.max(Math.round(state.psGridN ?? 300), 32), PS_GRID_MAX);
-  const step  = RANGE / (N - 1);
-  const half  = RANGE / 2;
-
   const Fx = new Float32Array(N * N);
   const Fy = new Float32Array(N * N);
   const D2 = new Float32Array(N * N);
-  const GX = new Float32Array(N * N);
-  const GY = new Float32Array(N * N);
-
-  for (let iy = 0; iy < N; iy++) {
-    for (let ix = 0; ix < N; ix++) {
-      const i = iy * N + ix;
-      GX[i] = -half + ix * step;
-      GY[i] = -half + iy * step;
-      const [fx, fy] = evalF(GX[i], GY[i]);
-      Fx[i] = fx; Fy[i] = fy;
-      D2[i] = fx*fx + fy*fy;
-    }
+  for (let i = 0; i < N * N; i++) {
+    Fx[i] = BX[i] - scx; Fy[i] = BY[i] - scy;
+    D2[i] = Fx[i]*Fx[i] + Fy[i]*Fy[i];
   }
-
+  const gx = i => -half + (i % N) * step;
+  const gy = i => -half + Math.floor(i / N) * step;
   const M   = N - 1;
   const hit = new Uint8Array(M * M);
   for (let iy = 0; iy < M; iy++) {
@@ -729,14 +742,14 @@ function findPointSourceImages(srcObj, srcPlane) {
         label[nc] = comp; stack.push(nc);
       }
     }
-    if (bestI >= 0) starts.push([GX[bestI], GY[bestI]]);
+    if (bestI >= 0) starts.push([gx(bestI), gy(bestI)]);
   }
 
   // ── Stage 2: Newton-Raphson with backtracking line search ──────────────
   const h       = 1e-4;          // fixed finite-difference step (arcsec)
   const maxIter = 60;
   const convTol = 1e-14;         // |F|² convergence (sub-nano-arcsec)
-  const diverge = state.fov * 3;
+  const diverge = Math.max(state.fov * 3, 2 * half);
   const images  = [];
 
   for (const [x0, y0] of starts) {
@@ -771,12 +784,118 @@ function findPointSourceImages(srcObj, srcPlane) {
     }
     if (!ok) continue;
 
-    // Deduplicate: discard if another solution is within 1e-7 arcsec.
-    if (images.some(([ix, iy]) => (ix-x)**2+(iy-y)**2 < 1e-14)) continue;
+    // Deduplicate: discard if another solution is within 1e-5 arcsec. Convergence is
+    // on |F|, so a magnified image's position is only fixed to about |μ|·1e-7″;
+    // a tighter test kept the same image twice. Real images are never this close.
+    if (images.some(([ix, iy]) => (ix-x)**2+(iy-y)**2 < 1e-10)) continue;
     images.push([x, y]);
   }
 
   return images;
+}
+
+// ── Image number map ──────────────────────────────────────────────────────────
+// An n×n grid of source positions over the view, at the reference z_s, each with
+// its number of images. Crossing a caustic (a fold) changes the count by two, so
+// n(β) = n₀ + 2·k(β), where k is how many caustic loops enclose β. k comes from the
+// winding number about each closed loop of the caustics already computed for the
+// overlay (|winding|, so a self-overlapping caustic counts twice where it overlaps).
+// n₀ is not always 1: a point mass has a second image everywhere, from its
+// singularity rather than a caustic. So it is anchored on the point-source solver
+// at the four view corners, taking the value most of them agree on.
+let _imageNumberCache = { key: '', counts: null };
+// The grid points are (i·d, j·d) for i, j = −K…K, so one sits on the centre of the
+// view; row 0 of the result is the top row (j = K).
+function imageNumberCounts(d, K) {
+  const zs  = effectiveCritZs();
+  const key = [_sceneSig(), state.fov, zs, state.critGridN, state.psGridN, d, K, state.H0, state.Omega_m].join('|');
+  if (_imageNumberCache.key === key) return _imageNumberCache.counts;
+
+  // Images of a source in view lie within one deflection of the view, and so do the
+  // critical curves of every caustic crossing it. Size that window from the largest
+  // deflection on a ring just outside the view (with a margin), and use it both for
+  // the critical curves, so every caustic in view closes into a loop even when the
+  // view is zoomed inside the Einstein ring, and for the solver's anchor search.
+  const t = planesForZs(state.planes, state.dist, zs);
+  let aMax = 0;
+  for (let i = 0; i < 64; i++) {
+    const a = 2 * Math.PI * i / 64, x = state.fov * Math.cos(a), y = state.fov * Math.sin(a);
+    const [bx, by] = traceRay(x, y, t.planes, t.dist, t.idx);
+    aMax = Math.max(aMax, Math.hypot(x - bx, y - by));
+  }
+  const half = state.fov / Math.SQRT2 + 1.2 * aMax;
+  const res  = computeCritCurvesForZs(state.planes, state.dist, zs, Math.max(state.fov * 1.3, 2 * half), state.critGridN);
+  // Closed loops only, each with its bounding box: a point outside the box has
+  // winding 0 about that loop, which skips most of the grid.
+  const loops = chainSegments(res.causticSegments).filter(p =>
+    p.length > 3 && Math.hypot(p[0][0] - p[p.length - 1][0], p[0][1] - p[p.length - 1][1]) < 1e-6)
+    .map(p => ({ p, x0: Math.min(...p.map(q => q[0])), x1: Math.max(...p.map(q => q[0])),
+                    y0: Math.min(...p.map(q => q[1])), y1: Math.max(...p.map(q => q[1])) }));
+  const k = (x, y) => {
+    let total = 0;
+    for (const { p, x0: bx0, x1: bx1, y0: by0, y1: by1 } of loops) {
+      if (x < bx0 || x > bx1 || y < by0 || y > by1) continue;
+      let w = 0;
+      for (let i = 0; i + 1 < p.length; i++) {
+        const [x0, y0] = p[i], [x1, y1] = p[i + 1];
+        const side = (x1 - x0) * (y - y0) - (x - x0) * (y1 - y0);
+        if (y0 <= y) { if (y1 > y && side > 0) w++; }
+        else if (y1 <= y && side < 0) w--;
+      }
+      total += Math.abs(w);
+    }
+    return total;
+  };
+
+  // Anchor: n₀ = n − 2k at the four corners, by the point-source solver over the
+  // same wide window, which holds their outer images.
+  const grid = imageSearchGrid(t.planes, t.dist, t.idx, half);
+  const c = 0.45 * state.fov, votes = new Map();
+  for (const [x, y] of [[-c, -c], [c, -c], [-c, c], [c, c]]) {
+    const n0 = solveImages(grid, x, y).length - 2 * k(x, y);
+    votes.set(n0, (votes.get(n0) ?? 0) + 1);
+  }
+  const n0 = [...votes.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0];
+
+  const m = 2 * K + 1, counts = new Uint8Array(m * m);
+  for (let r = 0; r < m; r++)
+    for (let q = 0; q < m; q++)
+      counts[r * m + q] = Math.max(0, Math.min(255, n0 + 2 * k((q - K) * d, (K - r) * d)));
+  _imageNumberCache = { key, counts, critFov: Math.max(state.fov * 1.3, 2 * half) };
+  return counts;
+}
+
+// Text colour per image count (index = count, the last entry for 7 or more), on the
+// view's plain black (dark) or white (light) field. One image is grey, so single-
+// image regions recede; each higher count has its own hue, checked with the dataviz
+// palette tests: every pair of counts one or two apart (the pairs that border each
+// other across a caustic) separates under normal and colour-blind vision, and every
+// colour clears 4.5:1 against its background. Green is left out: the caustics are green.
+const IMAGE_NUMBER_COLORS = {
+  //       0          1          2 violet   3 orange   4 teal     5 blue     6 amber    7+ magenta
+  light: ['#6b6a66', '#6b6a66', '#7c3aed', '#c2410c', '#0f766e', '#1d4ed8', '#a16207', '#be185d'],
+  dark:  ['#8b8a84', '#8b8a84', '#a78bfa', '#fb923c', '#2dd4bf', '#60a5fa', '#facc15', '#f472b6'],
+};
+
+// Write the image-number grid onto the overlay (CSS-pixel coordinates): one count
+// per grid point, coloured by IMAGE_NUMBER_COLORS, at the View tab's spacing and size.
+function drawImageNumberGrid(Wl, Hl) {
+  const d = state.imageNumberSpacing * state.fov / Math.min(Wl, Hl);    // spacing in arcsec
+  const K = Math.floor((state.fov / 2) / d + 1e-9);                     // points within the view
+  const counts = imageNumberCounts(d, K), m = 2 * K + 1;
+  const ramp   = IMAGE_NUMBER_COLORS[document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'];
+  overlayCtx.save();
+  overlayCtx.font = `600 ${state.imageNumberSize}px system-ui, -apple-system, sans-serif`;
+  overlayCtx.textAlign = 'center';
+  overlayCtx.textBaseline = 'middle';
+  for (let r = 0; r < m; r++) {
+    for (let q = 0; q < m; q++) {
+      const c = counts[r * m + q];
+      overlayCtx.fillStyle = ramp[Math.min(c, ramp.length - 1)];
+      overlayCtx.fillText(String(c), ((q - K) * d / state.fov + 0.5) * Wl, ((r - K) * d / state.fov + 0.5) * Hl);
+    }
+  }
+  overlayCtx.restore();
 }
 
 // ── Config YAML ───────────────────────────────────────────────────────────────
@@ -798,6 +917,7 @@ function configToYaml() {
   y += `renderScale: ${state.renderScale}\n`;
   y += `critZs: ${state.critZs === null ? 'null' : state.critZs}\n`;
   y += `contourSpacing: ${state.contourSpacing}\n`;
+  y += `imageNumberSpacing: ${state.imageNumberSpacing}\nimageNumberSize: ${state.imageNumberSize}\n`;
   y += `contourScale: ${state.contourScale === 1 ? 'asinh' : 'linear'}\n`;
   y += `H0: ${state.H0}\nOmega_m: ${state.Omega_m}\n`;
   y += `showTimeDelays: ${state.showTimeDelays}\n`;
@@ -1089,6 +1209,8 @@ function loadConfigFromYaml(yaml) {
     }
     state.critZs        = (isFinite(cfg.critZs) && cfg.critZs > 0) ? cfg.critZs : CONFIG_DEFAULTS.critZs;
     state.contourSpacing = isFinite(cfg.contourSpacing) ? Math.max(0.05, cfg.contourSpacing) : CONFIG_DEFAULTS.contourSpacing;
+    state.imageNumberSpacing = _clampNum(cfg.imageNumberSpacing, IMAGE_NUMBER_SPACING[0], IMAGE_NUMBER_SPACING[1], CONFIG_DEFAULTS.imageNumberSpacing);
+    state.imageNumberSize    = _clampNum(cfg.imageNumberSize,    IMAGE_NUMBER_SIZE[0],    IMAGE_NUMBER_SIZE[1],    CONFIG_DEFAULTS.imageNumberSize);
     state.contourScale = (cfg.contourScale === 'asinh' || cfg.contourScale === 1) ? 1 : 0;
     // Cosmology (flat ΛCDM): apply before invalidateDistances() below so the distance
     // matrix is built with the loaded values.
@@ -1719,6 +1841,7 @@ function buildDOM() {
                 <option value="5">Deflection |α|</option>
                 <option value="6">Fermat potential φ</option>
                 <option value="7">Parity</option>
+                <option value="8">Image number</option>
               </select>
             </div>
             <div class="sl-overlay-chips" id="sl-overlay-chips">
@@ -2007,8 +2130,8 @@ function attachHandlers() {
   // Zoom cluster + wheel + pinch.
   attachZoomHandlers(document.getElementById('sl-image-wrap'));
 
-  const _VIZ_LABELS ={ '0':'Lensed image','1':'Convergence κ','2':'Shear γ','3':'Magnification |μ|','5':'Deflection |α|','6':'Fermat potential φ','7':'Parity' };
-  const _VIZ_LABELS_SHORT = { '0':'[I] Lensed image','1':'[K] Convergence κ','2':'[G] Shear γ','3':'[M] Magnification |μ|','5':'[A] Deflection |α|','6':'[T] Fermat potential φ','7':'[P] Parity' };
+  const _VIZ_LABELS ={ '0':'Lensed image','1':'Convergence κ','2':'Shear γ','3':'Magnification |μ|','5':'Deflection |α|','6':'Fermat potential φ','7':'Parity','8':'Image number' };
+  const _VIZ_LABELS_SHORT = { '0':'[I] Lensed image','1':'[K] Convergence κ','2':'[G] Shear γ','3':'[M] Magnification |μ|','5':'[A] Deflection |α|','6':'[T] Fermat potential φ','7':'[P] Parity','8':'[N] Image number' };
   function _setVizOptionLabels(withShortcuts) {
     const sel = document.getElementById('sl-viz-mode');
     if (!sel) return;
@@ -2018,7 +2141,7 @@ function attachHandlers() {
   document.getElementById('sl-viz-mode')?.addEventListener('mousedown', () => _setVizOptionLabels(true));
   document.getElementById('sl-viz-mode')?.addEventListener('change', e => {
     _setVizOptionLabels(false);
-    e.target.blur();  // keep letter shortcuts (K/G/M/A/I/T/P) from hitting the select's type-ahead
+    e.target.blur();  // keep letter shortcuts (K/G/M/A/I/T/P/N) from hitting the select's type-ahead
     setVizMode(parseInt(e.target.value, 10));
   });
   document.getElementById('sl-viz-mode')?.addEventListener('blur', () => _setVizOptionLabels(false));
@@ -2319,7 +2442,7 @@ function attachHandlers() {
       return;
     }
     // Visualization mode shortcuts: toggle on/off; pressing the same key again returns to image.
-    const VIZ_KEYS = { k: 1, K: 1, g: 2, G: 2, m: 3, M: 3, a: 5, A: 5, i: 0, I: 0, t: 6, T: 6, p: 7, P: 7 };
+    const VIZ_KEYS = { k: 1, K: 1, g: 2, G: 2, m: 3, M: 3, a: 5, A: 5, i: 0, I: 0, t: 6, T: 6, p: 7, P: 7, n: 8, N: 8 };
     if (e.key in VIZ_KEYS) {
       setVizMode(VIZ_KEYS[e.key]);
       return;
@@ -2551,7 +2674,7 @@ function setVizMode(mode) {
 
 // Step to the previous/next visualization mode, wrapping around. The order
 // matches the on-canvas dropdown (image, κ, γ, |μ|, |α|, Fermat φ).
-const VIZ_CYCLE = [0, 1, 2, 3, 5, 6, 7];
+const VIZ_CYCLE = [0, 1, 2, 3, 5, 6, 7, 8];
 function cycleVizMode(dir) {
   const i = VIZ_CYCLE.indexOf(state.vizMode);
   setVizMode(VIZ_CYCLE[((i < 0 ? 0 : i) + dir + VIZ_CYCLE.length) % VIZ_CYCLE.length]);
@@ -2616,6 +2739,7 @@ const SHORTCUTS = [
   ['K / G / M / A', 'Convergence κ / Shear γ / Magnification |μ| / Deflection |α| map'],
   ['T', 'Fermat potential φ contour map'],
   ['P', 'Parity map (image types I / II / III)'],
+  ['N', 'Image number map (source plane)'],
   ['H', 'Hide / show the selected object'],
   ['O', 'Clear all objects from the selected plane'],
   ['X', 'Delete the selected plane'],
@@ -2757,6 +2881,9 @@ function hitTestImage(wrap, e) {
   for (const plane of ordered) {
     for (const obj of plane.objects) {
       if (obj.hidden) continue;
+      // Sources are hidden on the image-number map (a source-plane view of where a
+      // source could be), so they are not draggable there either.
+      if (state.vizMode === 8 && !state.lineArt && obj.type === 'source' && !obj.hybridId) continue;
       if (obj.hybridId) {
         if (seenHybrids.has(obj.hybridId)) continue;
         seenHybrids.add(obj.hybridId);
@@ -4290,7 +4417,7 @@ function renderViewPanel() {
             <label><input type="checkbox" id="sl-show-scalebar" ${state.showScaleBar?'checked':''}> Scale bar</label>
           </div>
           <div class="sl-checkbox-row">
-            <label title="${state.vizMode===0||state.vizMode===7?'This view has no colorbar; pick a quantity map to use one':''}"><input type="checkbox" id="sl-show-colorbar" ${state.showColorbar?'checked':''} ${state.vizMode===0||state.vizMode===7?'disabled':''}> Colorbar</label>
+            <label title="${!_VIZ_COLORBAR[state.vizMode]?'This view has no colorbar; pick a quantity map to use one':''}"><input type="checkbox" id="sl-show-colorbar" ${state.showColorbar?'checked':''} ${!_VIZ_COLORBAR[state.vizMode]?'disabled':''}> Colorbar</label>
             <label title="Whiskers along the direction images are stretched; longer means more distorted"><input type="checkbox" id="sl-show-stretch" ${state.showStretch?'checked':''}> Stretch</label>
           </div>
           <div class="sl-checkbox-row">
@@ -4478,6 +4605,28 @@ function renderViewPanel() {
           </div>
         </div>
       </div>` : ''}
+      ${state.vizMode === 8 ? `
+      <div class="sl-hybrid-section">
+        <div class="sl-view-hdr">
+          <span class="sl-panel-title" style="flex:1">Image Number</span>
+          ${infoSection('sl-imgnum-info', `
+            <b>Spacing</b>: screen distance between grid points. One point is always on the centre of the view.<br>
+            <b>Number size</b>: font size of the counts.`)}
+        </div>
+        <div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
+          <div class="sl-global-input">
+            <label>Spacing (px)</label>
+            <input type="number" class="sl-scrub" id="sl-imgnum-spacing" min="${IMAGE_NUMBER_SPACING[0]}" max="${IMAGE_NUMBER_SPACING[1]}" step="1" value="${state.imageNumberSpacing}">
+          </div>
+          <div class="sl-global-input">
+            <label>Number size (px)</label>
+            <input type="number" class="sl-scrub" id="sl-imgnum-size" min="${IMAGE_NUMBER_SIZE[0]}" max="${IMAGE_NUMBER_SIZE[1]}" step="1" value="${state.imageNumberSize}">
+          </div>
+          <div style="margin-top:4px">
+            <button id="sl-imgnum-reset" type="button" style="font-size:11px;background:none;border:none;color:var(--muted);text-decoration:underline;cursor:pointer;padding:0">Reset to default</button>
+          </div>
+        </div>
+      </div>` : ''}
     </div>`;
 
   const _fovEl = document.getElementById('sl-fov');
@@ -4614,6 +4763,26 @@ function renderViewPanel() {
   });
   document.getElementById('sl-contour-reset')?.addEventListener('click', () => {
     state.contourSpacing = 1.0; state.contourScale = 0; renderSidebar(); redraw();
+  });
+  // Image Number section: grid spacing and number size (whole screen pixels).
+  for (const [id, key, [lo, hi]] of [['sl-imgnum-spacing', 'imageNumberSpacing', IMAGE_NUMBER_SPACING],
+                                     ['sl-imgnum-size',    'imageNumberSize',    IMAGE_NUMBER_SIZE]]) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    const apply = (v) => {
+      if (!isFinite(v)) return;
+      v = Math.round(Math.min(hi, Math.max(lo, v)));
+      el.value = v;
+      state[key] = v;
+      redraw();
+    };
+    el.addEventListener('change', e => apply(parseFloat(e.target.value)));
+    _attachScrub(el, { lo, hi, step: 1, onChange: apply });
+  }
+  document.getElementById('sl-imgnum-reset')?.addEventListener('click', () => {
+    state.imageNumberSpacing = CONFIG_DEFAULTS.imageNumberSpacing;
+    state.imageNumberSize    = CONFIG_DEFAULTS.imageNumberSize;
+    renderSidebar(); redraw();
   });
   document.getElementById('sl-fermat-use-src')?.addEventListener('change', e => {
     state.fermatUseSourcePos = e.target.checked;
@@ -5253,9 +5422,18 @@ function planesForZs(planes, dist, zs) {
   return { planes: augmented, dist: precomputeDistances(augmented), idx: augmented.indexOf(vp) };
 }
 
+// Memoised over the last few calls: the overlay, the image-number map (which samples
+// a wider field) and the SVG export ask for the same curves, often every frame.
+const _critMemo = new Map();
 function computeCritCurvesForZs(planes, dist, zs, fovArcsec, gridN) {
+  const key = [JSON.stringify(planes.map(p => [p.z, p.objects.map(o => [o.type, o.model, o.cx, o.cy, o.hidden, o.params])])),
+               zs, fovArcsec, gridN, state.H0, state.Omega_m].join('|');
+  if (_critMemo.has(key)) return _critMemo.get(key);
   const t = planesForZs(planes, dist, zs);
-  return computeCriticalCurves(t.planes, t.dist, t.idx, fovArcsec, gridN);
+  const res = computeCriticalCurves(t.planes, t.dist, t.idx, fovArcsec, gridN);
+  _critMemo.set(key, res);
+  if (_critMemo.size > 4) _critMemo.delete(_critMemo.keys().next().value);   // oldest first
+  return res;
 }
 
 // Stretch whiskers on an n×n grid of cell centres across the field. At each point
@@ -5654,6 +5832,12 @@ function drawOverlay() {
   if (state.lineArt) drawLineArtBase(W, H, dpr);
 
   const hasLens     = state.planes.some(p => p.objects.some(o => o.type === 'lens'));
+  // The image-number map is drawn in the source plane, so the overlay drops the
+  // image-plane features (critical curves, image dots and their time delays, stretch
+  // whiskers). Sources are hidden too, and cannot be dragged here (hitTestImage): the
+  // map is about where a source could be, while the lenses that shape it stay
+  // visible and editable. Line art replaces the raster view, so it keeps its usual overlay.
+  const _srcPlaneView = state.vizMode === 8 && !state.lineArt;
   // The hide-overlays master switch (View tab) suppresses annotations for a clean
   // plot; point-source image circles stay (they ARE the lensed light), and critical
   // curves / caustics stay too (they are structure, not a labelling annotation).
@@ -5665,10 +5849,10 @@ function drawOverlay() {
   const needFermatPts = !hideOv && state.fermatPoints && state.fermatPoints.length > 0;
   const needRuler = !hideOv && state.showRuler && ((state.rulers && state.rulers.length) || state.rulerDraft);
   const needScale = state.showScaleBar && !hideOv;
-  const needStretch = state.showStretch && state.dist && hasLens;
+  const needStretch = state.showStretch && state.dist && hasLens && !_srcPlaneView;
   const needParityLegend = state.vizMode === 7 && state.showLegend && !hideOv;
   if (!needCurve && !showMk && !needEllipse && !needPointSources && !needFermatPts && !needRuler && !needScale
-      && !needStretch && !needParityLegend) return;
+      && !needStretch && !needParityLegend && !_srcPlaneView) return;
 
   const Wl = W/dpr, Hl = H/dpr;
   overlayCtx.save();
@@ -5677,6 +5861,10 @@ function drawOverlay() {
   function toPixel(ax, ay) {
     return [(ax / state.fov + 0.5) * Wl, (-ay / state.fov + 0.5) * Hl];
   }
+
+  // ── Image number: one numbered, coloured cell per grid source position ───────
+  // Drawn first so the caustics and source markers sit on top of it.
+  if (_srcPlaneView && state.dist) drawImageNumberGrid(Wl, Hl);
 
   // ── Point source image circles ─────────────────────────────────────────────────────
   const _psAll = [];  // collected for the Data tab's CSV export
@@ -5693,6 +5881,7 @@ function drawOverlay() {
       if (obj.type !== 'source' || obj.model !== 'pointsource' || obj.hidden) continue;
       const imagePositions = findPointSourceImages(obj, plane);
       for (const [tx, ty] of imagePositions) _psAll.push({ src: obj.id, x: tx, y: ty });
+      if (_srcPlaneView) continue;   // image positions mean nothing on the source-plane map
       // In the parity view the dot must be big enough to carry its +/− sign.
       const r_px = Math.max((obj.params.sigma ?? 0.05) / state.fov * Wl, _parityDots ? 7 : 2.5);
       const dark = document.documentElement.getAttribute('data-theme') === 'dark';
@@ -5755,6 +5944,7 @@ function drawOverlay() {
     for (const plane of state.planes) {
       for (const obj of plane.objects) {
         if (!obj.showShape || obj.hidden) continue;
+        if (_srcPlaneView && obj.type === 'source' && !obj.hybridId) continue;
         // Follow the marker color (palette-driven in line art, hybrid-aware).
         const col = _pal ? _pal[obj.hybridId ? 'hybrid' : obj.type] : typeColorHex(obj.type);
         const p = obj.params;
@@ -5877,6 +6067,7 @@ function drawOverlay() {
           if (drawnHybrids.has(obj.hybridId)) continue;
           drawnHybrids.add(obj.hybridId);
         }
+        if (_srcPlaneView && obj.type === 'source' && !obj.hybridId) continue;
         const markerType = obj.hybridId ? 'hybrid' : obj.type;
         const col = _pal ? _pal[markerType] : typeColorHex(markerType);
         const [px, py] = toPixel(obj.cx, obj.cy);
@@ -5904,8 +6095,10 @@ function drawOverlay() {
   if (needCurve) {
     // Sample 30% wider than the display FOV so rings near the edge are found in
     // full rather than cut off at the grid boundary.  The display filter below
-    // still clips what is actually drawn to the visible image area.
-    const samplingFov = state.fov * 1.3;
+    // still clips what is actually drawn to the visible image area. The image-
+    // number map samples wider still (see imageNumberCounts), so that its caustics
+    // close even when zoomed in; draw those same caustics there.
+    const samplingFov = (_srcPlaneView && _imageNumberCache.critFov) || state.fov * 1.3;
     const res = computeCritCurvesForZs(
       state.planes, state.dist, effectiveCritZs(), samplingFov, state.critGridN
     );
@@ -5969,7 +6162,7 @@ function drawOverlay() {
         if (t.tan.length) _curveTypesDrawn.add(which + 'T');
         if (t.rad.length) _curveTypesDrawn.add(which + 'R');
       };
-      if (state.showCritCurves) draw(critFiltered, res.critRadial.filter((_, i) => critKeep[i]), critCol, 'crit');
+      if (state.showCritCurves && !_srcPlaneView) draw(critFiltered, res.critRadial.filter((_, i) => critKeep[i]), critCol, 'crit');
       if (state.showCaustics)   draw(causFiltered, res.causticRadial.filter((_, i) => causKeep[i]), causCol, 'caus');
     }
   }
@@ -6009,7 +6202,7 @@ function drawOverlay() {
     for (const [k, color, label, kind] of typed)
       if (_curveTypesDrawn.has(k)) legendItems.push({ color, label, [kind]: true });
   } else {
-    if (state.showCritCurves && hasLens) legendItems.push({ color: _critCol, label: 'Critical curves', isLine: true });
+    if (state.showCritCurves && hasLens && !_srcPlaneView) legendItems.push({ color: _critCol, label: 'Critical curves', isLine: true });
     if (state.showCaustics   && hasLens) legendItems.push({ color: _causCol, label: 'Caustics',        isLine: true });
   }
   if (state.vizMode === 7 && !state.lineArt) {
@@ -6020,7 +6213,7 @@ function drawOverlay() {
   }
   if (showMk) {
     const hasLensObj   = state.planes.some(p => p.objects.some(o => o.type === 'lens'   && !o.hybridId));
-    const hasSrcObj    = state.planes.some(p => p.objects.some(o => o.type === 'source' && !o.hybridId));
+    const hasSrcObj    = !_srcPlaneView && state.planes.some(p => p.objects.some(o => o.type === 'source' && !o.hybridId));
     const hasHybridObj = state.planes.some(p => p.objects.some(o => o.hybridId));
     if (hasLensObj)   legendItems.push({ color: _pal ? _pal.lens   : typeColorHex('lens'),   label: 'Lens',   isDot: true, markerType: 'lens'   });
     if (hasSrcObj)    legendItems.push({ color: _pal ? _pal.source : typeColorHex('source'), label: 'Source', isDot: true, markerType: 'source' });
@@ -6034,7 +6227,7 @@ function drawOverlay() {
   const _anyShape = (type, models) => state.planes.some(p => p.objects.some(o =>
     o.showShape && !o.hidden && o.type === type && models.has(o.model)));
   if (_anyShape('lens',   _ELLIPSE_LENS)) legendItems.push({ color: typeColorHex('lens'),   label: 'Lens shape',   isDash: true });
-  if (_anyShape('source', _ELLIPSE_SRC))  legendItems.push({ color: typeColorHex('source'), label: 'Source shape', isDash: true });
+  if (!_srcPlaneView && _anyShape('source', _ELLIPSE_SRC)) legendItems.push({ color: typeColorHex('source'), label: 'Source shape', isDash: true });
 
   if (state.showLegend && !hideOv && legendItems.length > 0) {
     const _mob  = window.innerWidth <= 640;

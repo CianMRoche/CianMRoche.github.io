@@ -65,7 +65,7 @@ uniform float u_vizScaleParam; // γ for power, softening a for asinh
 uniform float u_vizMin;        // lower data limit mapped to colorbar 0
 uniform float u_vizMax;        // upper data limit mapped to colorbar 1
 uniform int   u_colormap;      // palette: 0=default 1=viridis 2=inferno 3=plasma 4=turbo 5=gray
-uniform int   u_vizMode;      // 0=surface brightness, 1=κ, 2=γ, 3=|μ|, 4=signed μ, 5=|α|, 6=φ (Fermat), 7=parity
+uniform int   u_vizMode;      // 0=surface brightness, 1=κ, 2=γ, 3=|μ|, 4=signed μ, 5=|α|, 6=φ (Fermat), 7=parity, 8=image number
 uniform int   u_vizSrcIdx;    // target plane index for visualization Jacobian
 uniform int   u_isDark;       // 1 = dark theme, 0 = light theme
 uniform float u_saddlePhi[8]; // φ values at Type-II saddle images (Fermat mode)
@@ -717,6 +717,10 @@ float fermatLevel(float phi) {
 
 vec3 computeViz(vec2 theta) {
   int tgt = u_vizSrcIdx;
+
+  // Image number is written on the overlay as a grid of counts; underneath it the
+  // GL layer is a plain black (dark) or white (light) field.
+  if (u_vizMode == 8) return u_isDark == 1 ? vec3(0.0) : vec3(1.0);
 
   // Fermat potential — contour lines of the arrival-time surface φ(θ; β_s).
   // Single blue line color; fades toward the edge; saddle-level contours
