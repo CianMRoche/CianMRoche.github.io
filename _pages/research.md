@@ -9,7 +9,7 @@ redirect_from:
 
 {% include base_path %}
 
-A collection of projects across observational astrophysics, cosmological simulations, and mathematical relativity. My current focus is on constraining dark matter properties using gravitational lensing and stellar kinematics.
+A collection of projects across observational astrophysics, cosmological simulations, and mathematical relativity. My current focus is on constraining dark matter properties using gravitational lensing and stellar kinematics. Check out this [astrobite](https://astrobites.org/2024/09/26/shining-light-on-sidm/) about my work with BCG offsets as a probe of dark matter self-interaction physics!
 
 <style>
 .research-grid {
