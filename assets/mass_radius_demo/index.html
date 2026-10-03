@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Halo Mass-Radius Converter</title>
+<script>
+  (function() {
+    function theme() {
+      var t = 'dark';
+      try { t = window.parent.document.documentElement.getAttribute('data-theme') || localStorage.getItem('theme') || 'dark'; } catch (e) {
+        try { t = localStorage.getItem('theme') || 'dark'; } catch (e2) {}
+      }
+      return t;
+    }
+    document.documentElement.setAttribute('data-theme', theme());
+    // Follow the host page's light/dark toggle live.
+    try {
+      new MutationObserver(function () {
+        document.documentElement.setAttribute('data-theme', theme());
+      }).observe(window.parent.document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    } catch (e) {}
+    window.addEventListener('storage', function () { document.documentElement.setAttribute('data-theme', theme()); });
+  })();
+</script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #ffffff; --fg: #374151; --muted: #6b7280; --card: #f6f8fa; --border: #d0d7de;
+    --accent: #3b82f6; --accent-fg: #fff;
+  }
+  html[data-theme="dark"] {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #8b949e; --card: #161b22; --border: #30363d;
+    --accent: #7bbfcc; --accent-fg: #0d1117;
+  }
+  html { overflow: hidden; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--fg); padding: 0.5rem 4px 1rem 0; font-size: 14px; line-height: 1.5; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  h2 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 8px; font-weight: 600; }
+  label { display: block; font-size: 0.8rem; color: var(--muted); margin: 8px 0 2px; }
+  input[type=text], input[type=number], select {
+    width: 100%; padding: 5px 8px; font: inherit; color: var(--fg); background: var(--bg);
+    border: 1px solid var(--border); border-radius: 6px;
+  }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 0; }
+  .row { display: flex; gap: 8px; align-items: flex-end; }
+  .row > * { flex: 1; min-width: 0; }
+  .row > .narrow { flex: 0 0 90px; }
+  .row > .wide { flex: 0 0 105px; }
+  .btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  button {
+    font: inherit; font-size: 0.78rem; cursor: pointer; padding: 3px 10px; border-radius: 6px;
+    background: var(--bg); color: var(--accent); border: 1.5px solid var(--accent);
+  }
+  button:hover, button.on { background: var(--accent); color: var(--accent-fg); }
+  .check { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 0.82rem; color: var(--fg); }
+  .check input { width: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 3px 0; border-bottom: 1px solid var(--border); vertical-align: baseline; }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { color: var(--muted); }
+  td:last-child { text-align: right; font-variant-numeric: tabular-nums; font-family: ui-monospace, Menlo, monospace; font-size: 0.85rem; }
+  .big td { font-size: 1rem; }
+  .note { font-size: 0.78rem; color: var(--muted); margin-top: 8px; line-height: 1.55; }
+  .warn { color: #c2410c; }
+  html[data-theme="dark"] .warn { color: #fb923c; }
+  ul { margin: 4px 0 0 18px; font-size: 0.8rem; color: var(--muted); line-height: 1.55; }
+  .hint { font-size: 0.75rem; color: var(--muted); margin-top: 3px; }
+</style>
+</head>
+<body>
+<div class="grid">
+
+  <div class="card">
+    <h2>Cosmology</h2>
+    <div class="btns" id="cosmo-presets"></div>
+    <div class="row">
+      <div><label for="H0">H<sub>0</sub> [km/s/Mpc]</label><input type="number" id="H0" step="any"></div>
+      <div><label for="Om">&Omega;<sub>m</sub></label><input type="number" id="Om" step="any"></div>
+      <div><label for="OL">&Omega;<sub>&Lambda;</sub></label><input type="number" id="OL" step="any"></div>
+    </div>
+    <label class="check"><input type="checkbox" id="flat" checked><span>Flat (&Omega;<sub>&Lambda;</sub> = 1 &minus; &Omega;<sub>m</sub>)</span></label>
+    <label for="z">Redshift z</label>
+    <input type="number" id="z" step="any" min="0" value="0">
+    <div class="note" id="rho-note"></div>
+  </div>
+
+  <div class="card">
+    <h2>Overdensity definition</h2>
+    <div class="btns" id="delta-presets"></div>
+    <div class="row">
+      <div><label for="delta">&Delta;</label><input type="number" id="delta" step="any" min="0"></div>
+      <div><label for="ref">relative to</label>
+        <select id="ref"><option value="c">critical (&rho;c)</option><option value="m">mean matter (&rho;m)</option></select>
+      </div>
+    </div>
+    <div class="hint" id="delta-hint"></div>
+  </div>
+
+  <div class="card">
+    <h2>Convert (edit either field)</h2>
+    <label for="M" id="M-label">M [M<sub>&odot;</sub>]</label>
+    <input type="text" id="M" value="1e14" autocomplete="off" inputmode="decimal">
+    <div class="row">
+      <div><label for="R" id="R-label">R</label><input type="text" id="R" autocomplete="off" inputmode="decimal"></div>
+      <div class="narrow"><label for="Ru">unit</label>
+        <select id="Ru"><option value="pc">pc</option><option value="kpc" selected>kpc</option><option value="Mpc">Mpc</option></select>
+      </div>
+      <div class="wide"><label for="Rfr">frame</label>
+        <select id="Rfr"><option value="p">physical</option><option value="c">comoving</option></select>
+      </div>
+    </div>
+    <label class="check"><input type="checkbox" id="hunits"><span>Use h<sup>&minus;1</sup> units (M in M<sub>&odot;</sub>/h, R in kpc/h etc.)</span></label>
+    <div class="hint">Accepts scientific notation, e.g. 3.5e14.</div>
+    <div id="msg" class="note warn"></div>
+  </div>
+
+  <div class="card">
+    <h2>Halo</h2>
+    <table class="big" id="t-halo"></table>
+  </div>
+
+
+
+</div>
+
+<div class="card" style="margin-top:12px">
+  <h2>Assumptions</h2>
+  <ul>
+    <li>M = (4&pi;/3) &Delta; &rho;<sub>ref</sub>(z) R&sup3;, with &rho;<sub>c</sub>(z) = 3H(z)&sup2;/8&pi;G and &rho;<sub>m</sub>(z) = &Omega;<sub>m</sub>(1+z)&sup3;&rho;<sub>c,0</sub>. No halo profile is assumed, so this cannot convert between different &Delta; for the same halo.</li>
+    <li>&Lambda;CDM (w = &minus;1); radiation and neutrinos neglected.</li>
+    <li>&ldquo;vir&rdquo; is the Bryan &amp; Norman (1998) flat-&Lambda;CDM fit.</li>
+  </ul>
+</div>
+
+<script>
+(function () {
+  var G = 4.30091727e-9;          // Mpc (km/s)^2 / Msun
+  var MPC_KM = 3.0856775814914e19;
+  var $ = function (id) { return document.getElementById(id); };
+
+  var COSMOS = [
+    { name: 'Planck 2018', H0: 67.66, Om: 0.3111 },
+    { name: 'Planck 2015', H0: 67.74, Om: 0.3089 },
+    { name: 'WMAP9',       H0: 69.32, Om: 0.2865 },
+    { name: 'Millennium',  H0: 73.0,  Om: 0.25 },
+    { name: 'H0=70, Ωm=0.3', H0: 70.0, Om: 0.3 }
+  ];
+  var DELTAS = [
+    { name: '200c', d: 200, ref: 'c' }, { name: '500c', d: 500, ref: 'c' }, { name: '2500c', d: 2500, ref: 'c' },
+    { name: '200m', d: 200, ref: 'm' }, { name: '500m', d: 500, ref: 'm' },
+    { name: 'vir (BN98)', vir: true }
+  ];
+
+  var driver = 'M';       // which field the user last edited
+  var vir = false;        // Δ tracks the Bryan & Norman virial value
+  var cur = { h: false, fr: 'p', ru: 'kpc' };   // unit state currently displayed
+
+  function fmt(x, nd) {
+    if (!isFinite(x)) return '—';
+    nd = nd || 5;
+    var a = Math.abs(x);
+    if (a === 0) return '0';
+    if (a >= 1e-3 && a < 1e5) return String(parseFloat(x.toPrecision(nd)));
+    return x.toExponential(nd - 1).replace('e+', 'e');
+  }
+  function parse(s) { var v = parseFloat(String(s).replace(/[×x]\s*10\^?/i, 'e')); return v; }
+
+  function cosmo() {
+    var H0 = parseFloat($('H0').value), Om = parseFloat($('Om').value), OL;
+    if ($('flat').checked) { OL = 1 - Om; $('OL').value = fmt(OL, 6); } else { OL = parseFloat($('OL').value); }
+    return { H0: H0, Om: Om, OL: OL, Ok: 1 - Om - OL, h: H0 / 100 };
+  }
+  function E(c, z) { var a = 1 + z; return Math.sqrt(c.Om * a * a * a + c.Ok * a * a + c.OL); }
+
+  function deltaValue(c, z) {
+    if (!vir) return parseFloat($('delta').value);
+    var Omz = c.Om * Math.pow(1 + z, 3) / Math.pow(E(c, z), 2), x = Omz - 1;
+    return 18 * Math.PI * Math.PI + 82 * x - 39 * x * x;
+  }
+
+  function units() { return { h: $('hunits').checked, fr: $('Rfr').value, ru: $('Ru').value }; }
+
+  // Physical (Msun, physical Mpc) <-> displayed values under unit state u.
+  function Mdisp(Mp, c, u) { return u.h ? Mp * c.h : Mp; }
+  function Mparse(v, c, u) { return u.h ? v / c.h : v; }
+  var RU = { pc: 1e-6, kpc: 1e-3, Mpc: 1 };   // unit size in Mpc
+  function Rdisp(Rp, c, z, u) { return Rp / RU[u.ru] * (u.fr === 'c' ? 1 + z : 1) * (u.h ? c.h : 1); }
+  function Rparse(v, c, z, u) { return v * RU[u.ru] / (u.fr === 'c' ? 1 + z : 1) / (u.h ? c.h : 1); }
+
+  function labels(u) {
+    $('M-label').innerHTML = 'M [M<sub>&odot;</sub>' + (u.h ? '/h' : '') + ']';
+    $('R-label').innerHTML = 'R' + (u.h ? ' [h<sup>&minus;1</sup> ' + u.ru + ']' : '');
+  }
+
+  function refDensity(c, z, ref) {
+    var rc0 = 3 * c.H0 * c.H0 / (8 * Math.PI * G);          // Msun/Mpc^3
+    var Ez = E(c, z);
+    return ref === 'c' ? rc0 * Ez * Ez : rc0 * c.Om * Math.pow(1 + z, 3);
+  }
+
+  // Size the host iframe to the content so the page has no inner scrollbar.
+  function fit() {
+    try {
+      var f = window.frameElement;
+      var h = document.documentElement.getBoundingClientRect().height;
+      if (f && h > 50) f.style.height = Math.ceil(h) + 'px';
+    } catch (e) {}
+  }
+  window.addEventListener('resize', fit);
+
+  function row(k, v) { return '<tr><td>' + k + '</td><td>' + v + '</td></tr>'; }
+
+  // `fromUnits` are the units the driver text was typed in; the display then moves to the current units.
+  function update(fromUnits) {
+    var c = cosmo(), z = parseFloat($('z').value), msg = [];
+    var u = units(); fromUnits = fromUnits || u;
+    labels(u);
+    if (!(c.H0 > 0) || !(c.Om >= 0) || !isFinite(c.OL) || !(z >= 0)) { $('msg').textContent = 'Enter a valid cosmology and z ≥ 0.'; return; }
+    var D = deltaValue(c, z);
+    if (vir) $('delta').value = fmt(D, 5);
+    if (!(D > 0)) { $('msg').textContent = 'Δ must be positive.'; return; }
+    var ref = vir ? 'c' : $('ref').value;
+    if (vir) $('ref').value = 'c';
+    var rho = refDensity(c, z, ref);
+
+    var Mp, Rp;
+    if (driver === 'M') {
+      Mp = Mparse(parse($('M').value), c, fromUnits);
+      Rp = Math.cbrt(3 * Mp / (4 * Math.PI * D * rho));
+    } else {
+      Rp = Rparse(parse($('R').value), c, z, fromUnits);
+      Mp = 4 * Math.PI / 3 * D * rho * Rp * Rp * Rp;
+    }
+    if (!(Mp > 0) || !(Rp > 0)) { $('msg').textContent = 'Enter a positive ' + (driver === 'M' ? 'mass' : 'radius') + '.'; return; }
+    // Don't rewrite the field being typed in, unless the units changed under it.
+    var unitsChanged = fromUnits.h !== u.h || fromUnits.fr !== u.fr || fromUnits.ru !== u.ru;
+    if (driver !== 'M' || unitsChanged) $('M').value = fmt(Mdisp(Mp, c, u), 6);
+    if (driver !== 'R' || unitsChanged) $('R').value = fmt(Rdisp(Rp, c, z, u), 6);
+    cur = u;
+
+    if (vir && Math.abs(c.Ok) > 1e-6) msg.push('Warning: BN98 virial Δ is a flat-ΛCDM fit; this cosmology is not flat.');
+    if (c.Om * Math.pow(1 + z, 3) + c.Ok * Math.pow(1 + z, 2) + c.OL <= 0) msg.push('Warning: E(z)² ≤ 0 (no big-bang solution).');
+    $('msg').innerHTML = msg.join('<br>');
+    $('delta-hint').textContent = vir ? 'Δ_vir(z) is computed from Ωm(z); editing Δ switches back to a fixed value.' : '';
+
+    var rhoC = refDensity(c, z, 'c'), rhoM = refDensity(c, z, 'm');
+    var Vc = Math.sqrt(G * Mp / Rp);                                  // km/s
+    var tdyn = Math.sqrt(Rp * Rp * Rp / (G * Mp)) * MPC_KM / 3.15576e16; // Gyr  (Mpc/(km/s) -> s -> Gyr)
+    var meanrho = 3 * Mp / (4 * Math.PI * Rp * Rp * Rp);
+
+    $('t-halo').innerHTML =
+      row('log<sub>10</sub> M', fmt(Math.log10(Mp), 5) + ' M<sub>&odot;</sub>') +
+      row('M (h<sup>&minus;1</sup>)', fmt(Mp * c.h) + ' M<sub>&odot;</sub>/h') +
+      row('R physical', fmt(Rp * 1000) + ' kpc') +
+      row('R comoving', fmt(Rp * (1 + z)) + ' Mpc') +
+      row('R physical (h<sup>&minus;1</sup>)', fmt(Rp * 1000 * c.h) + ' kpc/h') +
+      row('V<sub>c</sub> = &radic;(GM/R)', fmt(Vc) + ' km/s') +
+      row('t<sub>dyn</sub> = &radic;(R&sup3;/GM)', fmt(tdyn) + ' Gyr') +
+      row('Effective &Delta; vs &rho;<sub>c</sub>', fmt(meanrho / rhoC)) +
+      row('Effective &Delta; vs &rho;<sub>m</sub>', fmt(meanrho / rhoM)) +
+      row('Mean density', fmt(meanrho) + ' M<sub>&odot;</sub>/Mpc&sup3;');
+
+    $('rho-note').innerHTML = 'At z = ' + fmt(z, 4) + ': &rho;<sub>c</sub> = ' + fmt(rhoC) + ', &rho;<sub>m</sub> = ' + fmt(rhoM) + ' M<sub>&odot;</sub>/Mpc&sup3;';
+    fit();
+  }
+
+  function build() {
+    COSMOS.forEach(function (p, i) {
+      var b = document.createElement('button'); b.textContent = p.name; b.type = 'button';
+      b.addEventListener('click', function () {
+        $('H0').value = p.H0; $('Om').value = p.Om; $('flat').checked = true; $('OL').disabled = true; update();
+      });
+      $('cosmo-presets').appendChild(b);
+    });
+    DELTAS.forEach(function (p) {
+      var b = document.createElement('button'); b.textContent = p.name; b.type = 'button';
+      b.addEventListener('click', function () {
+        if (p.vir) { vir = true; } else { vir = false; $('delta').value = p.d; $('ref').value = p.ref; }
+        update();
+      });
+      $('delta-presets').appendChild(b);
+    });
+  }
+
+  function onUnit() { var prev = cur; update(prev); }
+
+  build();
+  $('H0').value = 67.66; $('Om').value = 0.3111; $('OL').disabled = true;
+  $('delta').value = 200; $('ref').value = 'c';
+  cur = units(); update();
+
+  ['H0', 'Om', 'OL', 'z', 'ref'].forEach(function (id) { $(id).addEventListener('input', function () { if (id === 'ref') vir = false; update(); }); });
+  $('delta').addEventListener('input', function () { vir = false; update(); });
+  $('flat').addEventListener('change', function () { $('OL').disabled = $('flat').checked; update(); });
+  $('hunits').addEventListener('change', onUnit);
+  $('Rfr').addEventListener('change', onUnit);
+  $('Ru').addEventListener('change', onUnit);
+  $('M').addEventListener('input', function () { driver = 'M'; update(); });
+  $('R').addEventListener('input', function () { driver = 'R'; update(); });
+})();
+</script>
+</body>
+</html>

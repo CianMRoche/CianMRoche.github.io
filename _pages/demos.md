@@ -10,11 +10,13 @@ author_profile: true
   --dm-color:   #c07a15;
   --lens-color: #4a7ec5;
   --nav-accent: #7c6bcf;
+  --mr-color:   #2f8f5b;
 }
 html[data-theme="dark"] {
   --dm-color:   #fbbf77;
   --lens-color: #93c5fd;
   --nav-accent: #c4b5fd;
+  --mr-color:   #6ee7a8;
 }
 
 /* Tabs */
@@ -31,6 +33,7 @@ html[data-theme="dark"] .dtab:hover { color: #e6edf3; }
 .dtab[aria-selected="true"] { color: var(--lens-color); border-bottom-color: var(--lens-color); }
 .dtab:focus-visible { outline: 2px solid var(--lens-color); outline-offset: 3px; border-radius: 3px; }
 #dtab-dm[aria-selected="true"] { color: var(--dm-color); border-bottom-color: var(--dm-color); }
+#dtab-mr[aria-selected="true"] { color: var(--mr-color); border-bottom-color: var(--mr-color); }
 
 .dpanel { padding-top: 1.25rem; }
 /* The theme's reset sets `section { display: block }`, which overrides the UA
@@ -51,11 +54,12 @@ html[data-theme="dark"] .lens-cta-btn { background: #0d1117; border-color: #7bbf
 html[data-theme="dark"] .lens-cta-btn:hover { background: #7bbfcc; color: #0d1117 !important; }
 </style>
 
-Here are some interactive demos which explain aspects of my research.
+Here are some interactive demos (and a calculator I find useful) which help to explain aspects of my research. 
 
 <div class="demo-tabs" role="tablist" aria-label="Demos">
   <button class="dtab" role="tab" aria-selected="true"  data-tab="lensing" id="dtab-lensing">Lensing Demo</button>
   <button class="dtab" role="tab" aria-selected="false" data-tab="dm"      id="dtab-dm">Dark Matter Demo</button>
+  <button class="dtab" role="tab" aria-selected="false" data-tab="mr"      id="dtab-mr">Halo Mass-Radius</button>
 </div>
 
 <div class="demo-panels">
@@ -133,6 +137,16 @@ Here are some interactive demos which explain aspects of my research.
 
 <div class="demo-wrap">
   <iframe class="demo-iframe" data-src="/assets/dark_matter_demo/index.html" width="100%" height="900" frameborder="0" style="border:none; display:block; background:#0d1117;"></iframe>
+</div>
+
+  </section>
+
+  <section class="dpanel" data-panel="mr" role="tabpanel" aria-labelledby="dtab-mr" hidden>
+
+<p class="dpanel-intro">Convert between a halo mass and radius for a chosen overdensity definition (M<sub>200c</sub> &harr; R<sub>200c</sub>, M<sub>500m</sub> &harr; R<sub>500m</sub>, virial, or a custom &Delta;), cosmology and redshift. Assumptions are listed at the bottom of the calculator.</p>
+
+<div class="demo-wrap">
+  <iframe class="demo-iframe" data-src="/assets/mass_radius_demo/index.html" width="100%" height="700" frameborder="0" style="border:none; display:block;"></iframe>
 </div>
 
   </section>
