@@ -9,7 +9,8 @@ redirect_from:
 
 {% include base_path %}
 
-Here is a collection of tutorials for tasks that I had trouble with at some point or another. <br>Most come from my [github gists](https://gist.github.com/CianMRoche) page.
+Here is a collection of tutorials for tasks that I had trouble with at some point or another. <br>Most come from my [github gists](https://gist.github.com/CianMRoche) page. I must admit that many of these have become a bit outdated, for example I now recommend using [`uv`](https://github.com/astral-sh/uv) instead of [`conda`](https://docs.conda.io) for environment management.
+. 
 
 - **Making and Using Custom Python Packages**  
 If you want to write some python functions or classes and have them be easily available on your local machine, without interacting with conda or pip at all (to keep things as simple as possible) see [this gist](https://gist.github.com/CianMRoche/7ad0396bc4eecfaa83a42e52b090ec4f).

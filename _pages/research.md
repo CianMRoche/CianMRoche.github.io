@@ -102,16 +102,17 @@ html[data-theme="dark"] .research-card img.img-dark  { display: block; }
 <div class="research-grid">
 
   <div class="research-card">
-    <img class="img-light" src="/images/ggsl.png" alt="Galaxy-galaxy strong lensing cross section">
-    <img class="img-dark" src="/images/ggsl_inverted.png" alt="Galaxy-galaxy strong lensing cross section">
+    <img class="img-light" src="/images/ggsl_caustics.png" alt="Galaxy-galaxy strong lensing cross section">
+    <img class="img-dark" src="/images/ggsl_caustics_dark.png" alt="Galaxy-galaxy strong lensing cross section">
     <div class="research-card-body">
       <h3>The Galaxy-Galaxy Strong Lensing Cross Section Tension</h3>
-      <p>The Galaxy--Galaxy Strong Lensing (GGSL) Cross Section is a measure of how efficiently galaxies in galaxy clusters can lens background sources, and is related to the underlying feedback and dark matter physics of thsoe galaxies. For several years now a tension between the observed GGSL properties of cluster strong lens members and their counterparts in cosmological simulations has been observed. We study this tension again in the context of full light cone information in the simualtions, performing strong lens modelling on the observed and simulated images, and quantifying the effect of correlated structure close to the cluster redshift.</p>
+      <p>The Galaxy--Galaxy Strong Lensing (GGSL) Cross Section is a measure of how efficiently galaxies in galaxy clusters can lens background sources, and is related to the underlying feedback and dark matter physics of thsoe galaxies. For several years now a tension between the observed GGSL properties of cluster strong lens members and their counterparts in cosmological simulations has been observed. We study this tension again in the context of full light cone information in the simulations, performing strong lens modelling on the observed and simulated images, and quantifying the effect of correlated structure close to the cluster redshift.</p>
       <div class="research-card-footer">
-        <span class="badge badge-prep">In preparation</span>
+        <span class="badge badge-pub">Published (preprint)</span>
+        <a class="research-link" href="https://arxiv.org/abs/2608.30079" target="_blank">arXiv →</a>
       </div>
     </div>
-  </div>
+  </div> 
 
   <div class="research-card">
     <img class="img-light" src="/images/lightcone_mag.png" alt="Light cone strong lensing magnifications">
@@ -120,15 +121,15 @@ html[data-theme="dark"] .research-card img.img-dark  { display: block; }
       <h3>Light Cone Strong Gravitational Lensing in Cosmological Simulations</h3>
       <p>Generating strong gravitational lensing images directly from cosmological simulation data is incredibly difficult due to the mismatched geometry of the lensing problem (a long, thin cone) and simulaiton boxes (cubes). We establish a methodology for generating images of strong lenses from full light cones in cosmological simualtions, for which the lens, sources and all intervening matter are drawn consistently from the parent simulation. Supervised by Prof. Michael McDonald and Prof. Mark Vogelsberger.</p>
       <div class="research-card-footer">
-        <span class="badge badge-pub">Published (preprint)</span>
+        <span class="badge badge-pub">Published</span>
         <a class="research-link" href="https://arxiv.org/pdf/2605.30433" target="_blank">arXiv →</a>
       </div>
     </div>
   </div>
 
   <div class="research-card">
-    <img class="img-light" src="/images/BCG_offsets.png" alt="BCG offsets in galaxy clusters">
-    <img class="img-dark" src="/images/BCG_offsets_inverted.png" alt="BCG offsets in galaxy clusters">
+    <img class="img-light" src="/images/BCG_offsets_inset.png" alt="BCG offsets in galaxy clusters">
+    <img class="img-dark" src="/images/BCG_offsets_inset_dark.png" alt="BCG offsets in galaxy clusters">
     <div class="research-card-body">
       <h3>Dark Matter Self-Interaction via Galaxy Wobbling</h3>
       <p>The brightest cluster galaxy (BCG) can wobble over time in the potential well of its host cluster, which is dominated by dark matter. Distributions of BCG–potential-minimum offsets, obtained via strong lensing, constrain the self-interaction cross section of dark matter. Supervised by Prof. Michael McDonald and Prof. Mark Vogelsberger.</p>
