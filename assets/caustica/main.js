@@ -1685,6 +1685,7 @@ function init() {
   _defaultConfigYaml = configToYaml();  // snapshot the default scene for the "Presets…" entry
   attachHandlers();
   _syncSwitcher();
+  renderTabs();
   renderPlaneCard();
   renderSidebar();
   updateCanvasTools();  // highlight the initial (select) viewer tool
@@ -1701,7 +1702,7 @@ function init() {
 
   // Redraw axis when crossing the mobile breakpoint (e.g. wide→narrow→wide).
   window.matchMedia('(max-width: 640px)').addEventListener('change', () => {
-    setTimeout(() => { drawAxisCanvas(); renderDrawer(); renderPlaneCard(); }, 150);
+    setTimeout(() => { drawAxisCanvas(); renderTabs(); renderDrawer(); renderPlaneCard(); redraw(); }, 150);
   });
 }
 
@@ -1811,6 +1812,11 @@ function buildDOM() {
       </div>
       <div class="sl-body" data-tab="scene">
         <div class="sl-stage" id="sl-stage">
+          <!-- Desktop view panes (see the panes section): each a tab strip over an
+               image. The wrappers are layout-neutral on phones. -->
+          <div class="sl-panes" id="sl-panes">
+          <div class="sl-pane" data-pane="0">
+          <div class="sl-tabbar" data-pane="0"></div>
           <div class="sl-image-wrap" id="sl-image-wrap">
             <canvas id="sl-gl-canvas"></canvas>
             <canvas class="sl-overlay" id="sl-overlay"></canvas>
@@ -1939,6 +1945,16 @@ function buildDOM() {
               </button>
             </div>
           </div>
+          </div>
+          <div class="sl-pane" data-pane="1" hidden>
+            <div class="sl-tabbar" data-pane="1"></div>
+            <div class="sl-image-wrap sl-image-wrap2" id="sl-image-wrap2">
+              <canvas id="sl-gl-canvas2"></canvas>
+              <canvas class="sl-overlay" id="sl-overlay2"></canvas>
+            </div>
+          </div>
+          </div>
+          <div class="sl-drop-zone" id="sl-drop-zone" hidden>Drop to open beside</div>
         </div>
         <div class="sl-timeline" id="sl-timeline">
           <div class="sl-axis-wrap">
@@ -2180,6 +2196,7 @@ function attachHandlers() {
   });
   attachPlaneCardHandlers(document.getElementById('sl-plane-canvas'));
   attachDrawerHandlers();
+  attachPaneHandlers();
 
   // Timeline z_max control (static DOM, wired once).
   const _zmaxEl = document.getElementById('sl-zmax');
@@ -3011,6 +3028,333 @@ function attachDrawerHandlers() {
   });
 }
 
+// ── View panes and tabs (desktop) ────────────────────────────────────────────
+// The stage shows one view, or two side by side, each pane with a strip of tabs;
+// a tab is a view mode. Pane 0 owns the WebGL canvas, the on-image chrome and
+// the exports. Pane 1, when open, is drawn by the same renderer: _doRedraw()
+// renders pane 1's view first and copies it into that pane's 2D canvas, then
+// renders pane 0's, so the WebGL canvas always ends on pane 0. state.vizMode is
+// always the FOCUSED pane's view, so every control that reads it (the View and
+// Colors panels, the shortcuts, the mask tool) follows whichever pane was last
+// clicked; _withView() switches it for the duration of one pane's pass.
+const _panes = [{ tabs: [0], active: 0 }];   // tabs: view modes; active: index into tabs
+let   _focusPane = 0;
+let   _pane1Fermat = null;     // pane 1's Fermat stationary points, for its overlay
+let   _overlayCtx2 = null;
+let   _dragTab = null;         // { p, i } while a tab is being dragged
+
+const _VIZ_GLYPHS = { 0: 'θ', 1: 'κ', 2: 'γ', 3: 'μ', 5: 'α', 6: 'φ', 7: '±', 8: 'N', 9: 'β' };
+const _VIZ_TAB_NAMES = { 0: 'Lensed image', 1: 'Convergence', 2: 'Shear', 3: 'Magnification', 5: 'Deflection',
+                         6: 'Fermat potential', 7: 'Parity', 8: 'Image number', 9: 'Delensed image' };
+const _VIZ_KEY_OF = { 0: 'I', 1: 'K', 2: 'G', 3: 'M', 5: 'A', 6: 'T', 7: 'P', 8: 'N', 9: 'U' };
+
+function _paneMode(i) { const p = _panes[i]; return p.tabs[p.active]; }
+function _splitAllowed() { return window.innerWidth > 640; }
+function _isSplit() { return _splitAllowed() && _panes.length > 1; }
+
+// Run fn with state.vizMode set to one pane's view, and return its result.
+function _withView(mode, fn) {
+  const keep = state.vizMode;
+  state.vizMode = mode;
+  try { return fn(); } finally { state.vizMode = keep; }
+}
+
+// Fold a state.vizMode set from elsewhere (a config load, the phone's view menu)
+// into the focused pane: activate that view's tab if the pane has one, else
+// retitle the active tab. Phones show pane 0 only.
+// Returns whether anything changed.
+function _reconcilePanes() {
+  let changed = false;
+  if (!_splitAllowed() && _focusPane !== 0) { _focusPane = 0; state.vizMode = _paneMode(0); changed = true; }
+  const p = _panes[_focusPane];
+  if (p.tabs[p.active] === state.vizMode) return changed;
+  const i = p.tabs.indexOf(state.vizMode);
+  if (i >= 0) p.active = i; else p.tabs[p.active] = state.vizMode;
+  return true;
+}
+
+// Everything that follows a change of the focused view.
+function _afterViewChange() {
+  const mode = state.vizMode;
+  if (mode === 9) seedBgPixel();
+  const sel = document.getElementById('sl-viz-mode');
+  if (sel) sel.value = mode;
+  updateCanvasTools();   // the mask tool comes and goes with the delensed view
+  _updateColorbar(); renderSidebar(); renderTabs(); redraw();
+}
+
+function focusPane(i) {
+  if (i === _focusPane || !_panes[i]) return;
+  _focusPane = i;
+  state.vizMode = _paneMode(i);
+  _afterViewChange();
+}
+
+function _activateTab(p, i) {
+  _panes[p].active = i;
+  _focusPane = p;
+  state.vizMode = _paneMode(p);
+  _afterViewChange();
+}
+
+// Open a view in pane p: its tab if it has one, else a new tab.
+function _addTab(p, mode) {
+  const pane = _panes[p];
+  let i = pane.tabs.indexOf(mode);
+  if (i < 0) { pane.tabs.push(mode); i = pane.tabs.length - 1; }
+  _activateTab(p, i);
+}
+
+// Take tab i out of pane p, closing the pane if that was its last tab (pane 1
+// then moves into pane 0's place). Returns the view it held.
+function _takeTab(p, i) {
+  const pane = _panes[p];
+  const [mode] = pane.tabs.splice(i, 1);
+  if (pane.active > i || pane.active >= pane.tabs.length) pane.active = Math.max(0, pane.active - 1);
+  if (!pane.tabs.length) {
+    _panes.splice(p, 1);
+    if (_focusPane >= p && _focusPane > 0) _focusPane--;
+  }
+  if (_focusPane >= _panes.length) _focusPane = _panes.length - 1;
+  return mode;
+}
+
+function _closeTab(p, i) {
+  if (_panes.length === 1 && _panes[0].tabs.length === 1) return;   // always keep one view
+  _takeTab(p, i);
+  state.vizMode = _paneMode(_focusPane);
+  _afterViewChange();
+}
+
+// Move tab (p, i) into pane q before index j (end when j is undefined).
+function _moveTab(p, i, q, j) {
+  if (p === q) {
+    const pane = _panes[p], mode = pane.tabs[i];
+    pane.tabs.splice(i, 1);
+    const at = j === undefined ? pane.tabs.length : (j > i ? j - 1 : j);
+    pane.tabs.splice(at, 0, mode);
+    pane.active = at;
+    _focusPane = p;
+    state.vizMode = mode;
+    _afterViewChange();
+    return;
+  }
+  const target = _panes[q];
+  const mode = _takeTab(p, i);
+  const qq = _panes.indexOf(target);   // pane indices shift if p closed
+  if (!target.tabs.includes(mode)) target.tabs.splice(j === undefined ? target.tabs.length : j, 0, mode);
+  _activateTab(qq, target.tabs.indexOf(mode));
+}
+
+// Open a second pane beside the first, showing view `mode`; a tab dragged out of
+// pane 0 moves there unless it is that pane's only one.
+function _splitWith(mode, fromIdx) {
+  if (_panes.length > 1) { _addTab(1, mode); return; }
+  if (fromIdx !== undefined && _panes[0].tabs.length > 1) _takeTab(0, fromIdx);
+  _panes.push({ tabs: [mode], active: 0 });
+  _focusPane = 1;
+  state.vizMode = mode;
+  _afterViewChange();
+}
+
+function _tabbarHtml(p) {
+  const pane = _panes[p];
+  const only = _panes.length === 1 && pane.tabs.length === 1;
+  const tabs = pane.tabs.map((m, i) => {
+    const on = i === pane.active;
+    return `<div class="sl-tab${on ? ' active' : ''}${on && p === _focusPane ? ' focus' : ''}" role="tab" aria-selected="${on}" draggable="true" data-pane="${p}" data-idx="${i}" title="${_VIZ_NAMES[m]} (${_VIZ_KEY_OF[m]})${_splitAllowed() ? '. Drag to the right half of the image to see it beside this one.' : ''}">` +
+      `<span class="sl-tab-glyph">${_VIZ_GLYPHS[m]}</span><span class="sl-tab-name">${_VIZ_TAB_NAMES[m]}</span>` +
+      (only ? '' : `<button type="button" class="sl-tab-x" data-act="close" aria-label="Close ${_VIZ_TAB_NAMES[m]}" title="Close">×</button>`) +
+      `</div>`;
+  }).join('');
+  const split = p === 0 && _panes.length === 1
+    ? `<button type="button" class="sl-tab-split" data-act="split" title="Open a second view beside this one" aria-label="Open a second view beside this one"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><path d="M8 2.5v11"/></svg></button>` : '';
+  return `<div class="sl-tabs" role="tablist" aria-label="Views">${tabs}</div>` +
+    `<button type="button" class="sl-tab-add" data-act="add" title="Add a view as a tab" aria-label="Add a view as a tab"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button>` +
+    `<span class="sl-tabbar-gap"></span>${split}`;
+}
+
+function renderTabs() {
+  _reconcilePanes();
+  const stage = document.getElementById('sl-stage');
+  if (!stage) return;
+  // Held before the strips are rebuilt below, which would detach it.
+  const chips = document.getElementById('sl-overlay-chips');
+  const split = _isSplit();
+  stage.classList.toggle('sl-split', split);
+  for (const p of [0, 1]) {
+    const paneEl = stage.querySelector(`.sl-pane[data-pane="${p}"]`);
+    const bar    = stage.querySelector(`.sl-tabbar[data-pane="${p}"]`);
+    const shown  = !!_panes[p];
+    if (p === 1) paneEl.hidden = !shown;
+    paneEl.classList.toggle('sl-pane-focus', shown && p === _focusPane);
+    if (shown) bar.innerHTML = _tabbarHtml(p);
+  }
+  // The overlay toggles sit at the end of the last pane's tab strip on desktop,
+  // and on the image itself on phones.
+  const home  = _splitAllowed()
+    ? stage.querySelector(`.sl-tabbar[data-pane="${split ? 1 : 0}"]`)
+    : document.getElementById('sl-image-wrap');
+  if (chips && home) home.appendChild(chips);
+}
+
+// ── The add-a-view menu ──
+function _closeTabMenu() { document.getElementById('sl-tab-menu')?.remove(); }
+function _openTabMenu(anchor, p, forSplit) {
+  _closeTabMenu();
+  const stage = document.getElementById('sl-stage');
+  const open  = forSplit ? [] : _panes[p].tabs;
+  const menu  = document.createElement('div');
+  menu.id = 'sl-tab-menu';
+  menu.className = 'sl-tab-menu';
+  menu.setAttribute('role', 'menu');
+  menu.innerHTML = `<div class="sl-tab-menu-hdr">${forSplit ? 'Open beside' : 'Add a view'}</div>` +
+    VIZ_CYCLE.map(m => `<button type="button" role="menuitem" data-mode="${m}"${open.includes(m) ? ' class="on"' : ''}><span class="sl-tab-glyph">${_VIZ_GLYPHS[m]}</span>${_VIZ_TAB_NAMES[m]}<span class="k">${_VIZ_KEY_OF[m]}</span></button>`).join('');
+  stage.appendChild(menu);
+  // Place it under its button, in the stage's own (unscaled) units.
+  const sr = stage.getBoundingClientRect(), ar = anchor.getBoundingClientRect();
+  const k  = stage.offsetWidth / sr.width;
+  let left = (ar.left - sr.left) * k;
+  left = Math.min(left, stage.offsetWidth - menu.offsetWidth - 8);
+  menu.style.left = `${Math.max(8, left)}px`;
+  menu.style.top  = `${(ar.bottom - sr.top) * k + 4}px`;
+  menu.addEventListener('click', e => {
+    const b = e.target.closest('[data-mode]');
+    if (!b) return;
+    _closeTabMenu();
+    const mode = +b.dataset.mode;
+    if (forSplit) _splitWith(mode); else _addTab(p, mode);
+  });
+}
+
+function attachPaneHandlers() {
+  const stage = document.getElementById('sl-stage');
+  if (!stage) return;
+  // Clicking anywhere in a pane focuses it, before its own handlers run (so a
+  // drag that starts there hit-tests against that pane's view).
+  stage.querySelectorAll('.sl-pane').forEach(el =>
+    el.addEventListener('pointerdown', () => focusPane(+el.dataset.pane), true));
+
+  stage.addEventListener('click', e => {
+    const bar = e.target.closest('.sl-tabbar');
+    if (!bar) return;
+    const p   = +bar.dataset.pane;
+    const act = e.target.closest('[data-act]')?.dataset.act;
+    const tab = e.target.closest('.sl-tab');
+    if (act === 'close' && tab) { _closeTab(p, +tab.dataset.idx); return; }
+    if (act === 'add')   { _openTabMenu(e.target.closest('[data-act]'), p, false); return; }
+    if (act === 'split') { _openTabMenu(e.target.closest('[data-act]'), p, true); return; }
+    if (tab) _activateTab(p, +tab.dataset.idx);
+  });
+  document.addEventListener('pointerdown', e => {
+    if (!e.target.closest('#sl-tab-menu, .sl-tab-add, .sl-tab-split')) _closeTabMenu();
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') _closeTabMenu(); });
+
+  // Drag a tab: along a strip to reorder it, onto the other pane's strip or image
+  // to move it there, or onto the right half of a single pane to split.
+  const zone = document.getElementById('sl-drop-zone');
+  const clearMarks = () => {
+    stage.querySelectorAll('.sl-tab.drop-before, .sl-tabbar.drop-end, .sl-pane.drop-into').forEach(el =>
+      el.classList.remove('drop-before', 'drop-end', 'drop-into'));
+    if (zone) zone.hidden = true;
+  };
+  // Where a drop at this event would land: { kind: 'tab'|'pane'|'split', q, j }.
+  const target = e => {
+    if (!_dragTab) return null;
+    const bar = e.target.closest?.('.sl-tabbar');
+    if (bar) {
+      const q = +bar.dataset.pane;
+      const tabs = [...bar.querySelectorAll('.sl-tab')];
+      const j = tabs.findIndex(t => { const r = t.getBoundingClientRect(); return e.clientX < r.left + r.width / 2; });
+      return { kind: 'tab', q, j: j < 0 ? undefined : j, el: j < 0 ? bar : tabs[j] };
+    }
+    const pane = e.target.closest?.('.sl-pane');
+    if (_panes.length > 1 && pane && +pane.dataset.pane !== _dragTab.p) return { kind: 'pane', q: +pane.dataset.pane, el: pane };
+    if (_panes.length === 1) {
+      const pr = document.getElementById('sl-panes').getBoundingClientRect();
+      if (e.clientX > pr.left + pr.width / 2) return { kind: 'split' };
+    }
+    return null;
+  };
+  stage.addEventListener('dragstart', e => {
+    const tab = e.target.closest?.('.sl-tab');
+    if (!tab) return;
+    _dragTab = { p: +tab.dataset.pane, i: +tab.dataset.idx };
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', _VIZ_TAB_NAMES[_panes[_dragTab.p].tabs[_dragTab.i]]);
+    tab.classList.add('dragging');
+    _closeTabMenu();
+  });
+  stage.addEventListener('dragover', e => {
+    const t = target(e);
+    clearMarks();
+    if (!t) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (t.kind === 'tab')   t.el.classList.add(t.j === undefined ? 'drop-end' : 'drop-before');
+    if (t.kind === 'pane')  t.el.classList.add('drop-into');
+    if (t.kind === 'split' && zone) zone.hidden = false;
+  });
+  stage.addEventListener('dragleave', e => { if (!stage.contains(e.relatedTarget)) clearMarks(); });
+  stage.addEventListener('drop', e => {
+    const t = target(e), d = _dragTab;
+    clearMarks();
+    if (!t || !d) return;
+    e.preventDefault();
+    _dragTab = null;
+    if (t.kind === 'tab')   _moveTab(d.p, d.i, t.q, t.j);
+    if (t.kind === 'pane')  _moveTab(d.p, d.i, t.q);
+    if (t.kind === 'split') _splitWith(_panes[0].tabs[d.i], d.i);
+  });
+  stage.addEventListener('dragend', () => {
+    _dragTab = null;
+    clearMarks();
+    stage.querySelectorAll('.sl-tab.dragging').forEach(el => el.classList.remove('dragging'));
+  });
+
+  // Pane 1's image: the same drag, ruler, zoom and undo handling as pane 0's.
+  const wrap2 = document.getElementById('sl-image-wrap2');
+  if (wrap2) {
+    attachImageHandlers(wrap2);
+    attachZoomHandlers(wrap2);
+    _attachHistoryBoundary(wrap2);
+    new ResizeObserver(() => { if (_isSplit()) redraw(); }).observe(wrap2);
+  }
+}
+
+// Pane 1's frame: what the renderer just drew, copied off the WebGL canvas.
+function _copyGLToPane1() {
+  const c2 = document.getElementById('sl-gl-canvas2');
+  if (!c2 || !glCanvas) return;
+  if (c2.width !== glCanvas.width || c2.height !== glCanvas.height) {
+    c2.width = glCanvas.width; c2.height = glCanvas.height;
+  }
+  const ctx = c2.getContext('2d');
+  ctx.clearRect(0, 0, c2.width, c2.height);
+  if (!state.lineArt) ctx.drawImage(glCanvas, 0, 0);   // line art paints its own background on the overlay
+  c2.classList.toggle('sl-viz-active', state.vizMode !== 0);
+}
+
+// The overlay of every visible pane: pane 1's first, so pane 0's computed
+// curves and image positions are the ones left cached for the CSV export.
+function drawOverlay() {
+  if (_isSplit()) {
+    const keepCtx = overlayCtx, keepF = state.fermatPoints, keepP = state.saddlePhis;
+    _overlayCtx2 ??= document.getElementById('sl-overlay2')?.getContext('2d');
+    if (_overlayCtx2) _withView(_paneMode(1), () => {
+      overlayCtx = _overlayCtx2;
+      if (_pane1Fermat) { state.fermatPoints = _pane1Fermat.points; state.saddlePhis = _pane1Fermat.phis; }
+      try {
+        _drawOverlayPane();
+        if (!state.hideOverlays && !state.lineArt)
+          _drawColorbarOnto(overlayCtx, overlayCtx.canvas.width, overlayCtx.canvas.height, true);
+      } finally { overlayCtx = keepCtx; state.fermatPoints = keepF; state.saddlePhis = keepP; }
+    });
+  }
+  _withView(_paneMode(0), _drawOverlayPane);
+}
+
 // ── Quality tab ───────────────────────────────────────────────────────────────
 function renderQualityPanel() {
   const pop = document.getElementById('sl-tab-quality');
@@ -3157,14 +3501,10 @@ function updateZsChip() {
 // Set the visualization mode and sync the dropdown, colorbar, and canvas class.
 // Single entry point shared by the dropdown, the I/K/G/M/A/T keys, the tour,
 // and the mobile image swipe.
+// Show view `mode` in the focused pane (its tab if it has one; see _reconcilePanes).
 function setVizMode(mode) {
   state.vizMode = mode;
-  if (mode === 9) seedBgPixel();
-  const sel = document.getElementById('sl-viz-mode');
-  if (sel) sel.value = mode;
-  glCanvas?.classList.toggle('sl-viz-active', mode !== 0);
-  updateCanvasTools();   // the mask tool comes and goes with the delensed view
-  _updateColorbar(); renderSidebar(); redraw();
+  _afterViewChange();
 }
 
 // Step to the previous/next visualization mode, wrapping around. The order
@@ -6562,8 +6902,9 @@ function drawLineArtBase(W, H, dpr) {
   overlayCtx.restore();
 }
 
-function drawOverlay() {
-  const overlay = document.getElementById('sl-overlay');
+// One pane's overlay, on overlayCtx for state.vizMode; drawOverlay() runs it per pane.
+function _drawOverlayPane() {
+  const overlay = overlayCtx.canvas;
   const r   = overlay.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
   const W   = Math.max(1, Math.round(r.width  * dpr));
@@ -7311,6 +7652,33 @@ function _fmtLimit(v, suffix) {
   return s + suffix;
 }
 
+// The colorbar on a canvas with no DOM colorbar to measure (pane 1): the same
+// strip and labels, at the place .sl-colorbar puts them (8px in, 12px up, 110×10).
+function _drawColorbarFixed(ctx, w, h, info) {
+  const u      = w / Math.max(1, ctx.canvas.clientWidth);   // buffer px per CSS px
+  const vs     = vizScaleFor(state.vizMode);
+  const dark   = document.documentElement.getAttribute('data-theme') === 'dark';
+  const stops  = _paletteStops(vs.palette ?? 0, dark);
+  const barX = 8 * u, barW = 110 * u, barH = 10 * u, barY = h - 39 * u, labelsY = barY + barH + 4 * u;
+  ctx.save();
+  ctx.globalAlpha = 0.88;
+  const grad = ctx.createLinearGradient(barX, 0, barX + barW, 0);
+  const n = Math.max(stops.length - 1, 1);
+  stops.forEach((c, i) => grad.addColorStop(i / n, c));
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(barX, barY, barW, barH, 2 * u); else ctx.rect(barX, barY, barW, barH);
+  ctx.fillStyle = grad; ctx.fill();
+  ctx.lineWidth = Math.max(1, u); ctx.strokeStyle = 'rgba(128,128,128,0.3)'; ctx.stroke();
+  ctx.fillStyle = dark ? '#c9d1d9' : '#4b5563';
+  ctx.textBaseline = 'top';
+  ctx.font = `${10 * u}px system-ui, -apple-system, sans-serif`;
+  ctx.textAlign = 'left';   ctx.fillText(_fmtLimit(vs.min, info[1]), barX, labelsY);
+  ctx.textAlign = 'right';  ctx.fillText(_fmtLimit(vs.max, info[1]), barX + barW, labelsY);
+  ctx.font = `600 ${10.5 * u}px system-ui, -apple-system, sans-serif`;
+  ctx.textAlign = 'center'; ctx.fillText(info[0], barX + barW / 2, labelsY);
+  ctx.restore();
+}
+
 function _updateColorbar() {
   const bar   = document.getElementById('sl-colorbar');
   const strip = document.getElementById('sl-colorbar-bar');
@@ -7352,9 +7720,10 @@ function _paletteStops(palette, dark) {
 // the 2D composite. To stay identical to the live bar under any scaling, we MEASURE the
 // live elements and map their screen rects into the canvas buffer, deriving sizes from
 // the measured bar (the .sl-colorbar* CSS uses 10px units that match the bar height).
-function _drawColorbarOnto(ctx, w, h) {
+function _drawColorbarOnto(ctx, w, h, fixed = false) {
   const info = _VIZ_COLORBAR[state.vizMode];
   if (!info || !state.showColorbar || !glCanvas) return;
+  if (fixed) return _drawColorbarFixed(ctx, w, h, info);
   const barEl = document.getElementById('sl-colorbar-bar');
   const minEl = document.getElementById('sl-colorbar-min');
   if (!barEl) return;
@@ -7454,6 +7823,7 @@ function redraw() {
 }
 
 function _doRedraw() {
+  if (_reconcilePanes()) renderTabs();
   syncBackdrop();   // background framing is read by the renderer at draw time
   syncDetector();   // ... as is the detector model
   if (!renderer || !state.dist) return;
@@ -7483,6 +7853,36 @@ function _doRedraw() {
     if (_fso) { state.lastFermatSource.cx = _fso.cx; state.lastFermatSource.cy = _fso.cy; }
   }
 
+  // Pane 1 first: its frame is copied off the WebGL canvas, which then ends on
+  // pane 0's view (see the panes section).
+  if (_isSplit()) _withView(_paneMode(1), () => {
+    syncBackdrop(); syncDetector();
+    _renderGL(sorted, isDark);
+    _pane1Fermat = { points: state.fermatPoints, phis: state.saddlePhis };
+    _copyGLToPane1();
+  });
+  _withView(_paneMode(0), () => {
+    syncBackdrop(); syncDetector();
+    _renderGL(sorted, isDark);
+    glCanvas.classList.toggle('sl-viz-active', state.vizMode !== 0);
+    _updateColorbar();
+  });
+  for (const plane of state.planes) redrawPlaneCanvas(plane);
+  drawAxisCanvas();
+  const _t0 = performance.now();
+  drawOverlay();
+  reportPerf(performance.now() - _t0);
+  // Pane 0's chrome describes pane 0's view.
+  _withView(_paneMode(0), () => {
+    reportObjectCap();
+    reportDetector();
+    updateOverlayChips();
+    updateZsChip();
+  });
+}
+
+// Draw the scene for state.vizMode onto the WebGL canvas.
+function _renderGL(sorted, isDark) {
   if (state.lineArt) {
     // Line-art mode draws everything as vectors on the overlay; skip the raster GL
     // pass entirely (the opaque overlay background covers the GL canvas).
@@ -7505,15 +7905,6 @@ function _doRedraw() {
     state.fermatPoints = null;
     state.saddlePhis = [];
   }
-  for (const plane of state.planes) redrawPlaneCanvas(plane);
-  drawAxisCanvas();
-  const _t0 = performance.now();
-  drawOverlay();
-  reportPerf(performance.now() - _t0);
-  reportObjectCap();
-  reportDetector();
-  updateOverlayChips();
-  updateZsChip();
 }
 
 // ── Capture & recording ───────────────────────────────────────────────────────
@@ -7522,7 +7913,8 @@ function _doRedraw() {
 // Composite the GL canvas + overlay (markers/curves/legend) into a flat 2D canvas,
 // reflecting whatever is currently on screen. UI chrome (the viz-mode chip, colorbar,
 // sidebar) lives in separate DOM elements and is intentionally NOT included.
-function buildCompositeCanvas() {
+function buildCompositeCanvas() { return _withView(_paneMode(0), _buildCompositeCanvas); }
+function _buildCompositeCanvas() {
   const gl  = glCanvas;
   const ov  = document.getElementById('sl-overlay');
   // Line-art mode: the overlay already holds the opaque background + all vectors,
@@ -7563,7 +7955,8 @@ function downloadBlob(blob, filename) {
 }
 
 // PNG snapshot.
-function captureSnapshot() {
+function captureSnapshot() { _withView(_paneMode(0), _captureSnapshot); }
+function _captureSnapshot() {
   // Ensure the frame is fully drawn first, from current settings: the backdrop,
   // masks and detector are otherwise pushed into the renderer only by the next
   // _doRedraw(), which may still be pending.
@@ -7983,7 +8376,8 @@ function stopRecording() {
   }
 }
 
-function _compositeToLive() {
+function _compositeToLive() { _withView(_paneMode(0), _compositeToLiveNow); }
+function _compositeToLiveNow() {
   if (!recState.liveCanvas) return;
   const lc  = recState.liveCanvas;
   const gl  = glCanvas;
@@ -8251,7 +8645,8 @@ const TOUR_STEPS = [
     mobileText: 'The <b>Critical curves</b> are where magnification formally diverges, and the <b>caustics</b> are the critical curves mapped onto the source plane. Press <kbd>C</kbd> to toggle them, use the chips beside the view dropdown, or the View tab.',
   },
   {
-    target: '#sl-viz-mode',
+    target: '.sl-tabbar[data-pane="0"]',
+    mobileTarget: '#sl-viz-mode',
     onEnter: () => {
       _tourClosePlaneSetup();
       state.showCritCurves = false;
@@ -8261,7 +8656,8 @@ const TOUR_STEPS = [
     },
     arrow: 'below',
     label: 'Lensing quantities',
-    text: 'This dropdown maps a lensing quantity across the field: convergence κ, shear γ, magnification |μ|, deflection |α|, or the <b>Fermat potential φ</b> shown here. Its contours trace light arrival time, and the marked points are the images of the source (a minimum, saddle, or maximum of that surface). Press <kbd>I</kbd> to return to the lensed image.',
+    text: 'Each tab is a view: the lensed image, or a map of a lensing quantity across the field, such as convergence κ, shear γ, magnification |μ|, deflection |α|, or the <b>Fermat potential φ</b> shown here, whose contours trace light arrival time (the marked points are the images of the source). <b>+</b> adds a view as a tab, and the letter keys switch the current tab (<kbd>I</kbd> for the lensed image). To see two views side by side, drag a tab onto the right half of the image, or use the split button at the end of the strip; click either one to make it the view the panels on the right control.',
+    mobileText: 'This dropdown maps a lensing quantity across the field: convergence κ, shear γ, magnification |μ|, deflection |α|, or the <b>Fermat potential φ</b> shown here. Its contours trace light arrival time, and the marked points are the images of the source (a minimum, saddle, or maximum of that surface). Press <kbd>I</kbd> to return to the lensed image.',
   },
   {
     target: '#sl-image-wrap',

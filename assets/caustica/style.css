@@ -320,7 +320,8 @@ html[data-theme="dark"] .sl-topbar-menu { box-shadow: 0 8px 24px rgba(0, 0, 0, 0
 /* In light mode, invert the lensed image so background is bright and arcs are dark.
    Keep this selector in step with glCanvasInverted() in main.js, which PNG/video
    capture and the background image's pre-inversion both read. */
-html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); }
+html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active),
+html[data-theme="light"] #sl-gl-canvas2:not(.sl-viz-active) { filter: invert(1); }
 
 /* Overlay canvas for critical curves — sits on top, pointer-events off. */
 .sl-overlay {
@@ -2266,6 +2267,10 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
    elements are hidden there. */
 
 .sl-switcher, .sl-drawer, .sl-insp-title { display: none; }
+/* Phones show one view: the pane wrappers are layout-neutral and the desktop
+   tab strips, second pane and drop zone are hidden. */
+.sl-panes, .sl-pane { display: contents; }
+.sl-tabbar, .sl-pane[data-pane="1"], .sl-drop-zone, .sl-tab-menu { display: none; }
 /* View-tab sections are grouped by inspector category (see setInspectorCat);
    the wrappers are layout-neutral. */
 .sl-cat { display: contents; }
@@ -2284,25 +2289,124 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
   }
   .sl-timeline, .sl-rail-tabs, #sl-plane-card { display: none !important; }
 
-  /* View bar: the view-mode menu and the overlay toggles sit in a strip above
-     the canvas instead of on it. The wrap stops clipping so they can hang
-     above it; the canvases take over the rounded corners. */
-  .sl-stage { padding: 46px 14px 10px; }
-  .sl-image-wrap { overflow: visible; }
-  .sl-image-wrap > canvas { border-radius: 5px; }
-  .sl-viz-chip { top: -38px; left: -1px; right: auto; opacity: 1; }
-  .sl-viz-chip select {
-    font: 500 13px system-ui, -apple-system, sans-serif;
-    padding: 5px 8px;
+  /* View panes: one, or two side by side, each a tab strip over a square image.
+     The overlay toggles join the last strip (renderTabs() moves them there). */
+  .sl-stage { position: relative; padding: 8px 14px 10px; }
+  .sl-panes { display: flex; justify-content: center; align-items: flex-start; gap: 14px; width: 100%; height: 100%; }
+  .sl-pane { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .sl-pane[data-pane="1"]:not([hidden]) { display: flex; }
+  .sl-pane[hidden] { display: none; }
+  .sl-image-wrap { width: min(100cqw, 100cqh - 40px); }
+  .sl-split .sl-image-wrap { width: min((100cqw - 14px) / 2, 100cqh - 40px); }
+  .sl-split .sl-pane-focus .sl-image-wrap { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .sl-pane.drop-into .sl-image-wrap { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+  .sl-viz-chip { display: none; }
+  .sl-zs-chip { top: 8px; }
+
+  .sl-tabbar { display: flex; align-items: center; gap: 2px; height: 34px; min-width: 0; }
+  .sl-tabbar.drop-end .sl-tab-add { box-shadow: inset 2px 0 0 var(--accent); }
+  .sl-tabs { display: flex; align-items: center; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .sl-tabs::-webkit-scrollbar { display: none; }
+  .sl-tab {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 30px;
+    padding: 0 6px 0 10px;
+    border-radius: 7px;
+    color: var(--muted);
+    font: 500 12.5px system-ui, -apple-system, sans-serif;
+    white-space: nowrap;
+    user-select: none;
+    cursor: pointer;
+  }
+  .sl-tab.active { background: var(--bg-soft2); color: var(--fg); }
+  .sl-tab.dragging { opacity: 0.4; }
+  .sl-tab.drop-before { box-shadow: inset 2px 0 0 var(--accent); }
+  .sl-tab-glyph { min-width: 10px; text-align: center; font-weight: 700; color: var(--muted); }
+  .sl-tab.active .sl-tab-glyph { color: var(--fg-soft); }
+  .sl-tab.focus .sl-tab-glyph { color: var(--accent); }
+  .sl-tab-name { max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+  .sl-tab-x {
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: none;
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    visibility: hidden;
+  }
+  .sl-tab:hover .sl-tab-x, .sl-tab.active .sl-tab-x { visibility: visible; }
+  .sl-tab-add, .sl-tab-split {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
     border: none;
     border-radius: 7px;
-    background: var(--bg-soft2);
-    color: var(--fg);
+    background: none;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
   }
-  .sl-overlay-chips { top: -37px; right: -1px; gap: 2px; opacity: 1; }
-  .sl-overlay-chips button { width: 28px; height: 28px; border: none; border-radius: 7px; background: none; }
-  .sl-overlay-chips button.active { border: none; }
-  .sl-zs-chip { top: 8px; }
+  .sl-tabbar-gap { flex: 1; min-width: 8px; }
+  .sl-tabbar .sl-overlay-chips { position: static; flex-shrink: 0; gap: 2px; opacity: 1; }
+  .sl-tabbar .sl-overlay-chips button { width: 28px; height: 28px; border: none; border-radius: 7px; background: none; }
+  .sl-tabbar .sl-overlay-chips button.active { border: none; }
+
+  .sl-drop-zone {
+    position: absolute;
+    top: 48px;
+    right: 14px;
+    bottom: 10px;
+    width: calc(50% - 21px);
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px dashed var(--accent);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    color: var(--accent);
+    font: 600 13px system-ui, -apple-system, sans-serif;
+    pointer-events: none;
+  }
+  .sl-drop-zone[hidden] { display: none; }
+
+  .sl-tab-menu {
+    position: absolute;
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    min-width: 210px;
+    padding: 4px;
+    border: 1px solid var(--hairline);
+    border-radius: 8px;
+    background: var(--bg);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  }
+  .sl-tab-menu-hdr { padding: 4px 8px 4px; font-size: 11px; color: var(--muted); }
+  .sl-tab-menu button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border: none;
+    border-radius: 5px;
+    background: none;
+    color: var(--fg-soft);
+    font: 12.5px system-ui, -apple-system, sans-serif;
+    text-align: left;
+    cursor: pointer;
+  }
+  .sl-tab-menu button.on { color: var(--fg); font-weight: 600; }
+  .sl-tab-menu .k { margin-left: auto; padding-left: 12px; font-size: 11px; color: var(--muted); }
 
   /* Inspector: a title for the chosen category above its scrolling panel. */
   .sl-insp-title {
@@ -2578,4 +2682,8 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
   .sl-dcard-delobj:hover,
   .sl-dcard-act:hover { color: var(--fg); border-color: var(--fg-soft); }
   .sl-drawer-btn:hover { background: var(--hairline); }
+  .sl-tab:hover:not(.active) { color: var(--fg-soft); background: color-mix(in srgb, var(--bg-soft2) 60%, transparent); }
+  .sl-tab-x:hover, .sl-tab-add:hover, .sl-tab-split:hover,
+  .sl-tabbar .sl-overlay-chips button:hover { color: var(--fg); background: var(--bg-soft2); }
+  .sl-tab-menu button:hover { background: var(--bg-soft2); color: var(--fg); }
 }
