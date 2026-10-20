@@ -2351,7 +2351,7 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
     position: relative;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
     min-width: 0;
     padding: 6px 14px 10px;
     border-top: 1px solid var(--hairline);
@@ -2362,25 +2362,25 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
     top: 0;
     left: 50%;
     width: 48px;
-    height: 12px;
+    height: 10px;
     margin-left: -24px;
     border: none;
     background: none;
     cursor: pointer;
+    z-index: 1;
   }
   .sl-drawer-handle::after {
     content: '';
     position: absolute;
     left: 8px;
     right: 8px;
-    top: 4px;
+    top: 3px;
     height: 4px;
     border-radius: 2px;
     background: var(--hairline);
   }
   .sl-drawer-hdr { display: flex; align-items: center; gap: 8px; height: 28px; }
-  .sl-drawer-title { font-size: 13px; font-weight: 600; color: var(--fg); }
-  .sl-drawer-sum { margin-right: auto; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .sl-drawer-title { flex-shrink: 0; font-size: 13px; font-weight: 600; color: var(--fg); }
   .sl-drawer-btn {
     flex-shrink: 0;
     padding: 3px 10px;
@@ -2408,84 +2408,49 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
   .sl-drawer-closed .sl-drawer-cards { display: none; }
   .sl-drawer-closed { padding-bottom: 6px; }
 
+  /* Line-of-sight strip in the header: the observer, then a mark per plane. */
+  .sl-sight { flex: 1; min-width: 60px; max-width: 560px; height: 28px; margin: 0 auto 0 6px; color: var(--muted); touch-action: none; }
+  .sl-sight svg { display: block; overflow: visible; }
+  .sl-sight-axis { stroke: var(--hairline); stroke-width: 1.5; fill: none; }
+  .sl-sight-tick { stroke: var(--muted); stroke-opacity: 0.55; stroke-width: 1; }
+  .sl-sight-end  { fill: var(--muted); font: 10.5px system-ui, -apple-system, sans-serif; }
+  .sl-sight-ring { fill: none; stroke: var(--accent); stroke-width: 1.4; }
+
   .sl-drawer-cards {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     overflow-x: auto;
     padding-bottom: 2px;
   }
+  .sl-drawer-empty { padding: 14px 2px; font-size: 12.5px; color: var(--muted); }
+
+  /* A plane card: the viewer, with the plane tools around it when selected. */
   .sl-dcard {
-    position: relative;
-    flex: 1 0 212px;
-    max-width: 320px;
+    flex: 0 0 auto;
     display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: 7px 9px 9px;
+    gap: 8px;
+    padding: 8px;
     border: 1px solid var(--hairline);
     border-radius: 10px;
     background: var(--bg-soft);
-  }
-  .sl-dcard-sel { border-color: var(--accent); }
-  .sl-dcard-hdr { position: relative; display: flex; align-items: center; gap: 6px; min-height: 24px; }
-  .sl-dcard-dot { flex-shrink: 0; width: 7px; height: 7px; border-radius: 1px; transform: rotate(45deg); background: var(--muted); }
-  .sl-dcard[data-effective-type="lens"]   .sl-dcard-dot { background: var(--lens-color); }
-  .sl-dcard[data-effective-type="source"] .sl-dcard-dot { background: var(--src-color); }
-  .sl-dcard[data-effective-type="hybrid"] .sl-dcard-dot { background: var(--hybrid-color); }
-  .sl-dcard-title { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 600; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .sl-dcard-z { display: flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--muted); }
-  .sl-dcard-z-input {
-    width: 52px;
-    padding: 2px 5px;
-    border: 1px solid var(--hairline);
-    border-radius: 5px;
-    background: var(--bg);
-    color: var(--fg);
-    font: 12px system-ui, -apple-system, sans-serif;
-    font-variant-numeric: tabular-nums;
-  }
-  .sl-dcard-menu-btn {
-    width: 24px;
-    height: 24px;
-    border: none;
-    border-radius: 5px;
-    background: none;
-    color: var(--muted);
-    font-size: 15px;
-    line-height: 1;
     cursor: pointer;
   }
-  .sl-dcard-menu {
-    position: absolute;
-    top: 26px;
-    right: 0;
-    z-index: 30;
-    display: flex;
-    flex-direction: column;
-    min-width: 150px;
-    padding: 4px;
-    border: 1px solid var(--hairline);
-    border-radius: 8px;
-    background: var(--bg);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  .sl-dcard-hot { border-color: color-mix(in srgb, var(--accent) 55%, var(--hairline)); }
+  .sl-dcard-sel {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+    cursor: default;
   }
-  .sl-dcard-menu[hidden], .sl-dcard-menu button[hidden] { display: none; }
-  .sl-dcard-menu button {
-    padding: 7px 9px;
-    border: none;
-    border-radius: 5px;
-    background: none;
-    color: var(--fg-soft);
-    font: 12.5px system-ui, -apple-system, sans-serif;
-    text-align: left;
-    cursor: pointer;
-  }
-  .sl-dcard-body { display: flex; gap: 10px; min-height: 0; }
+  .sl-dcard-tools, .sl-dcard-side { display: none; }
+  .sl-dcard-sel .sl-dcard-tools { display: flex; flex-direction: column; gap: 4px; }
+  .sl-dcard-sel .sl-dcard-side  { display: flex; flex-direction: column; width: 84px; min-width: 0; }
+  .sl-dcard-sel .sl-dcard-zlabel { display: none; }
+
+  .sl-dcard-view { position: relative; flex: 0 0 auto; }
   .sl-dcard-canvas {
-    flex: 0 0 auto;
     display: block;
-    width: 88px;
-    height: 88px;
+    width: 120px;
+    height: 120px;
     border: 1.5px solid var(--hairline);
     border-radius: 6px;
     touch-action: none;
@@ -2493,81 +2458,77 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
   .sl-dcard[data-effective-type="lens"]   .sl-dcard-canvas { border-color: color-mix(in srgb, var(--lens-color) 60%, transparent); }
   .sl-dcard[data-effective-type="source"] .sl-dcard-canvas { border-color: color-mix(in srgb, var(--src-color) 60%, transparent); }
   .sl-dcard[data-effective-type="hybrid"] .sl-dcard-canvas { border-color: color-mix(in srgb, var(--hybrid-color) 60%, transparent); }
-  .sl-dcard-side { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-  .sl-dcard-objs { display: flex; flex-direction: column; gap: 1px; max-height: 64px; overflow-y: auto; }
-  .sl-dobj {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    flex-shrink: 0;
-    height: 25px;
-    padding: 0 7px;
-    border: none;
-    border-radius: 6px;
-    background: none;
+  .sl-dcard-zlabel {
+    position: absolute;
+    left: 6px;
+    bottom: 6px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
     color: var(--fg);
-    font: 12.5px system-ui, -apple-system, sans-serif;
-    text-align: left;
-    white-space: nowrap;
-    cursor: pointer;
+    font: 12px system-ui, -apple-system, sans-serif;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
   }
-  .sl-dobj.active { background: var(--accent-soft); }
-  .sl-dobj-hidden { opacity: 0.5; }
-  .sl-dobj-glyph { flex: 0 0 auto; display: inline-block; width: 9px; height: 9px; }
-  .sl-dobj-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-  .sl-dobj-val { margin-left: auto; padding-left: 6px; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .sl-dcard-empty { padding: 3px 2px; font-size: 11.5px; line-height: 1.35; color: var(--muted); }
-  .sl-dcard-place { display: flex; align-items: center; gap: 3px; margin-top: auto; padding-top: 4px; }
-  .sl-dcard-place-lbl { margin-right: 2px; font-size: 11.5px; color: var(--muted); }
-  .sl-dplace-btn {
-    width: 24px;
-    height: 24px;
+
+  .sl-dplace-btn, .sl-dcard-delobj {
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
+    padding: 0;
     border: 1px solid var(--hairline);
     border-radius: 6px;
     background: var(--bg);
     color: var(--fg-soft);
     font: 600 11.5px system-ui, -apple-system, sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     cursor: pointer;
   }
+  .sl-dcard-delobj { margin-top: auto; }
+  /* With the mask tool there are five buttons; keep the column to the viewer's height. */
+  .sl-dcard-mask.sl-dcard-sel .sl-dcard-tools { gap: 2.5px; }
+  .sl-dcard-mask .sl-dplace-btn, .sl-dcard-mask .sl-dcard-delobj { width: 22px; height: 22px; }
   .sl-dplace-btn.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 
-  .sl-dcard-bg { flex: 0 0 168px; }
-  .sl-dbg-open {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    min-width: 0;
-    padding: 0;
-    border: none;
-    background: none;
+  .sl-dcard-cap { margin-bottom: 3px; font-size: 10.5px; color: var(--muted); }
+  .sl-dcard-z-input {
+    width: 100%;
+    height: 24px;
+    padding: 2px 6px;
+    border: 1px solid var(--hairline);
+    border-radius: 5px;
+    background: var(--bg);
     color: var(--fg);
-    text-align: left;
-    cursor: pointer;
+    font: 12.5px system-ui, -apple-system, sans-serif;
+    font-variant-numeric: tabular-nums;
   }
-  .sl-dbg-thumb { display: block; width: 148px; height: 74px; border-radius: 6px; background: #000; }
-  .sl-dbg-name { max-width: 148px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .sl-dbg-meta { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .sl-dbg-upload { display: none; }
-  .sl-dcard-bg-none .sl-dbg-open { display: none; }
-  .sl-dcard-bg-none .sl-dbg-upload {
-    display: block;
-    padding: 10px;
-    border: 1px dashed var(--hairline);
-    border-radius: 8px;
+  .sl-dcard-type { margin-top: 6px; font-size: 11.5px; color: var(--fg-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sl-dcard-gap { flex: 1; }
+  .sl-dcard-act {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    height: 22px;
+    margin-top: 4px;
+    padding: 0 7px;
+    border: 1px solid var(--hairline);
+    border-radius: 5px;
     background: none;
     color: var(--fg-soft);
-    font: 12px system-ui, -apple-system, sans-serif;
+    font: 11.5px system-ui, -apple-system, sans-serif;
+    white-space: nowrap;
     cursor: pointer;
   }
+  .sl-dcard-act[hidden] { display: none; }
 }
 
 @media (min-width: 641px) and (hover: hover) {
   .sl-cat-btn:hover:not(.active),
-  .sl-drawer-toggle:hover,
-  .sl-dcard-menu-btn:hover { color: var(--fg); background: var(--bg-soft2); }
-  .sl-dcard-menu button:hover { background: var(--bg-soft2); color: var(--fg); }
-  .sl-dobj:hover:not(.active) { background: var(--bg-soft2); }
-  .sl-dplace-btn:hover:not(.active) { color: var(--fg); border-color: var(--fg-soft); }
+  .sl-drawer-toggle:hover { color: var(--fg); background: var(--bg-soft2); }
+  .sl-dplace-btn:hover:not(.active),
+  .sl-dcard-delobj:hover,
+  .sl-dcard-act:hover { color: var(--fg); border-color: var(--fg-soft); }
   .sl-drawer-btn:hover { background: var(--hairline); }
-  .sl-dcard-bg-none .sl-dbg-upload:hover { color: var(--fg); border-color: var(--fg-soft); }
 }

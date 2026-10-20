@@ -1699,7 +1699,7 @@ function init() {
 
   // Redraw axis when crossing the mobile breakpoint (e.g. wide→narrow→wide).
   window.matchMedia('(max-width: 640px)').addEventListener('change', () => {
-    setTimeout(() => { drawAxisCanvas(); _drawerBgFor = null; renderDrawer(); renderPlaneCard(); }, 150);
+    setTimeout(() => { drawAxisCanvas(); renderDrawer(); renderPlaneCard(); }, 150);
   });
 }
 
@@ -1959,7 +1959,7 @@ function buildDOM() {
           <button class="sl-drawer-handle" id="sl-drawer-handle" type="button" title="Show or tuck away the scene drawer" aria-label="Show or tuck away the scene drawer" aria-expanded="true"></button>
           <div class="sl-drawer-hdr">
             <span class="sl-drawer-title">Scene</span>
-            <span class="sl-drawer-sum" id="sl-drawer-sum"></span>
+            <div class="sl-sight" id="sl-sight" role="img" aria-label="Line of sight: the observer, then each plane at its redshift. Drag a mark to move its plane."></div>
             <button class="sl-drawer-btn" id="sl-drawer-add" type="button" title="Add a plane behind the farthest one">+ Plane</button>
             <button class="sl-drawer-toggle" id="sl-drawer-toggle" type="button" title="Show or tuck away the scene drawer" aria-label="Show or tuck away the scene drawer" aria-expanded="true">
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
@@ -2673,40 +2673,20 @@ function _syncSwitcher() {
 }
 
 // ── Scene drawer (desktop) ───────────────────────────────────────────────────
-// One card per plane in z order, then the background image. Cards are keyed by
+// One card per plane in z order, under a line-of-sight strip in the drawer's
+// header that marks every plane at its true redshift. The selected plane's card
+// carries the plane tools, laid out like the phone plane viewer: a column of
+// L/S/H (M) and delete-object beside its viewer, then the redshift box and the
+// plane actions. Every other card shrinks to its viewer and z. Cards are keyed by
 // plane id and updated in place, never rebuilt: each owns a plane-viewer canvas
 // whose pointer handlers may be mid-drag when a render comes through.
-const _drawerCards = new Map();   // plane id → { el, canvas, refs }
+const _drawerCards = new Map();   // plane id → { el, canvas, zIn }
 let   _drawerOpen  = true;
 try { _drawerOpen = localStorage.getItem('caustica-drawer') !== 'closed'; } catch (_) {}
+let   _sightHot    = null;        // plane under the pointer, on the strip or its card
+let   _sightDrag   = null;        // { id, top, x0, moved } while a strip mark is dragged
 
-const _PLANE_TITLES = { lens: 'Lens plane', source: 'Source plane', hybrid: 'Lens + source plane', empty: 'Empty plane' };
-const _OBJ_NAMES = {
-  sie: 'SIE', nie: 'NIE', epl: 'EPL', pointmass: 'Point mass', shear: 'External shear',
-  convergence: 'Convergence', deflection: 'Deflection', gaussian: 'Gaussian', exponential: 'Exponential',
-  point: 'Uniform disc', pointsource: 'Point source', pastedimage: 'Image', mask: 'Mask',
-};
-// The one parameter that best tells two objects of a kind apart, for the row.
-function _objKeyParam(o) {
-  const p = o.params || {};
-  const f = (v, d = 2) => (+v).toFixed(d);
-  switch (o.model) {
-    case 'sie': case 'nie': case 'epl': case 'pointmass': return `b ${f(p.b)}″`;
-    case 'shear':       return `γ ${f(p.gamma, 3)}`;
-    case 'convergence': return `κ ${f(p.kappa, 3)}`;
-    case 'deflection':  return `α ${f(p.alpha)}″`;
-    case 'mask':        return `r ${f(p.r)}″`;
-    case 'pastedimage': return '';
-    default:            return p.sigma != null ? `${f(p.sigma)}″` : '';
-  }
-}
-function _objGlyph(type, hidden) {
-  const col = hidden ? 'var(--muted)' : `var(--${type === 'source' ? 'src' : type}-color)`;
-  if (type === 'mask')   return `<span class="sl-dobj-glyph" style="border-radius:50%;background:${col}"></span>`;
-  if (type === 'hybrid') return `<span class="sl-dobj-glyph" style="transform:rotate(45deg) scale(.8);background:${col}"></span>`;
-  const d = type === 'source' ? 'M8 14L14.5 3H1.5z' : 'M8 2L14.5 13H1.5z';
-  return `<svg class="sl-dobj-glyph" width="10" height="10" viewBox="0 0 16 16" aria-hidden="true"><path d="${d}" fill="${col}"/></svg>`;
-}
+const _PLANE_TITLES = { lens: 'Lens plane', source: 'Source plane', hybrid: 'Lens + source', empty: 'Empty plane' };
 
 // The drawer is display:none on phones and when tucked away; its viewers are
 // only worth drawing when they can be seen (a hidden canvas can't measure itself).
@@ -2721,29 +2701,25 @@ function _makeDrawerCard(pl) {
   el.className = 'sl-dcard';
   el.dataset.planeId = pl.id;
   el.innerHTML = `
-    <div class="sl-dcard-hdr">
-      <span class="sl-dcard-dot"></span>
-      <span class="sl-dcard-title"></span>
-      <label class="sl-dcard-z" title="Redshift of this plane. Drag sideways to scrub.">z <input type="number" class="sl-dcard-z-input" min="0.01" max="10" step="0.01" aria-label="Plane redshift"></label>
-      <button type="button" class="sl-dcard-menu-btn" title="Plane actions" aria-label="Plane actions" aria-haspopup="true">⋯</button>
-      <div class="sl-dcard-menu" role="menu" hidden>
-        <button type="button" role="menuitem" data-act="paste">Load image…</button>
-        <button type="button" role="menuitem" data-act="clear">Clear objects</button>
-        <button type="button" role="menuitem" data-act="delete">Delete plane</button>
-      </div>
+    <div class="sl-dcard-tools" role="group" aria-label="Place on this plane">
+      <button type="button" class="sl-dplace-btn" data-tool="lens"   title="Add lens: click this viewer to place (1). Click again to stop adding.">L</button>
+      <button type="button" class="sl-dplace-btn" data-tool="source" title="Add source: click this viewer to place (2). Click again to stop adding.">S</button>
+      <button type="button" class="sl-dplace-btn" data-tool="hybrid" title="Add hybrid: click this viewer to place (3). Click again to stop adding.">H</button>
+      <button type="button" class="sl-dplace-btn" data-tool="mask"   title="Add mask: cuts a patch out of the background image before it is delensed. Click this viewer to place (4). Click again to stop adding.">M</button>
+      <button type="button" class="sl-dcard-delobj" title="Delete selected object" aria-label="Delete selected object"><svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 4h11M4 4l.5 7h5l.5-7M5 4V3h4v1"/></svg></button>
     </div>
-    <div class="sl-dcard-body">
-      <canvas class="sl-dcard-canvas" aria-label="Plane viewer: true positions on this plane"></canvas>
-      <div class="sl-dcard-side">
-        <div class="sl-dcard-objs"></div>
-        <div class="sl-dcard-place" role="group" aria-label="Place on this plane">
-          <span class="sl-dcard-place-lbl">Place</span>
-          <button type="button" class="sl-dplace-btn" data-tool="lens"   title="Place lenses on this plane: click its viewer (1). Click again to stop.">L</button>
-          <button type="button" class="sl-dplace-btn" data-tool="source" title="Place sources on this plane: click its viewer (2). Click again to stop.">S</button>
-          <button type="button" class="sl-dplace-btn" data-tool="hybrid" title="Place hybrids on this plane: click its viewer (3). Click again to stop.">H</button>
-          <button type="button" class="sl-dplace-btn" data-tool="mask"   title="Place masks: they cut patches out of the background image before it is delensed (4). Click again to stop.">M</button>
-        </div>
-      </div>
+    <div class="sl-dcard-view">
+      <canvas class="sl-dcard-canvas"></canvas>
+      <span class="sl-dcard-zlabel" aria-hidden="true"></span>
+    </div>
+    <div class="sl-dcard-side">
+      <span class="sl-dcard-cap">Redshift</span>
+      <input type="number" class="sl-dcard-z-input" min="0.01" max="10" step="0.01" aria-label="Plane redshift" title="Redshift of this plane. Drag sideways to scrub.">
+      <span class="sl-dcard-type"></span>
+      <button type="button" class="sl-dcard-act" data-act="paste" title="Load an image file into this plane's image source">Image…</button>
+      <span class="sl-dcard-gap"></span>
+      <button type="button" class="sl-dcard-act" data-act="clear" title="Clear all objects on this plane (O)"><span class="sl-pglyph">○</span> Clear</button>
+      <button type="button" class="sl-dcard-act" data-act="delete" title="Delete plane (X)"><span class="sl-pglyph sl-pglyph-x">×</span> Delete</button>
     </div>`;
   const canvas = el.querySelector('canvas');
   const zIn    = el.querySelector('.sl-dcard-z-input');
@@ -2751,6 +2727,9 @@ function _makeDrawerCard(pl) {
   zIn.addEventListener('change', e => { record(); applyZ(parseFloat(e.target.value)); });
   _attachScrub(zIn, { lo: 0.01, hi: 10, onChange: applyZ });
   attachPlaneCardHandlers(canvas, { getPlane: () => _drawerPlaneById(pl.id), swipe: false });
+  // Hovering a card lights its mark on the line-of-sight strip.
+  el.addEventListener('pointerenter', () => _setSightHot(pl.id));
+  el.addEventListener('pointerleave', () => _setSightHot(null));
   return { el, canvas, zIn };
 }
 
@@ -2783,13 +2762,10 @@ function renderDrawer() {
   for (const b of [document.getElementById('sl-drawer-handle'), document.getElementById('sl-drawer-toggle')])
     b?.setAttribute('aria-expanded', _drawerOpen ? 'true' : 'false');
 
-  const nObj = state.planes.reduce((n, p) => n + p.objects.filter(o => !(o.hybridId && o.type === 'source')).length, 0);
-  const sum  = document.getElementById('sl-drawer-sum');
-  if (sum) sum.textContent = `${state.planes.length} plane${state.planes.length === 1 ? '' : 's'} · ${nObj} object${nObj === 1 ? '' : 's'}${state.bgCanvas ? ' · background image' : ''}`;
-
   // Drop cards whose plane is gone, then lay the rest out in z order.
   const live = new Set(state.planes.map(p => p.id));
   for (const [id, c] of _drawerCards) if (!live.has(id)) { c.el.remove(); _drawerCards.delete(id); }
+  if (!live.has(_sightHot)) _sightHot = null;
   const mask  = maskToolAvailable();
   const shown = _drawerShown();
   state.planes.forEach(pl => {
@@ -2799,85 +2775,167 @@ function renderDrawer() {
     const sel  = pl.id === state.selectedPlaneId;
     const type = planeEffectiveType(pl);
     c.el.classList.toggle('sl-dcard-sel', sel);
+    c.el.classList.toggle('sl-dcard-hot', pl.id === _sightHot);
     c.el.dataset.effectiveType = type;
-    c.el.querySelector('.sl-dcard-title').textContent = _PLANE_TITLES[type];
+    c.el.setAttribute('aria-label', `${_PLANE_TITLES[type]} at z ${pl.z.toFixed(2)}${sel ? ', selected' : ''}`);
+    c.canvas.setAttribute('aria-label', `Plane viewer: true positions on the ${_PLANE_TITLES[type].toLowerCase()} at z ${pl.z.toFixed(2)}`);
+    c.el.querySelector('.sl-dcard-zlabel').textContent = `z ${pl.z.toFixed(2)}`;
+    c.el.querySelector('.sl-dcard-type').textContent = _PLANE_TITLES[type];
     if (document.activeElement !== c.zIn) c.zIn.value = pl.z.toFixed(2);
     c.el.querySelector('[data-act="paste"]').hidden = !pl.objects.some(o => o.model === 'pastedimage');
-    // Object rows: a hybrid pair is one row, reached through its lens half.
-    const rows = [];
-    for (const o of pl.objects) {
-      if (o.hybridId && o.type !== 'lens') continue;
-      const partner = o.hybridId ? hybridPartner(pl, o) : null;
-      const kind    = o.hybridId ? 'hybrid' : o.type;
-      const hidden  = o.hidden && (!partner || partner.hidden);
-      const on      = sel && (state.selectedObjId === o.id || (partner && state.selectedObjId === partner.id));
-      const name    = o.hybridId ? `${_OBJ_NAMES[o.model] ?? o.model} + ${_OBJ_NAMES[partner?.model] ?? 'source'}` : (_OBJ_NAMES[o.model] ?? o.model);
-      rows.push(`<button type="button" class="sl-dobj${on ? ' active' : ''}${hidden ? ' sl-dobj-hidden' : ''}" data-obj-id="${o.id}" title="${hidden ? 'Hidden. ' : ''}Select and edit">${_objGlyph(kind, hidden)}<span class="sl-dobj-name">${_escHtml(name)}</span><span class="sl-dobj-val">${_objKeyParam(o)}</span></button>`);
-    }
-    c.el.querySelector('.sl-dcard-objs').innerHTML = rows.length ? rows.join('')
-      : `<div class="sl-dcard-empty">No objects yet. Pick L, S or H, then click the viewer.</div>`;
     c.el.querySelectorAll('.sl-dplace-btn').forEach(b => {
       b.classList.toggle('active', sel && state.addMode === b.dataset.tool);
       if (b.dataset.tool === 'mask') b.style.display = mask ? '' : 'none';
     });
+    c.el.classList.toggle('sl-dcard-mask', mask);   // five tools: packed tighter
     if (shown) drawPlaneCanvas(c.canvas, pl);
   });
-  host.appendChild(_drawerBgCard());
-}
-
-// The background-image card: a thumbnail and its scale, opening the Background
-// category; with no picture, a button to upload one.
-let _drawerBg = null, _drawerBgFor = null;
-function _drawerBgCard() {
-  if (!_drawerBg) {
-    _drawerBg = document.createElement('section');
-    _drawerBg.className = 'sl-dcard sl-dcard-bg';
-    _drawerBg.innerHTML = `
-      <div class="sl-dcard-hdr"><span class="sl-dcard-title">Background</span></div>
-      <button type="button" class="sl-dbg-open" title="Background image settings"><canvas class="sl-dbg-thumb"></canvas><span class="sl-dbg-name"></span><span class="sl-dbg-meta"></span></button>
-      <button type="button" class="sl-dbg-upload">Upload image…</button>`;
-  }
-  const has = !!state.bgCanvas;
-  _drawerBg.classList.toggle('sl-dcard-bg-none', !has);
-  _drawerBg.classList.toggle('sl-dobj-hidden', has && state.bgHidden);
-  if (has) {
-    _drawerBg.querySelector('.sl-dbg-name').textContent = state.bgName || 'image';
-    _drawerBg.querySelector('.sl-dbg-meta').textContent = state.bgPixel > 0
-      ? `${+state.bgPixel.toPrecision(3)}″/px${state.bgHidden ? ' · hidden' : ''}`
-      : `${state.bgCanvas.width}×${state.bgCanvas.height}${state.bgHidden ? ' · hidden' : ''}`;
-    if (_drawerBgFor !== state.bgCanvas && _drawerShown()) {
-      // Redraw the thumbnail only when the picture itself changes.
-      const t = _drawerBg.querySelector('.sl-dbg-thumb');
-      const dpr = window.devicePixelRatio || 1, W = 148, H = 74;
-      t.width = W * dpr; t.height = H * dpr;
-      const ctx = t.getContext('2d');
-      const s = Math.max(W / state.bgCanvas.width, H / state.bgCanvas.height);
-      const w = state.bgCanvas.width * s, h = state.bgCanvas.height * s;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, W, H);
-      ctx.drawImage(state.bgCanvas, (W - w) / 2, (H - h) / 2, w, h);
-      _drawerBgFor = state.bgCanvas;
+  let empty = document.getElementById('sl-drawer-empty');
+  if (!state.planes.length) {
+    if (!empty) {
+      empty = document.createElement('div');
+      empty.id = 'sl-drawer-empty';
+      empty.className = 'sl-drawer-empty';
+      empty.innerHTML = 'No planes yet. Add one with <b>+ Plane</b>.';
     }
-  } else {
-    _drawerBgFor = null;
-  }
-  return _drawerBg;
+    host.appendChild(empty);
+  } else empty?.remove();
+  renderSightLine();
 }
 
-function _closeDrawerMenus(except) {
-  document.querySelectorAll('.sl-dcard-menu').forEach(m => { if (m !== except) m.hidden = true; });
+// ── Line-of-sight strip (drawer header) ──
+// The observer at the left, then a mark per plane at its true redshift, so the
+// spacing of the cards below can be read in z. The axis ends at a round redshift
+// a little past the farthest plane; it is frozen while a mark is dragged so the
+// scale does not move under the pointer.
+const _SIGHT_X0 = 22, _SIGHT_PAD_R = 32;
+function _sightTop() {
+  if (_sightDrag) return _sightDrag.top;
+  const far  = state.planes.reduce((m, p) => Math.max(m, p.z), 0) + 0.2;
+  const step = far > 2 ? 1 : 0.5;
+  return Math.max(1, Math.ceil(far / step) * step);
+}
+function _sightX(z, W, top) { return _SIGHT_X0 + z / top * (W - _SIGHT_X0 - _SIGHT_PAD_R); }
+function _sightZ(x, W, top) { return (x - _SIGHT_X0) / (W - _SIGHT_X0 - _SIGHT_PAD_R) * top; }
+
+function renderSightLine() {
+  const el = document.getElementById('sl-sight');
+  if (!el || !el.offsetParent) return;
+  const W = el.clientWidth, H = 28, y = 14;
+  const top  = _sightTop();
+  const tick = top <= 2 ? 0.5 : top <= 5 ? 1 : 2;
+  const x1   = W - _SIGHT_PAD_R;
+  const p = [`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true">`,
+    `<g class="sl-sight-obs"><title>Observer, z = 0</title><circle cx="8" cy="${y}" r="4.5" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="8" cy="${y}" r="1.6" fill="currentColor"/></g>`,
+    `<path class="sl-sight-axis" d="M${_SIGHT_X0 - 6} ${y}H${x1}"/>`];
+  for (let z = tick; z < top - 1e-9; z += tick) {
+    const x = _sightX(z, W, top).toFixed(1);
+    p.push(`<path class="sl-sight-tick" d="M${x} ${y - 3}V${y + 3}"/>`);
+  }
+  p.push(`<text class="sl-sight-end" x="${W - 2}" y="${y + 4}" text-anchor="end">z ${+top.toFixed(1)}</text>`);
+  // Selected and hovered marks are drawn last so they sit on top of a neighbour.
+  const order = [...state.planes].sort((a, b) =>
+    (a.id === state.selectedPlaneId) - (b.id === state.selectedPlaneId) || (a.id === _sightHot) - (b.id === _sightHot));
+  for (const pl of order) {
+    const x   = _sightX(pl.z, W, top);
+    const sel = pl.id === state.selectedPlaneId, hot = pl.id === _sightHot;
+    const s   = hot ? 4.8 : 4;
+    const type = planeEffectiveType(pl);
+    const fill = type === 'empty' ? 'none' : typeColorHex(type);
+    p.push(`<g><title>${_PLANE_TITLES[type]}, z ${pl.z.toFixed(2)}</title>` +
+      (sel ? `<circle class="sl-sight-ring" cx="${x.toFixed(1)}" cy="${y}" r="${s + 3.4}"/>` : '') +
+      `<path d="M${x.toFixed(1)} ${y - s}l${s} ${s}l${-s} ${s}l${-s} ${-s}z" fill="${fill}" stroke="${type === 'empty' ? 'currentColor' : fill}" stroke-width="1.2"/></g>`);
+  }
+  p.push('</svg>');
+  el.innerHTML = p.join('');
+}
+
+function _setSightHot(id) {
+  if (_sightHot === id) return;
+  _sightHot = id;
+  for (const [pid, c] of _drawerCards) c.el.classList.toggle('sl-dcard-hot', pid === id);
+  renderSightLine();
+}
+
+// The plane whose mark is nearest the pointer, within reach of it.
+function _sightHit(e) {
+  const el = document.getElementById('sl-sight');
+  const r  = el.getBoundingClientRect();
+  // The app may be CSS-scaled (1.3× on desktop): work in the strip's own units.
+  const k  = el.clientWidth / r.width;
+  const mx = (e.clientX - r.left) * k, my = (e.clientY - r.top) * k;
+  const top = _sightTop();
+  let best = null, bestD = 9;
+  for (const pl of state.planes) {
+    const d = Math.hypot(mx - _sightX(pl.z, el.clientWidth, top), my - 14);
+    if (d < bestD || (d === bestD && pl.id === state.selectedPlaneId)) { bestD = d; best = pl; }
+  }
+  return best;
+}
+
+function attachSightHandlers() {
+  const el = document.getElementById('sl-sight');
+  if (!el) return;
+  el.addEventListener('pointermove', e => {
+    if (_sightDrag) {
+      e.preventDefault();
+      const pl = _drawerPlaneById(_sightDrag.id);
+      const r  = el.getBoundingClientRect();
+      const mx = (e.clientX - r.left) * el.clientWidth / r.width;
+      if (!_sightDrag.moved && Math.abs(e.clientX - _sightDrag.x0) < 3) return;
+      _sightDrag.moved = true;
+      const z = Math.max(0.01, Math.min(_sightDrag.top, Math.round(_sightZ(mx, el.clientWidth, _sightDrag.top) * 100) / 100));
+      if (!pl || z === pl.z) return;
+      pl.z = z;
+      state.planes.sort((a, b) => a.z - b.z);
+      invalidateDistances();
+      renderPlaneCard(); drawAxisCanvas(); redraw();
+      const zEl = document.querySelector('#sl-obj-panel .sl-params-z');
+      if (zEl) zEl.textContent = `z: ${z.toFixed(2)}`;
+      updateThetaEReadout();
+      return;
+    }
+    const hit = _sightHit(e);
+    el.style.cursor = hit ? 'grab' : '';
+    _setSightHot(hit?.id ?? null);
+  });
+  el.addEventListener('pointerleave', () => { if (!_sightDrag) _setSightHot(null); });
+  el.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    const hit = _sightHit(e);
+    if (!hit) return;
+    e.preventDefault();
+    el.setPointerCapture(e.pointerId);
+    _sightDrag = { id: hit.id, top: _sightTop(), x0: e.clientX, moved: false };
+    el.style.cursor = 'grabbing';
+    if (hit.id !== state.selectedPlaneId) {
+      _drawerSelectPlane(hit);
+      updateCanvasTools();
+      renderPlaneCard(); renderSidebar(); redraw();
+    }
+  });
+  const end = () => {
+    if (!_sightDrag) return;
+    const { id, moved } = _sightDrag;
+    _sightDrag = null;
+    el.style.cursor = 'grab';
+    renderDrawer();   // the axis may rescale now that the drag is over
+    if (!moved) _drawerCards.get(id)?.el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  };
+  el.addEventListener('pointerup', end);
+  el.addEventListener('pointercancel', end);
+  new ResizeObserver(() => renderSightLine()).observe(el);
 }
 
 function setDrawerOpen(open) {
   _drawerOpen = open;
   try { localStorage.setItem('caustica-drawer', open ? 'open' : 'closed'); } catch (_) {}
   renderDrawer();
-  _drawerBgFor = null;
   // The stage just changed height; the canvases resize through their observer.
   requestAnimationFrame(() => renderDrawer());
 }
 
-// Select a plane from the drawer (keeping the object if it is on that plane).
+// Select a plane from the drawer (its first object comes with it).
 function _drawerSelectPlane(pl) {
   if (pl.id === state.selectedPlaneId) return;
   state.selectedPlaneId = pl.id;
@@ -2889,6 +2947,7 @@ function attachDrawerHandlers() {
   const drawer = document.getElementById('sl-drawer');
   if (!drawer) return;
   _attachHistoryBoundary(drawer);
+  attachSightHandlers();
   document.getElementById('sl-drawer-handle').addEventListener('click', () => setDrawerOpen(!_drawerOpen));
   document.getElementById('sl-drawer-toggle').addEventListener('click', () => setDrawerOpen(!_drawerOpen));
   document.getElementById('sl-drawer-add').addEventListener('click', () => {
@@ -2905,22 +2964,12 @@ function attachDrawerHandlers() {
   });
 
   document.getElementById('sl-drawer-cards').addEventListener('click', e => {
-    if (e.target.closest('.sl-dbg-open'))   { setInspectorCat('background'); return; }
-    if (e.target.closest('.sl-dbg-upload')) { pickBackgroundImage(); return; }
     const cardEl = e.target.closest('.sl-dcard[data-plane-id]');
     const pl = cardEl && _drawerPlaneById(+cardEl.dataset.planeId);
     if (!pl) return;
 
-    const menuBtn = e.target.closest('.sl-dcard-menu-btn');
-    if (menuBtn) {
-      const menu = cardEl.querySelector('.sl-dcard-menu');
-      _closeDrawerMenus(menu);
-      menu.hidden = !menu.hidden;
-      return;
-    }
-    const act = e.target.closest('.sl-dcard-menu [data-act]')?.dataset.act;
+    const act = e.target.closest('.sl-dcard-act')?.dataset.act;
     if (act) {
-      _closeDrawerMenus();
       if (act === 'clear') {
         record();
         pl.objects.filter(o => o.model === 'pastedimage').forEach(o => renderer?.clearPastedTexture(o.id));
@@ -2930,50 +2979,23 @@ function attachDrawerHandlers() {
         record();
         removePlane(pl.id);
       } else if (act === 'paste') {
-        _drawerSelectPlane(pl);
         document.getElementById('sl-plane-file')?.click();
+        return;
       }
       renderPlaneCard(); renderSidebar(); drawAxisCanvas(); redraw();
       return;
     }
-
+    if (e.target.closest('.sl-dcard-delobj')) { deleteSelectedObject(); return; }
     const place = e.target.closest('.sl-dplace-btn');
-    if (place) {
-      const tool = place.dataset.tool;
-      if (pl.id !== state.selectedPlaneId) {
-        // Arming a tool on another plane moves the selection there; the tool
-        // stays armed rather than toggling off.
-        _drawerSelectPlane(pl);
-        if (tool !== 'mask' || maskToolAvailable()) state.addMode = tool;
-        updateCanvasTools();
-        renderPlaneCard(); renderSidebar(); redraw();
-      } else {
-        setCanvasTool(tool);
-        renderDrawer();
-      }
-      return;
-    }
-
-    const row = e.target.closest('.sl-dobj');
-    if (row) {
-      state.selectedPlaneId = pl.id;
-      state.selectedObjId   = +row.dataset.objId;
-      clearRulerSelectionForObject();
-      setInspectorCat('object');
-      renderPlaneCard(); redraw();
-      return;
-    }
-    // Anywhere else on a card (its header, the empty note) selects the plane.
-    if (!e.target.closest('input, canvas')) {
+    if (place) { setCanvasTool(place.dataset.tool); renderDrawer(); return; }
+    // Anywhere else on a card that is not a control selects its plane (the
+    // viewer selects on pointerdown itself).
+    if (!e.target.closest('input, canvas, button')) {
       _drawerSelectPlane(pl);
+      updateCanvasTools();
       renderPlaneCard(); renderSidebar(); redraw();
     }
   });
-  // A menu closes on any click outside it, and on Escape.
-  document.addEventListener('click', e => {
-    if (!e.target.closest('.sl-dcard-menu, .sl-dcard-menu-btn')) _closeDrawerMenus();
-  });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') _closeDrawerMenus(); });
 
   document.getElementById('sl-switcher')?.addEventListener('click', e => {
     const b = e.target.closest('.sl-cat-btn');
@@ -4623,7 +4645,7 @@ function renderScenePanel() {
         </div>`;
     }
   } else {
-    paramsPanel = `<div class="sl-panel"><div class="sl-empty-msg">Click an object in the plane card or the image to edit its parameters.</div></div>`;
+    paramsPanel = `<div class="sl-panel"><div class="sl-empty-msg">Click an object in a plane viewer or on the image to edit its parameters.</div></div>`;
   }
 
   document.getElementById('sl-obj-panel').innerHTML = paramsPanel;
@@ -8144,15 +8166,18 @@ const TOUR_STEPS = [
     onEnter: () => { _tourOpenPlaneSetup(); if (!_drawerOpen) setDrawerOpen(true); },
     arrow: 'above',
     label: 'Scene drawer',
-    text: 'The drawer holds your line of sight: one card per plane, in order of redshift, then the background image. Each card has its own viewer showing the true positions of the objects on that plane. Type a plane\'s redshift in its <b>z</b> box (or drag sideways on it to scrub), add a plane behind the farthest with <b>+ Plane</b>, and use <b>⋯</b> to clear or delete one. The chevron tucks the drawer away when you only want to look.',
+    text: 'The drawer holds your line of sight. The strip in its header runs from the observer (the circle at its left) out in redshift, with a mark for each plane at its z: drag a mark to move that plane, and point at one to find its card. Below are the planes themselves, in order of redshift, each with a viewer showing the true positions of its objects. Click a card to select its plane, add a plane behind the farthest with <b>+ Plane</b>, and use the chevron to tuck the drawer away when you only want to look.',
   },
   {
-    target: '.sl-dcard',
+    target: '.sl-dcard-sel',
     desktopOnly: true,
-    onEnter: _tourOpenPlaneSetup,
+    onEnter: () => {
+      _tourOpenPlaneSetup();
+      if (!selectedPlane() && state.planes[0]) { state.selectedPlaneId = state.planes[0].id; renderPlaneCard(); }
+    },
     arrow: 'above',
     label: 'Placing objects',
-    text: 'Pick <b>L</b>, <b>S</b> or <b>H</b> on a card, then click its viewer to place a <b>Lens</b> that bends light, a <b>Source</b> that emits it, or a <b>Hybrid</b> that does both (keys <kbd>1</kbd>, <kbd>2</kbd>, <kbd>3</kbd> arm them on the selected plane). Click the lit letter again, or press <kbd>Esc</kbd>, to stop placing. Drag objects in a viewer to move them, and click a row in a card\'s list to edit that object. <kbd>[</kbd> and <kbd>]</kbd> step through the planes.',
+    text: 'The selected plane\'s card holds its tools. Pick <b>L</b>, <b>S</b> or <b>H</b> (keys <kbd>1</kbd>, <kbd>2</kbd>, <kbd>3</kbd>) and click the viewer to place a <b>Lens</b> that bends light, a <b>Source</b> that emits it, or a <b>Hybrid</b> that does both; click the lit letter again, or press <kbd>Esc</kbd>, to stop placing. Drag objects in the viewer to move them and click one to edit it; the trash deletes the selected object. Beside the viewer are the plane\'s <b>Redshift</b> box (type a value, or drag sideways on it), <b>Clear</b> (key <kbd>O</kbd>) and <b>Delete</b> (key <kbd>X</kbd>). <kbd>[</kbd> and <kbd>]</kbd> step through the planes.',
   },
   {
     target: '.sl-axis-wrap',
