@@ -2259,6 +2259,7 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
 .app-inner label:has(> input[type="checkbox"]:disabled) { opacity: 0.55; cursor: default; }
 
 /* ── Scene drawer layout (desktop, ≥641px) ────────────────────────────────── */
+.sl-desk-only { display: none; }
 /* The stage keeps the canvas with a view bar above it, the scene drawer sits
    below it, and the rail is driven by a vertical category switcher on the far
    right. Phones keep the timeline / plane card / tab bar layout above; these
@@ -2313,7 +2314,7 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
     color: var(--fg);
   }
   #sl-tab-view[data-cat="view"]       .sl-cat:not([data-cat="view"]),
-  #sl-tab-view[data-cat="overlays"]   .sl-cat:not([data-cat="overlays"]),
+  #sl-tab-view[data-cat="colors"]     .sl-cat:not([data-cat="colors"]),
   #sl-tab-view[data-cat="background"] .sl-cat:not([data-cat="background"]),
   #sl-tab-view[data-cat="instrument"] .sl-cat:not([data-cat="instrument"]),
   #sl-tab-view[data-cat="lineart"]    .sl-cat:not([data-cat="lineart"]) { display: none; }
@@ -2414,7 +2415,7 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
   .sl-sight-axis { stroke: var(--hairline); stroke-width: 1.5; fill: none; }
   .sl-sight-tick { stroke: var(--muted); stroke-opacity: 0.55; stroke-width: 1; }
   .sl-sight-end  { fill: var(--muted); font: 10.5px system-ui, -apple-system, sans-serif; }
-  .sl-sight-ring { fill: none; stroke: var(--accent); stroke-width: 1.4; }
+  .sl-sight-ring { fill: none; stroke-width: 1.4; }
 
   .sl-drawer-cards {
     display: flex;
@@ -2435,10 +2436,15 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
     background: var(--bg-soft);
     cursor: pointer;
   }
-  .sl-dcard-hot { border-color: color-mix(in srgb, var(--accent) 55%, var(--hairline)); }
+  /* Highlights take the plane's own colour: lens, source, hybrid (or grey when empty). */
+  .sl-dcard { --pc: var(--muted); }
+  .sl-dcard[data-effective-type="lens"]   { --pc: var(--lens-color); }
+  .sl-dcard[data-effective-type="source"] { --pc: var(--src-color); }
+  .sl-dcard[data-effective-type="hybrid"] { --pc: var(--hybrid-color); }
+  .sl-dcard-hot { border-color: color-mix(in srgb, var(--pc) 55%, var(--hairline)); }
   .sl-dcard-sel {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+    border-color: var(--pc);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--pc) 35%, transparent);
     cursor: default;
   }
   .sl-dcard-tools, .sl-dcard-side { display: none; }
@@ -2455,9 +2461,7 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
     border-radius: 6px;
     touch-action: none;
   }
-  .sl-dcard[data-effective-type="lens"]   .sl-dcard-canvas { border-color: color-mix(in srgb, var(--lens-color) 60%, transparent); }
-  .sl-dcard[data-effective-type="source"] .sl-dcard-canvas { border-color: color-mix(in srgb, var(--src-color) 60%, transparent); }
-  .sl-dcard[data-effective-type="hybrid"] .sl-dcard-canvas { border-color: color-mix(in srgb, var(--hybrid-color) 60%, transparent); }
+  .sl-dcard:not([data-effective-type="empty"]) .sl-dcard-canvas { border-color: color-mix(in srgb, var(--pc) 60%, transparent); }
   .sl-dcard-zlabel {
     position: absolute;
     left: 6px;
@@ -2490,7 +2494,12 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
   /* With the mask tool there are five buttons; keep the column to the viewer's height. */
   .sl-dcard-mask.sl-dcard-sel .sl-dcard-tools { gap: 2.5px; }
   .sl-dcard-mask .sl-dplace-btn, .sl-dcard-mask .sl-dcard-delobj { width: 22px; height: 22px; }
-  .sl-dplace-btn.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+  /* An armed tool lights in the colour of what it places. */
+  .sl-dplace-btn { --tc: var(--lens-color); }
+  .sl-dplace-btn[data-tool="source"] { --tc: var(--src-color); }
+  .sl-dplace-btn[data-tool="hybrid"] { --tc: var(--hybrid-color); }
+  .sl-dplace-btn[data-tool="mask"]   { --tc: var(--mask-color); }
+  .sl-dplace-btn.active { border-color: var(--tc); background: color-mix(in srgb, var(--tc) 16%, transparent); color: var(--tc); }
 
   .sl-dcard-cap { margin-bottom: 3px; font-size: 10.5px; color: var(--muted); }
   .sl-dcard-z-input {
@@ -2522,6 +2531,44 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
     cursor: pointer;
   }
   .sl-dcard-act[hidden] { display: none; }
+
+  /* ── Inspector panels: no boxes, no borders, sections always open ── */
+  .sl-rail .sl-tab-content { padding: 10px 16px 18px; }
+  .sl-rail .sl-panel { border: none; background: none; padding: 0; }
+  .sl-rail .sl-panel + .sl-panel { margin-top: 18px; }
+  .sl-rail .sl-hybrid-section,
+  #sl-tab-view .sl-cat > .sl-hybrid-section:first-of-type { border-top: none; padding-top: 0; margin-top: 18px; }
+  .sl-rail .sl-hybrid-section:first-of-type { margin-top: 0; }
+  /* The first section of each category opens the panel, so it needs no gap above it. */
+  #sl-tab-view .sl-cat[data-cat="view"]:not(.sl-cat[data-cat="view"] ~ *) > .sl-hybrid-section:first-child,
+  #sl-tab-view .sl-cat[data-cat="colors"]:not(.sl-cat[data-cat="colors"] ~ *) > :first-child,
+  #sl-tab-view .sl-cat[data-cat="background"] > .sl-hybrid-section:first-child,
+  #sl-tab-view .sl-cat[data-cat="instrument"] > .sl-hybrid-section:first-child,
+  #sl-tab-view .sl-cat[data-cat="lineart"] > .sl-hybrid-section:first-child { margin-top: 0; }
+  .sl-rail .sl-hybrid-arrow { display: none; }
+  .sl-rail .sl-hybrid-hdr { padding-left: 0; cursor: default; pointer-events: none; }
+  .sl-rail .sl-hybrid-hdr > * { pointer-events: auto; }
+  .sl-rail .sl-hybrid-hdr:hover { background: none; }
+  .sl-rail .sl-panel-title {
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--fg);
+  }
+  .sl-rail .sl-hide-all-row { border-bottom: none; padding-bottom: 2px; margin-bottom: 12px; font-size: 12.5px; }
+  .sl-desk-only { display: block; }
+  /* Panels that are one section, and the object panel, use that section's own
+     header as the panel title (it carries the ⓘ and any switch). */
+  .sl-sel-pre { display: none; }
+  #sl-rail[data-cat="object"]:has(#sl-obj-panel .sl-panel-title-row) .sl-insp-title,
+  #sl-rail[data-cat="background"] .sl-insp-title,
+  #sl-rail[data-cat="instrument"] .sl-insp-title,
+  #sl-rail[data-cat="lineart"] .sl-insp-title { display: none; }
+  #sl-obj-panel .sl-panel > .sl-panel-title-row:first-child .sl-panel-title,
+  #sl-tab-view .sl-cat[data-cat="background"] > .sl-hybrid-section:first-child .sl-panel-title,
+  #sl-tab-view .sl-cat[data-cat="instrument"] > .sl-hybrid-section:first-child .sl-panel-title,
+  #sl-tab-view .sl-cat[data-cat="lineart"] > .sl-hybrid-section:first-child .sl-panel-title { font-size: 14px; }
 }
 
 @media (min-width: 641px) and (hover: hover) {

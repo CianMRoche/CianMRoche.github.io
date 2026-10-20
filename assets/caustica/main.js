@@ -62,6 +62,8 @@ let _cmapExpanded     = false;
 let _bgExpanded       = false;
 let _instrExpanded    = false;
 let _curvesExpanded   = false;
+// Sections are collapsible on phones only; the desktop panels show them open.
+function _open(flag) { return flag || window.innerWidth > 640; }
 
 // Invert a 6-digit hex colour (#rrggbb → complement).
 function invertHexColor(hex) {
@@ -2633,10 +2635,10 @@ const _catIcon = d => `<svg width="18" height="18" viewBox="0 0 16 16" fill="non
 const INSPECTOR_CATS = [
   { key: 'object',     tab: 'scene',   label: 'Object',
     icon: _catIcon('<path d="M8 2.5L14 13H2z"/>') },
-  { key: 'view',       tab: 'view',    label: 'View: field, colour map and the active view\'s settings',
+  { key: 'view',       tab: 'view',    label: 'View: field, overlays and the active view\'s settings',
     icon: _catIcon('<circle cx="8" cy="8" r="6"/><path d="M8 2a6 6 0 010 12z" fill="currentColor"/>') },
-  { key: 'overlays',   tab: 'view',    label: 'Overlays: curves, markers, legend, ruler',
-    icon: _catIcon('<circle cx="6" cy="8" r="4"/><circle cx="10" cy="8" r="4"/>') },
+  { key: 'colors',     tab: 'view',    label: 'Colors: color map, field, annotations, line art',
+    icon: _catIcon('<path d="M8 2a6 6 0 100 12c.9 0 1.4-.6 1.4-1.3 0-.8-.7-1.1-.7-1.8 0-.7.6-1.2 1.3-1.2H11.4A2.6 2.6 0 0014 7.1C14 4.2 11.3 2 8 2z"/><circle cx="5" cy="7.2" r=".9" fill="currentColor" stroke="none"/><circle cx="7.4" cy="4.8" r=".9" fill="currentColor" stroke="none"/><circle cx="10.4" cy="5.4" r=".9" fill="currentColor" stroke="none"/>') },
   { key: 'background', tab: 'view',    label: 'Background image',
     icon: _catIcon('<rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 11l4-4 3 3 2-2 3 3"/>') },
   { key: 'instrument', tab: 'view',    label: 'Instrument',
@@ -2645,11 +2647,14 @@ const INSPECTOR_CATS = [
     icon: _catIcon('<path d="M2 12c2.5-6 5-8 6-4s3.5 2 6-4"/>') },
   { key: 'export',     tab: 'export',  label: 'Export',
     icon: _catIcon('<path d="M8 2v8M4.5 6.5L8 10l3.5-3.5M2.5 13.5h11"/>') },
+  // The gear the old rail tab bar used.
   { key: 'settings',   tab: 'quality', label: 'Settings: cosmology and quality',
-    icon: _catIcon('<circle cx="8" cy="8" r="2.3"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/>') },
+    icon: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>' },
 ];
-const _CAT_TITLES = { object: 'Object', view: 'View', overlays: 'Overlays', background: 'Background image',
+const _CAT_TITLES = { object: 'Object', view: 'View', colors: 'Colors', background: 'Background image',
                       instrument: 'Instrument', lineart: 'Line art', export: 'Export', settings: 'Settings' };
+const _VIZ_NAMES  = { 0: 'Lensed image', 1: 'Convergence κ', 2: 'Shear γ', 3: 'Magnification |μ|', 5: 'Deflection |α|',
+                      6: 'Fermat potential φ', 7: 'Parity', 8: 'Image number', 9: 'Delensed image' };
 let activeCat = 'object';
 
 function setInspectorCat(cat) {
@@ -2670,6 +2675,9 @@ function _syncSwitcher() {
   if (view) view.dataset.cat = INSPECTOR_CATS.find(c => c.key === activeCat)?.tab === 'view' ? activeCat : '';
   const title = document.getElementById('sl-insp-title');
   if (title) title.textContent = _CAT_TITLES[activeCat] ?? '';
+  // The desktop CSS keys the panel's title treatment on the category.
+  const rail = document.getElementById('sl-rail');
+  if (rail) rail.dataset.cat = activeCat;
 }
 
 // ── Scene drawer (desktop) ───────────────────────────────────────────────────
@@ -2843,7 +2851,7 @@ function renderSightLine() {
     const type = planeEffectiveType(pl);
     const fill = type === 'empty' ? 'none' : typeColorHex(type);
     p.push(`<g><title>${_PLANE_TITLES[type]}, z ${pl.z.toFixed(2)}</title>` +
-      (sel ? `<circle class="sl-sight-ring" cx="${x.toFixed(1)}" cy="${y}" r="${s + 3.4}"/>` : '') +
+      (sel ? `<circle class="sl-sight-ring" cx="${x.toFixed(1)}" cy="${y}" r="${s + 3.4}" stroke="${typeColorHex(type)}"/>` : '') +
       `<path d="M${x.toFixed(1)} ${y - s}l${s} ${s}l${-s} ${s}l${-s} ${-s}z" fill="${fill}" stroke="${type === 'empty' ? 'currentColor' : fill}" stroke-width="1.2"/></g>`);
   }
   p.push('</svg>');
@@ -4539,7 +4547,7 @@ function renderScenePanel() {
       const lensObj = obj.type === 'lens' ? obj : partner;
       const srcObj  = obj.type === 'source' ? obj : partner;
       const bothHidden = lensObj.hidden && srcObj.hidden;
-      const lensExp = _hybridExpanded.lens, srcExp = _hybridExpanded.src;
+      const lensExp = _open(_hybridExpanded.lens), srcExp = _open(_hybridExpanded.src);
 
       const lensModelOpts = `
         <option value="sie"       ${lensObj.model==='sie'       ?'selected':''}>SIE (Isothermal, γ'=2)</option>
@@ -4558,6 +4566,9 @@ function renderScenePanel() {
 
       paramsPanel = `
         <div class="sl-panel">
+          <div class="sl-panel-title-row">
+            <span class="sl-panel-title"><span class="sl-sel-pre">Selected: </span>Hybrid</span>
+          </div>
           <div class="sl-params-meta-row">
             <span class="sl-params-z">z: ${pl.z.toFixed(2)}</span>
             <span class="sl-params-pos" id="sl-obj-pos">Pos: (${lensObj.cx.toFixed(2)}, ${lensObj.cy.toFixed(2)})</span>
@@ -4595,7 +4606,7 @@ function renderScenePanel() {
       paramsPanel = `
         <div class="sl-panel">
           <div class="sl-panel-title-row">
-            <span class="sl-panel-title">Selected: Mask</span>
+            <span class="sl-panel-title"><span class="sl-sel-pre">Selected: </span>Mask</span>
             ${infoSection('sl-param-info', MASK_INFO)}
           </div>
           <div class="sl-params-meta-row">
@@ -4631,7 +4642,7 @@ function renderScenePanel() {
       paramsPanel = `
         <div class="sl-panel">
           <div class="sl-panel-title-row">
-            <span class="sl-panel-title">Selected: ${isLens ? 'Lens' : 'Source'}</span>
+            <span class="sl-panel-title"><span class="sl-sel-pre">Selected: </span>${isLens ? 'Lens' : 'Source'}</span>
             ${infoHtml}
           </div>
           <div class="sl-params-meta-row">
@@ -4792,7 +4803,7 @@ function instrumentSectionHtml() {
       <div class="sl-hybrid-section">
         <div class="sl-view-hdr" style="padding:0">
           <button class="sl-hybrid-hdr" id="sl-instr-section-hdr" style="flex:1">
-            <span class="sl-hybrid-arrow">${_instrExpanded?'▼':'▶'}</span>
+            <span class="sl-hybrid-arrow">${_open(_instrExpanded)?'▼':'▶'}</span>
             <span class="sl-panel-title" style="flex:1">Instrument</span>
             ${on ? `<span class="sl-instr-tag">${INSTRUMENTS[state.instrument].name}</span>` : ''}
           </button>
@@ -4802,7 +4813,7 @@ function instrumentSectionHtml() {
             Lensed image only. Needs 2+ computed samples per pixel, or it is skipped with a warning.
             <a href="/caustica-documentation/#8-instrument-model" target="_blank" rel="noopener">Details and sources</a>`)}
         </div>
-        ${_instrExpanded ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
+        ${_open(_instrExpanded) ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
           <div class="sl-global-input">
             <label>Detector</label>
             <select id="sl-instr" style="flex:1 1 auto;min-width:0">
@@ -4943,6 +4954,46 @@ function _refreshDelensReadout() {
 // is always square, so a rectangular picture needs framing: Fit picks the starting
 // frame, then Zoom and the two Offsets give full manual control over which part of
 // it fills the square.
+// Colors: the empty field behind everything, with or without a picture loaded.
+function fieldColorSectionHtml() {
+  return `
+      <div class="sl-hybrid-section">
+        <div class="sl-view-hdr">
+          <span class="sl-panel-title" style="flex:1">Field</span>
+          <input type="color" id="sl-bg-color" class="sl-color-input" value="${_bgColorDisplay()}"
+                 style="flex:0 0 auto;width:44px;height:22px" title="Colour of the empty field behind the lensed image and behind (or around) the background picture">
+          <button class="sl-rec-mini-btn" id="sl-bg-match" ${_matchablePastedCanvas() ? '' : 'disabled'}
+                  title="Set the field to the average colour around the border of the pasted image, so the source rectangle's edge stops reading as a step">Match image</button>
+          ${infoSection('sl-field-info', `
+            The color of the empty field behind the lensed image, with or without a background picture loaded; it also fills the margins a <b>Contain</b> fit leaves over. It is the companion to a pasted-image source: match the two and the rectangular boundary of the pasted image stops being visible. <b>Match image</b> does that in one click, by averaging the color around the border of the pasted image; the source's own <b>Edge blend</b> then softens whatever is left.`)}
+        </div>
+      </div>`;
+}
+
+// Colors: the line-art palette and its per-role overrides (used while line art is on).
+function lineArtColorsSectionHtml() {
+  return `
+      <div class="sl-hybrid-section">
+        <div class="sl-view-hdr">
+          <span class="sl-panel-title" style="flex:1">Line art</span>
+        </div>
+        <div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
+          ${state.lineArt ? '' : '<p class="sl-muted-note" style="margin:0 0 6px">Used when line art is on.</p>'}
+          <div class="sl-global-input">
+            <label>Palette</label>
+            <select id="sl-lineart-palette" style="flex:1 1 auto;min-width:0">
+              ${Object.entries(LINE_ART_PALETTES).map(([k, v]) =>
+                `<option value="${k}" ${state.lineArtPalette===k?'selected':''}>${v.name}</option>`).join('')}
+            </select>
+          </div>
+          <div class="sl-lineart-colors" title="Override any color from the chosen palette; re-selecting a palette resets them">
+            ${LINE_ART_ROLES.map(([role, label]) =>
+              `<label class="sl-la-color"><span>${label}</span><input type="color" data-la-color="${role}" value="${lineArtPalette()[role]}"></label>`).join('')}
+          </div>
+        </div>
+      </div>`;
+}
+
 function backgroundSectionHtml() {
   const has = !!state.bgCanvas;
   const dis = has ? '' : 'disabled';
@@ -4962,18 +5013,18 @@ function backgroundSectionHtml() {
       <div class="sl-hybrid-section">
         <div class="sl-view-hdr" style="padding:0">
           <button class="sl-hybrid-hdr" id="sl-bg-section-hdr" style="flex:1">
-            <span class="sl-hybrid-arrow">${_bgExpanded?'▼':'▶'}</span>
+            <span class="sl-hybrid-arrow">${_open(_bgExpanded)?'▼':'▶'}</span>
             <span class="sl-panel-title" style="flex:1">Background</span>
           </button>
           ${infoSection('sl-bg-info', `
             An uploaded image replaces the empty field behind the lensed image and sits behind the lensed light, which covers it where the image is bright. The picture looks the same in either theme; every other plot element still follows the light / dark theme (<b>D</b>) as usual.<br><br>
-            <b>Field color</b> sets the empty field itself, with or without a picture loaded, and also fills the margins a <b>Contain</b> fit leaves over. It is the companion to a pasted-image source: match the two and the rectangular boundary of the pasted image stops being visible. <b>Match image</b> does that in one click, by averaging the colour around the border of the pasted image; the source's own <b>Edge blend</b> then softens whatever is left.<br><br>
+            The empty field around the picture (and the margins a <b>Contain</b> fit leaves over) is the <b>Field</b> color, set under <b>Colors</b>.<br><br>
             <b>Fit</b>: the image panel is square. <b>Cover</b> fills it and crops the long axis, <b>Contain</b> fits the whole image and leaves the rest empty, <b>Stretch</b> distorts it to the square, <b>Tile</b> fits it and mirror-repeats to fill.<br><br>
             <b>Zoom</b> and <b>Offset X / Y</b> then frame it by hand (offsets are in half-panel widths). <b>Brightness</b> fades the picture toward the empty field (0) or past its supplied brightness (above 1), and affects the backdrop only. <b>Zoom with FOV</b> pins the backdrop to the sky instead of the viewport, so zooming the field magnifies it too.<br><br>
             A <b>pixel scale</b>, set in the <b>Delensed image</b> view (<b>U</b>), replaces all of that framing: the picture is then placed on the sky at that many arcseconds per pixel, centred on the axis, in every view.<br><br>
             The eye button takes the picture off the plot without unloading it. Config files save the framing, and the file name only for the images shipped with the site (as the <b>Image recreation</b> preset does); a picture you upload yourself is not saved.`)}
         </div>
-        ${_bgExpanded ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
+        ${_open(_bgExpanded) ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
           <div class="sl-capture-row" style="margin-top:0">
             <button class="sl-capture-btn" id="sl-bg-pick">${has ? 'Replace image…' : 'Upload image…'}</button>
             ${has ? `<button type="button" class="sl-hybrid-part-btn${hid ? ' sl-obj-hidden' : ''}" id="sl-bg-vis" title="${hid ? 'Show' : 'Hide'} the background image">${eyeIcon(hid)}</button>
@@ -4983,13 +5034,6 @@ function backgroundSectionHtml() {
           ${inertNote ? `<p class="sl-muted-note" style="margin:6px 0 0">${inertNote}</p>` : ''}
           ${cal ? `<p class="sl-muted-note" style="margin:6px 0 0">Placed on the sky at <b id="sl-bg-pxnote">${+state.bgPixel.toPrecision(4)}″/px</b>, its pixel scale, centred on the axis. Fit, Zoom and Offset are off while it has one.${delensView ? '' : ` <button id="sl-bg-uncal" type="button" style="font-size:11px;background:none;border:none;color:var(--muted);text-decoration:underline;cursor:pointer;padding:0">Use Fit framing</button>`}</p>` : ''}
           <div class="sl-global-input" style="margin-top:8px">
-            <label title="Colour of the empty field behind the lensed image and behind (or around) the backdrop picture">Field color</label>
-            <input type="color" id="sl-bg-color" class="sl-color-input" value="${_bgColorDisplay()}"
-                   style="flex:0 0 auto;width:44px;height:22px" title="Colour of the empty field">
-            <button class="sl-rec-mini-btn" id="sl-bg-match" style="margin-left:auto" ${_matchablePastedCanvas() ? '' : 'disabled'}
-                    title="Set the field to the average colour around the border of the pasted image, so the source rectangle's edge stops reading as a step">Match image</button>
-          </div>
-          <div class="sl-global-input">
             <label>Fit</label>
             <select id="sl-bg-fit" style="flex:1 1 auto;min-width:0" ${fdis}>
               <option value="cover"   ${state.bgFit==='cover'  ?'selected':''}>Cover (crop)</option>
@@ -5067,7 +5111,7 @@ function renderViewPanel() {
       </div>
       </div>
 
-      <div class="sl-cat" data-cat="overlays">
+      <div class="sl-cat" data-cat="view">
       <label class="sl-hide-all-row" title="Hide every overlay and on-canvas control (markers, curves, legend, ruler, scale bar, colorbar, tool buttons) for a clean plot until switched back off">
         <span style="flex:1">Hide all overlays</span>
         <input type="checkbox" id="sl-hide-overlays" ${state.hideOverlays?'checked':''}>
@@ -5106,14 +5150,14 @@ function renderViewPanel() {
       <div class="sl-hybrid-section">
         <div class="sl-view-hdr" style="padding:0">
           <button class="sl-hybrid-hdr" id="sl-curves-section-hdr" style="flex:1">
-            <span class="sl-hybrid-arrow">${_curvesExpanded?'▼':'▶'}</span>
+            <span class="sl-hybrid-arrow">${_open(_curvesExpanded)?'▼':'▶'}</span>
             <span class="sl-panel-title" style="flex:1">Critical curves</span>
           </button>
           ${infoSection('sl-curves-info', `
             <b>Critical curves</b> / <b>Caustics</b> (<b>C</b>): where magnification diverges, in the image and source planes.<br>
             <b>Curve types</b>: radial curves dotted, tangential solid. <b>Show</b> picks one type.`)}
         </div>
-        ${_curvesExpanded ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
+        ${_open(_curvesExpanded) ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
           <div class="sl-checkbox-row">
             <label><input type="checkbox" id="sl-show-crit" ${state.showCritCurves?'checked':''}> Critical curves</label>
             <label><input type="checkbox" id="sl-show-caus" ${state.showCaustics   ?'checked':''}> Caustics</label>
@@ -5141,68 +5185,38 @@ function renderViewPanel() {
         <div class="sl-view-hdr" style="padding:0">
           <span class="sl-panel-title" style="flex:1">Line art</span>
           ${infoSection('sl-lineart-info', `
-            Flat vector line-art of the lensing structure. Only <b>uniform-disc</b> and <b>point</b> sources are drawn; other source types are ignored. The palette below sets the line-art colors; the scale bar, legend, ruler and other annotations take their color from <b>Annotation color</b> underneath.`)}
+            Flat vector line-art of the lensing structure. Only <b>uniform-disc</b> and <b>point</b> sources are drawn; other source types are ignored. Its palette and per-role colors are set under <b>Colors</b>, where <b>Annotations</b> sets the ink of the scale bar, legend, ruler and other annotations.`)}
           <label style="display:flex;align-items:center;cursor:pointer;margin:0 0 0 4px" title="Vector line-art render mode">
             <input type="checkbox" id="sl-lineart" ${state.lineArt?'checked':''} style="margin:0">
           </label>
         </div>
         ${ state.lineArt ? `
         <div class="sl-hybrid-body" style="display:block;padding:8px 2px 2px">
-          <div class="sl-global-input">
-            <label>Palette</label>
-            <select id="sl-lineart-palette" style="flex:1 1 auto;min-width:0">
-              ${Object.entries(LINE_ART_PALETTES).map(([k, v]) =>
-                `<option value="${k}" ${state.lineArtPalette===k?'selected':''}>${v.name}</option>`).join('')}
-            </select>
-          </div>
           <div class="sl-checkbox-row">
             <label><input type="checkbox" id="sl-lineart-fill" ${state.lineArtFill?'checked':''}> Fill images</label>
             <label title="Curvature-aware smoothing: rounds off sampling staircase while preserving genuine cusps"><input type="checkbox" id="sl-lineart-smooth" ${state.lineArtSmooth?'checked':''}> Smooth</label>
           </div>
-          <div class="sl-lineart-colors" title="Override any color from the chosen palette; re-selecting a palette resets them">
-            ${(() => {
-              const cells = LINE_ART_ROLES.map(([role, label]) =>
-                `<label class="sl-la-color"><span>${label}</span><input type="color" data-la-color="${role}" value="${lineArtPalette()[role]}"></label>`);
-              // Opacity of the image fill. Spliced in after "Image line" so that in the
-              // two-column grid it lands in the cell directly under "Image fill".
-              cells.splice(3, 0,
-                `<label class="sl-la-color" title="Opacity of the lensed-image fill (0 = clear, 1 = solid). Drag left/right to scrub.">
-                  <span>Fill alpha</span>
-                  <input type="number" class="sl-la-num sl-scrub" id="sl-lineart-fillalpha" min="0" max="1" step="0.05"
-                         value="${state.lineArtFillAlpha}" ${state.lineArtFill ? '' : 'disabled'}>
-                </label>`);
-              return cells.join('');
-            })()}
+          <div class="sl-global-input" title="Opacity of the lensed-image fill (0 = clear, 1 = solid). Drag left/right to scrub.">
+            <label>Fill alpha</label>
+            <input type="number" class="sl-la-num sl-scrub" id="sl-lineart-fillalpha" min="0" max="1" step="0.05"
+                   value="${state.lineArtFillAlpha}" ${state.lineArtFill ? '' : 'disabled'}>
           </div>
+          <p class="sl-muted-note" style="margin:6px 0 0">Its palette and colors are under <b>Colors</b>.</p>
         </div>` : '' }
       </div>
       </div>
 
-      <div class="sl-cat" data-cat="overlays">
-      <div class="sl-hybrid-section" style="padding:5px 0">
-        <div class="sl-view-hdr" style="padding:0">
-          <span class="sl-panel-title" style="flex:1">Annotation color</span>
-          <label class="sl-annot-auto" title="Follow the page's light / dark theme: white on dark, black on light">
-            <input type="checkbox" id="sl-annot-auto" ${state.annotAuto?'checked':''}> Auto
-          </label>
-          <input type="color" id="sl-annot-color" value="${annotInk()}" title="Annotation ink color (picking one turns Auto off)">
-          ${infoSection('sl-annot-info', `
-            Ink for the plot furniture that isn't tied to an object: scale bar, legend, ruler, time-delay pills, Fermat markers. <b>Auto</b> snaps it to white or black with the page theme; picking a color pins it instead.`)}
-        </div>
-      </div>
-      </div>
-
-      <div class="sl-cat" data-cat="view">
+      <div class="sl-cat" data-cat="colors">
       ${vizModeHasScale(state.vizMode) ? `
       <div class="sl-hybrid-section">
         <div class="sl-view-hdr" style="padding:0">
           <button class="sl-hybrid-hdr" id="sl-cmap-section-hdr" style="flex:1">
-            <span class="sl-hybrid-arrow">${_cmapExpanded?'▼':'▶'}</span>
-            <span class="sl-panel-title" style="flex:1">Color Map</span>
+            <span class="sl-hybrid-arrow">${_open(_cmapExpanded)?'▼':'▶'}</span>
+            <span class="sl-panel-title" style="flex:1">Color map</span>
           </button>
           ${infoSection('sl-cmap-info', cmapInfoHtml(state.vizMode))}
         </div>
-        ${_cmapExpanded ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
+        ${_open(_cmapExpanded) ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
           ${(() => {
             const vs = vizScaleFor(state.vizMode);
             const heading = { 0:'Brightness stretch', 1:'κ color scale', 2:'γ color scale',
@@ -5252,7 +5266,20 @@ function renderViewPanel() {
           </div>`;
           })()}
         </div>` : ''}
-      </div>` : ''}
+      </div>` : `<p class="sl-muted-note sl-desk-only">${_VIZ_NAMES[state.vizMode] ?? 'This view'} has fixed colors, so there is no color map to set.</p>`}
+      ${fieldColorSectionHtml()}
+      <div class="sl-hybrid-section">
+        <div class="sl-view-hdr">
+          <span class="sl-panel-title" style="flex:1">Annotations</span>
+          <label class="sl-annot-auto" title="Follow the page's light / dark theme: white on dark, black on light">
+            <input type="checkbox" id="sl-annot-auto" ${state.annotAuto?'checked':''}> Auto
+          </label>
+          <input type="color" id="sl-annot-color" value="${annotInk()}" title="Annotation ink color (picking one turns Auto off)">
+          ${infoSection('sl-annot-info', `
+            Ink for the plot furniture that isn't tied to an object: scale bar, legend, ruler, time-delay pills, Fermat markers. <b>Auto</b> snaps it to white or black with the page theme; picking a color pins it instead.`)}
+        </div>
+      </div>
+      ${lineArtColorsSectionHtml()}
       </div>
 
       <div class="sl-cat" data-cat="background">${backgroundSectionHtml()}</div>
@@ -5620,7 +5647,7 @@ function renderExportPanel() {
     <div class="sl-panel">
       <p class="sl-perf-note" style="margin-bottom:10px">Critical curves are included in GIF recordings but hidden in WebM to keep frame timing accurate.</p>
       <div class="sl-panel-title-row">
-        <span class="sl-panel-title">LIVE</span>
+        <span class="sl-panel-title">Live</span>
         ${infoSection('sl-rec-info', `
           <b>WebM</b>: fast, browser-native. Critical curves are hidden during programmatic recording to keep frame timing correct.<br><br>
           <b>GIF</b>: auto-looping, universally shareable. Slower to encode, 256 colors. GIF programmatic recording includes critical curves at full resolution.<br><br>
@@ -5660,10 +5687,10 @@ function renderExportPanel() {
 
       <div class="sl-hybrid-section" style="margin-top:8px">
         <button class="sl-hybrid-hdr" id="sl-prog-section-hdr">
-          <span class="sl-hybrid-arrow">${_progExpanded?'▼':'▶'}</span>
+          <span class="sl-hybrid-arrow">${_open(_progExpanded)?'▼':'▶'}</span>
           <span class="sl-panel-title" style="flex:1">Programmatic</span>
         </button>
-        ${_progExpanded ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
+        ${_open(_progExpanded) ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
           ${zLine ? `<div class="sl-rec-prog-z" style="margin-bottom:4px">${zLine}</div>` : ''}
           <div class="sl-rec-prog-field">
             <span class="sl-rec-prog-key">Initial</span>
@@ -5717,7 +5744,7 @@ function renderExportPanel() {
   el.insertAdjacentHTML('beforeend', `
     <div class="sl-panel" style="margin-top:10px">
       <div class="sl-panel-title-row">
-        <span class="sl-panel-title">DATA (CSV)</span>
+        <span class="sl-panel-title">Data (CSV)</span>
         ${infoSection('sl-csv-info', `
           Exports the most recently computed overlays, with positions in arcseconds.<br><br>
           <b>Curves</b>: critical-curve and caustic segments, one row per segment, labelled <code>critical</code> or <code>caustic</code> and <code>tangential</code> or <code>radial</code>, at the source redshift they were computed for.<br><br>
