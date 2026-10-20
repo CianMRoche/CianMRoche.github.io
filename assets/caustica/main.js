@@ -1,6 +1,6 @@
 // Caustica: main.js
 
-import { Renderer, MAX_OBJECTS, MAX_PLANES }   from './renderer.js';
+import { Renderer, MAX_OBJECTS, MAX_PLANES, MAX_MASKS } from './renderer.js';
 import { precomputeDistances,
          computeCriticalCurves,
          computeDiscImageOutlines,
@@ -26,6 +26,7 @@ function typeColorHex(type) {
   if (type === 'lens')   return dark ? '#7bbfcc' : '#4a7fc8';
   if (type === 'hybrid') return dark ? '#b09ac8' : '#9b7dd4';
   if (type === 'empty')  return dark ? '#484f58' : '#d1d5db';
+  if (type === 'mask')   return dark ? '#9ca3af' : '#6b7280';
   return dark ? '#fbbf24' : '#f59e0b';
 }
 
@@ -374,7 +375,7 @@ function reportObjectCap() {
 const CONFIG_DEFAULTS = {
   fov:                4.0,
   zMax:               3.0,
-  vizMode:            0,      // 0=surface brightness, 1=κ, 2=γ, 3=|μ|, 4=signed μ, 5=|α|, 6=φ (Fermat), 7=parity, 8=image number
+  vizMode:            0,      // 0=surface brightness, 1=κ, 2=γ, 3=|μ|, 4=signed μ, 5=|α|, 6=φ (Fermat), 7=parity, 8=image number, 9=delensed
   showCritCurves:     false,
   showCaustics:       false,
   curveTypes:         true,   // draw radial curves/caustics dotted and label both types in the legend
@@ -420,6 +421,9 @@ const CONFIG_DEFAULTS = {
                               // the dark-mode display value (black = the old field)
   bgSkyLock:          false,  // false = fixed to the viewport; true = zooms with the FOV
   bgHidden:           false,  // eye toggle: keep the loaded image but stop drawing it
+  bgPixel:            0,      // arcsec per pixel of the image as supplied; 0 = none, framed by
+                              // Fit / Zoom / Offset. Set, it places the picture on the sky (centred
+                              // on the axis) in every view, and is what the Delensed view needs.
   // Detector model (View tab → Instrument). instrPixel / instrPsfFwhm are only
   // consulted for the 'custom' selection; presets carry their own values.
   instrument:         'off',  // key into INSTRUMENTS
@@ -440,6 +444,7 @@ const IMAGE_NUMBER_SIZE    = [6, 40];
 const BG_ZOOM_MIN   = 0.25, BG_ZOOM_MAX = 5;
 const BG_OFF_MAX    = 1;
 const BG_BRIGHT_MAX = 2;
+const BG_PIXEL_MIN  = 1e-4, BG_PIXEL_MAX = 10;   // arcsec/px
 
 // Numeric config field: finite and clamped into range, else the supplied default.
 const _clampNum = (v, lo, hi, d) => isFinite(v) ? Math.min(hi, Math.max(lo, +v)) : d;
@@ -449,7 +454,7 @@ const state = {
   planes:          [],
   selectedPlaneId: null,
   selectedObjId:   null,
-  addMode:         'select', // plane-viewer tool: 'select' | 'lens' | 'source' | 'hybrid'
+  addMode:         'select', // plane-viewer tool: 'select' | 'lens' | 'source' | 'hybrid' | 'mask' (delensed view only)
   rulerActive:     false,    // ruler is the active pointer tool on the image panel (transient)
   rulers:          [],       // committed measurements, each { id, x0, y0, x1, y1 } in arcsec (session-only)
   rulerDraft:      null,     // in-progress ruler drag { x0, y0, x1, y1 } or null (transient)
@@ -471,6 +476,8 @@ const state = {
   bgName:          '',       // file name, shown in the View tab
   bgSrc:           '',       // site file name when the image came from a config, else ''
   bgAngSize:       0,        // FOV (arcsec) when the image was loaded
+  bgNatW:          0,        // the image's own pixel size, before any downscale on load:
+  bgNatH:          0,        //   the pixel scale refers to these pixels
 };
 
 // True when a background image is actually on screen. It replaces the flat field
@@ -629,11 +636,14 @@ function contourInfoHtml() {
 }
 
 // Draw a type-specific marker shape centred at (px, py) with circumradius r.
-// type: 'lens' = upward triangle, 'source' = downward triangle, 'hybrid' = diamond.
+// type: 'lens' = upward triangle, 'source' = downward triangle, 'hybrid' = diamond,
+// 'mask' = circle.
 const _S3 = Math.sqrt(3);
 function drawShapeMarker(ctx, type, px, py, r) {
   ctx.beginPath();
-  if (type === 'lens') {
+  if (type === 'mask') {
+    ctx.arc(px, py, r * 0.8, 0, Math.PI * 2);
+  } else if (type === 'lens') {
     ctx.moveTo(px,               py - r);
     ctx.lineTo(px + r * _S3 / 2, py + r / 2);
     ctx.lineTo(px - r * _S3 / 2, py + r / 2);
@@ -962,6 +972,7 @@ function configToYaml() {
   y += `bgColor: ${state.bgColor}\n`;
   y += `bgSkyLock: ${state.bgSkyLock}\n`;
   y += `bgHidden: ${state.bgHidden}\n`;
+  y += `bgPixel: ${+state.bgPixel.toPrecision(6)}\n`;
   y += `instrument: ${state.instrument}\n`;
   y += `instrPixel: ${+state.instrPixel.toFixed(5)}\n`;
   y += `instrPsfFwhm: ${+state.instrPsfFwhm.toFixed(5)}\n`;
@@ -1125,14 +1136,16 @@ function loadConfigFromYaml(yaml) {
     // Clear pasted textures before replacing planes
     for (const p of state.planes)
       p.objects.filter(o => o.model === 'pastedimage').forEach(o => renderer?.clearPastedTexture(o.id));
-    const VALID_TYPES  = new Set(['lens', 'source']);
+    const VALID_TYPES  = new Set(['lens', 'source', 'mask']);
     const VALID_MODELS = new Set(['pointmass','sie','nie','epl','shear','convergence','deflection','gaussian','exponential','point','pointsource','pastedimage']);
     const COLOR_RE     = /^#[0-9a-fA-F]{6}$/;
     state.planes = (cfg.planes || []).map(p => ({
       id: uid(), z: isFinite(p.z) ? +p.z : 0,
       objects: (p.objects || []).map(o => {
         const type  = VALID_TYPES.has(o.type)   ? o.type  : 'lens';
-        const model = VALID_MODELS.has(o.model) ? o.model : (type === 'lens' ? 'sie' : 'gaussian');
+        // A mask has a single model of its own, and no other type may claim it.
+        const model = type === 'mask'           ? 'mask'
+                    : VALID_MODELS.has(o.model) ? o.model : (type === 'lens' ? 'sie' : 'gaussian');
         // Sanitize params: numbers only except color (must be #rrggbb)
         const rawParams = o.params ?? {};
         const params = {};
@@ -1274,6 +1287,12 @@ function loadConfigFromYaml(yaml) {
     state.bgColor   = COLOR_RE.test(cfg.bgColor) ? cfg.bgColor : CONFIG_DEFAULTS.bgColor;
     state.bgSkyLock = _bool(cfg.bgSkyLock, CONFIG_DEFAULTS.bgSkyLock);
     state.bgHidden  = _bool(cfg.bgHidden,  CONFIG_DEFAULTS.bgHidden);
+    state.bgPixel   = cfg.bgPixel > 0 ? _clampNum(cfg.bgPixel, BG_PIXEL_MIN, BG_PIXEL_MAX, 0) : 0;
+    // The delensed view needs a pixel scale. A config-named image still loading
+    // seeds itself on arrival (_installBackground); one already on screen, and not
+    // about to be replaced, is seeded now.
+    const _bgPending = isPresetBgName(cfg.bgImage) && cfg.bgImage !== state.bgSrc;
+    if (state.vizMode === 9 && !_bgPending) seedBgPixel();
     // Detector model.
     state.instrument   = INSTRUMENTS[cfg.instrument] ? cfg.instrument : CONFIG_DEFAULTS.instrument;
     state.instrPixel   = _clampNum(cfg.instrPixel,   1e-4, INSTR_PIXEL_MAX, CONFIG_DEFAULTS.instrPixel);
@@ -1318,6 +1337,8 @@ function defaultParams(model) {
   // stretch: false keeps a photograph's supplied tones (the brightness stretch is
   // meant for the analytic sources' faint light and washes a picture out).
   if (model === 'pastedimage') return { sigma: 1.0, amplitude: 1.0, contrast: 1.0, saturation: 1.0, angSize: 0, edgeBlend: 0, stretch: false };
+  // Mask (delensed view): r is the semi-major axis, as for the analytic sources.
+  if (model === 'mask')        return { r: 0.3, q: 1.0, phi: 0 };
   return {};
 }
 
@@ -1865,6 +1886,7 @@ function buildDOM() {
                 <option value="6">Fermat potential φ</option>
                 <option value="7">Parity</option>
                 <option value="8">Image number</option>
+                <option value="9">Delensed image</option>
               </select>
             </div>
             <div class="sl-overlay-chips" id="sl-overlay-chips">
@@ -1952,6 +1974,7 @@ function buildDOM() {
                   <button class="sl-ctool-btn" data-tool="lens"   title="Add lens — click this panel to place (1). Click again to stop adding." aria-label="Add lens tool">L</button>
                   <button class="sl-ctool-btn" data-tool="source" title="Add source — click this panel to place (2). Click again to stop adding." aria-label="Add source tool">S</button>
                   <button class="sl-ctool-btn" data-tool="hybrid" title="Add hybrid — click this panel to place (3). Click again to stop adding." aria-label="Add hybrid tool">H</button>
+                  <button class="sl-ctool-btn" data-tool="mask"   title="Add mask: cuts a patch out of the background image before it is delensed. Click this panel to place (4). Click again to stop adding." aria-label="Add mask tool" style="display:none">M</button>
                   <button class="sl-ctool-del" id="sl-card-del-obj" title="Delete selected object" aria-label="Delete selected object"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="1.5" y1="4" x2="12.5" y2="4"/><path d="M4 4l.5 7h5l.5-7"/><path d="M5 4V3h4v1"/></svg></button>
                 </div>
                 <div class="sl-plane-spacer" aria-hidden="true"></div>
@@ -2153,8 +2176,8 @@ function attachHandlers() {
   // Zoom cluster + wheel + pinch.
   attachZoomHandlers(document.getElementById('sl-image-wrap'));
 
-  const _VIZ_LABELS ={ '0':'Lensed image','1':'Convergence κ','2':'Shear γ','3':'Magnification |μ|','5':'Deflection |α|','6':'Fermat potential φ','7':'Parity','8':'Image number' };
-  const _VIZ_LABELS_SHORT = { '0':'[I] Lensed image','1':'[K] Convergence κ','2':'[G] Shear γ','3':'[M] Magnification |μ|','5':'[A] Deflection |α|','6':'[T] Fermat potential φ','7':'[P] Parity','8':'[N] Image number' };
+  const _VIZ_LABELS ={ '0':'Lensed image','1':'Convergence κ','2':'Shear γ','3':'Magnification |μ|','5':'Deflection |α|','6':'Fermat potential φ','7':'Parity','8':'Image number','9':'Delensed image' };
+  const _VIZ_LABELS_SHORT = { '0':'[I] Lensed image','1':'[K] Convergence κ','2':'[G] Shear γ','3':'[M] Magnification |μ|','5':'[A] Deflection |α|','6':'[T] Fermat potential φ','7':'[P] Parity','8':'[N] Image number','9':'[U] Delensed image' };
   function _setVizOptionLabels(withShortcuts) {
     const sel = document.getElementById('sl-viz-mode');
     if (!sel) return;
@@ -2164,7 +2187,7 @@ function attachHandlers() {
   document.getElementById('sl-viz-mode')?.addEventListener('mousedown', () => _setVizOptionLabels(true));
   document.getElementById('sl-viz-mode')?.addEventListener('change', e => {
     _setVizOptionLabels(false);
-    e.target.blur();  // keep letter shortcuts (K/G/M/A/I/T/P/N) from hitting the select's type-ahead
+    e.target.blur();  // keep letter shortcuts (K/G/M/A/I/T/P/N/U) from hitting the select's type-ahead
     setVizMode(parseInt(e.target.value, 10));
   });
   document.getElementById('sl-viz-mode')?.addEventListener('blur', () => _setVizOptionLabels(false));
@@ -2420,6 +2443,10 @@ function attachHandlers() {
       setCanvasTool(e.key === '1' ? 'lens' : e.key === '2' ? 'source' : 'hybrid');
       return;
     }
+    if (e.key === '4' && maskToolAvailable()) {
+      setCanvasTool('mask');
+      return;
+    }
     if (e.key === 'o' || e.key === 'O') {
       const pl = selectedPlane();
       if (!pl) return;
@@ -2465,7 +2492,7 @@ function attachHandlers() {
       return;
     }
     // Visualization mode shortcuts: toggle on/off; pressing the same key again returns to image.
-    const VIZ_KEYS = { k: 1, K: 1, g: 2, G: 2, m: 3, M: 3, a: 5, A: 5, i: 0, I: 0, t: 6, T: 6, p: 7, P: 7, n: 8, N: 8 };
+    const VIZ_KEYS = { k: 1, K: 1, g: 2, G: 2, m: 3, M: 3, a: 5, A: 5, i: 0, I: 0, t: 6, T: 6, p: 7, P: 7, n: 8, N: 8, u: 9, U: 9 };
     if (e.key in VIZ_KEYS) {
       setVizMode(VIZ_KEYS[e.key]);
       return;
@@ -2507,14 +2534,21 @@ function attachHandlers() {
 // no-tool state where clicks/taps never create an object. The main image is
 // always selection-only; objects there can be dragged but never created.
 function setCanvasTool(tool) {
+  if (tool === 'mask' && !maskToolAvailable()) return;
   // Clicking the already-active creation tool toggles it back off (no-tool).
   state.addMode = (tool === state.addMode && tool !== 'select') ? 'select' : tool;
   updateCanvasTools();
 }
 
+// Masks only act on the delensed view, so that is the only view offering the tool.
+function maskToolAvailable() { return state.vizMode === 9; }
+
 function updateCanvasTools() {
+  // Leaving the delensed view drops an armed mask tool along with its button.
+  if (state.addMode === 'mask' && !maskToolAvailable()) state.addMode = 'select';
   document.querySelectorAll('.sl-ctool-btn[data-tool]').forEach(b => {
     b.classList.toggle('active', state.addMode === b.dataset.tool);
+    if (b.dataset.tool === 'mask') b.style.display = maskToolAvailable() ? '' : 'none';
   });
 }
 
@@ -2701,15 +2735,17 @@ function updateZsChip() {
 // and the mobile image swipe.
 function setVizMode(mode) {
   state.vizMode = mode;
+  if (mode === 9) seedBgPixel();
   const sel = document.getElementById('sl-viz-mode');
   if (sel) sel.value = mode;
   glCanvas?.classList.toggle('sl-viz-active', mode !== 0);
+  updateCanvasTools();   // the mask tool comes and goes with the delensed view
   _updateColorbar(); renderSidebar(); redraw();
 }
 
 // Step to the previous/next visualization mode, wrapping around. The order
 // matches the on-canvas dropdown (image, κ, γ, |μ|, |α|, Fermat φ).
-const VIZ_CYCLE = [0, 1, 2, 3, 5, 6, 7, 8];
+const VIZ_CYCLE = [0, 1, 2, 3, 5, 6, 7, 8, 9];
 function cycleVizMode(dir) {
   const i = VIZ_CYCLE.indexOf(state.vizMode);
   setVizMode(VIZ_CYCLE[((i < 0 ? 0 : i) + dir + VIZ_CYCLE.length) % VIZ_CYCLE.length]);
@@ -2775,6 +2811,8 @@ const SHORTCUTS = [
   ['T', 'Fermat potential φ contour map'],
   ['P', 'Parity map (image types I / II / III)'],
   ['N', 'Image number map (source plane)'],
+  ['U', 'Delensed background image (source plane)'],
+  ['4', 'Toggle the Mask tool (Delensed view only)'],
   ['H', 'Hide / show the selected object'],
   ['O', 'Clear all objects from the selected plane'],
   ['X', 'Delete the selected plane'],
@@ -2919,6 +2957,8 @@ function hitTestImage(wrap, e) {
       // Sources are hidden on the image-number map (a source-plane view of where a
       // source could be), so they are not draggable there either.
       if (state.vizMode === 8 && !state.lineArt && obj.type === 'source' && !obj.hybridId) continue;
+      // Masks are drawn (and so can be grabbed) only where they mean something.
+      if (obj.type === 'mask' && !masksShown()) continue;
       if (obj.hybridId) {
         if (seenHybrids.has(obj.hybridId)) continue;
         seenHybrids.add(obj.hybridId);
@@ -3560,6 +3600,9 @@ function _installBackground(img, name, src) {
   state.bgName    = name || 'image';
   state.bgSrc     = src || '';
   state.bgAngSize = state.fov;   // sky-lock reference: identical framing at this FOV
+  state.bgNatW    = iw;
+  state.bgNatH    = ih;
+  if (state.vizMode === 9) seedBgPixel();
   renderer?.setBackdrop(cvs);
   syncBackdrop();
   renderSidebar(); redraw();
@@ -3571,7 +3614,11 @@ function _applyBackgroundFile(file) {
   const img = new Image();
   img.onload = () => {
     URL.revokeObjectURL(url);
-    if (seq === _bgLoadSeq) _installBackground(img, file.name, '');
+    if (seq !== _bgLoadSeq) return;
+    // A pixel scale belongs to the picture it was set for, so a new upload starts
+    // without one (the delensed view seeds a fresh one from its framing).
+    state.bgPixel = 0;
+    _installBackground(img, file.name, '');
   };
   img.onerror = () => { URL.revokeObjectURL(url); showToast('Could not read that image.'); };
   img.src = url;
@@ -3639,8 +3686,15 @@ function syncBackdrop() {
     bright:  state.bgBright,
     skyLock: state.bgSkyLock,
     angSize: state.bgAngSize,
+    sky:     bgSkySize(),
     invert:  glCanvasInverted(),
   } : null;
+  // The delensed view reads the picture even while the eye toggle hides it: there
+  // it is the data being delensed, not a backdrop. Brightness does apply.
+  renderer.delensSky    = bgSkySize();
+  renderer.delensBright = state.bgBright;
+  renderer.delensMasks  = activeMasks().map(o =>
+    [o.cx, o.cy, o.params.r ?? 0.3, o.params.q ?? 1, o.params.phi ?? 0]);
   // The field colour applies whether or not a picture is loaded, so it lives outside
   // the bgOpts branch. Stored as the dark-mode display value and handed over as-is,
   // exactly like source colours: in light theme the canvas's CSS invert flips it
@@ -3649,6 +3703,56 @@ function syncBackdrop() {
   // matched field and pasted image agree on screen in either theme, since both take
   // the same as-is path.
   renderer.fieldColor = _hexRgb01(state.bgColor) ?? [0, 0, 0];
+}
+
+// Masks: elliptical patches cut out of the background image before it is delensed.
+// They live on planes like any object (so selection, dragging, undo and configs
+// all carry them), but their plane's redshift plays no part: a mask covers part
+// of the observed picture, at an image-plane angle. The shader takes MAX_MASKS.
+function activeMasks() {
+  const out = [];
+  for (const pl of state.planes)
+    for (const o of pl.objects)
+      if (o.type === 'mask' && !o.hidden) out.push(o);
+  return out.slice(0, MAX_MASKS);
+}
+
+// Views a mask means something in, and so is drawn and draggable in: the lensed
+// image, where it sits over the picture it covers, and the delensed view it acts on.
+function masksShown() {
+  return (state.vizMode === 0 || state.vizMode === 9) && !state.lineArt;
+}
+
+// The background image's [w, h] on the sky in arcsec, from its pixel scale, or null
+// while it has none (and is framed by Fit / Zoom / Offset instead).
+function bgSkySize() {
+  return state.bgCanvas && state.bgPixel > 0 && state.bgNatW > 0
+    ? [state.bgNatW * state.bgPixel, state.bgNatH * state.bgPixel] : null;
+}
+
+// The pixel scale at which the picture keeps the Fit / Zoom framing it had when it
+// was loaded (at FOV bgAngSize, where the sky-lock option also matches it), so that
+// giving it one moves nothing at that field of view. Every fit but Stretch keeps
+// the aspect ratio, making the two axes agree; for Stretch take their mean.
+// Offsets are not carried over: a picture with a pixel scale is centred on the axis.
+function _bgImpliedPixel() {
+  const c = state.bgCanvas;
+  if (!c || !(state.bgNatW > 0)) return 0;
+  const ar = c.width / c.height;
+  let sx, sy;
+  if (state.bgFit === 'stretch')                             { sx = 1;                 sy = 1; }
+  else if (state.bgFit === 'contain' || state.bgFit === 'tile') { sx = Math.max(1, 1 / ar); sy = Math.max(1, ar); }
+  else                                                       { sx = Math.min(1, 1 / ar); sy = Math.min(1, ar); }
+  const z = state.bgZoom > 0 ? state.bgZoom : 1;
+  const A = state.bgAngSize > 0 ? state.bgAngSize : state.fov;
+  const p = A * z / Math.sqrt(sx * state.bgNatW * sy * state.bgNatH);
+  return _clampNum(+p.toPrecision(4), BG_PIXEL_MIN, BG_PIXEL_MAX, 0);
+}
+
+// The delensed view maps image pixels to angles, so it needs a pixel scale. One the
+// user (or a config) has set is kept; otherwise adopt the framing's own.
+function seedBgPixel() {
+  if (state.bgCanvas && !(state.bgPixel > 0)) state.bgPixel = _bgImpliedPixel();
 }
 
 // What the Field color picker should show: the stored value is the dark-mode one, so
@@ -3785,6 +3889,10 @@ function _makeAddObjects(plane, cx, cy) {
     const obj = makeObject('source', 'gaussian', cx, cy);
     plane.objects.push(obj);
     return obj;
+  } else if (state.addMode === 'mask') {
+    const obj = makeObject('mask', 'mask', cx, cy);
+    plane.objects.push(obj);
+    return obj;
   } else {
     const obj = makeObject('lens', 'sie', cx, cy);
     plane.objects.push(obj);
@@ -3906,6 +4014,11 @@ const LENS_INFO = {
         <b>φ</b>: position angle of the major axis (radians).<br>
         <b>γ'</b>: radial mass-density slope (ρ ∝ r<sup>−γ'</sup>), written with a prime to distinguish it from the external-shear strength γ. γ' = 2 is isothermal (identical to SIE); γ' &lt; 2 shallows the central density, γ' &gt; 2 steepens it. Typical galaxies have γ' ≈ 1.9–2.1.`,
 };
+const MASK_INFO = `Cuts an elliptical patch out of the <b>Background</b> image before it is delensed, for example over the lens galaxy, whose own light would otherwise be spread across the source plane, or over a foreground star. Masked pixels contribute nothing: source points seen only through them become holes, and points with other images are rebuilt from those.<br><br>
+  <b>Size</b>: semi-major axis (arcsec).<br>
+  <b>q</b>: axis ratio (1 = circular).<br>
+  <b>φ</b>: position angle of the major axis (radians).<br><br>
+  Its position is an angle on the observed picture, so the outline sits over what it covers in the <b>Lensed image</b> view. The plane it was placed on does not matter.`;
 const SOURCE_INFO = {
   gaussian: `<b>σ</b>: half-width at 1/e² of the Gaussian profile (arcsec).<br>
              <b>q</b>: axis ratio (1 = circular, lower = more elliptical).<br>
@@ -4046,6 +4159,26 @@ function renderScenePanel() {
               ${sourceParamRows(srcObj)}
             </div>` : ''}
           </div>
+        </div>`;
+    } else if (obj.type === 'mask') {
+      // ── Mask (delensed view): no model choice, just its ellipse ──
+      const p = obj.params;
+      paramsPanel = `
+        <div class="sl-panel">
+          <div class="sl-panel-title-row">
+            <span class="sl-panel-title">Selected: Mask</span>
+            ${infoSection('sl-param-info', MASK_INFO)}
+          </div>
+          <div class="sl-params-meta-row">
+            <span class="sl-params-z" title="A mask covers part of the observed picture, so the redshift of the plane it was placed on plays no part">Image plane</span>
+            <span class="sl-params-pos" id="sl-obj-pos">Pos: (${obj.cx.toFixed(2)}, ${obj.cy.toFixed(2)})</span>
+            <button class="sl-obj-vis-btn${obj.hidden ? ' sl-obj-hidden' : ''}" id="sl-toggle-vis" title="${obj.hidden ? 'Turn the mask back on' : 'Turn the mask off'}">${eyeIcon(obj.hidden)}</button>
+            <button class="sl-delete-obj-btn" id="sl-delete-obj" title="Delete mask" aria-label="Delete mask"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="1.5" y1="4" x2="12.5" y2="4"/><path d="M4 4l.5 7h5l.5-7"/><path d="M5 4V3h4v1"/></svg></button>
+          </div>
+          ${sliderRowLog('Size (″)', 'r', 0.01, 20, p.r ?? 0.3)}
+          ${sliderRow('q', 'q', 0.05, 1.0, 0.05, p.q ?? 1.0)}
+          ${sliderRow('φ (rad)', 'phi', 0, Math.PI, 0.05, p.phi ?? 0)}
+          <p style="font-size:11px;color:var(--muted);margin-top:4px;grid-column:1/-1">${state.vizMode === 9 ? 'Its outline is drawn over the picture in the Lensed image view (I).' : 'Acts on the Delensed image view (U) only.'}</p>
         </div>`;
     } else {
       // ── Single-type object ──
@@ -4315,6 +4448,66 @@ function _refreshInstrReadout() {
   if (el) el.innerHTML = instrReadoutHtml();
 }
 
+// ── View tab: Delensed Image section ─────────────────────────────────────────
+// Shown in the delensed view (vizMode 9) only. Its one control is the background
+// image's pixel scale, which fixes the angle each image pixel subtends; the image
+// itself is loaded in the Background section.
+function delensSectionHtml() {
+  const has = !!state.bgCanvas;
+  let note = '';
+  if (renderer && !renderer.delensSupported)
+    note = 'This browser cannot draw the delensed view: it needs WebGL2 float render targets (<code>EXT_color_buffer_float</code>), which this GPU does not offer.';
+  else if (!has)
+    note = 'Upload the lensed image in the <b>Background</b> section above. This view traces it back to the source plane through the current lens model.';
+  else if (state.lineArt)
+    note = 'Line art draws its own vectors; switch it off to see the delensed image.';
+  return `
+      <div class="sl-hybrid-section">
+        <div class="sl-view-hdr">
+          <span class="sl-panel-title" style="flex:1">Delensed Image</span>
+          ${infoSection('sl-delens-info', `
+            Each pixel of the <b>Background</b> image is traced through the lens model to the source plane at <b>z<sub>s</sub> ref</b> and painted where its light came from. Where several images of the same point overlap they are averaged, weighted by magnification, so a more magnified image (which samples the source more finely) counts for more.<br><br>
+            With the right lens model the images line up into a single source. With a wrong one you see offset copies: move or reshape the lenses here and watch them merge. <b>Caustics</b> (<b>C</b>) can be drawn on top.<br><br>
+            <b>Pixel scale</b>: arcseconds per pixel of the image as supplied. It also places the picture on the sky in the lensed-image view, so the model you line up against the arcs there is the one delensed here. It starts at the scale that matches the image's framing when it was loaded.<br><br>
+            <b>Masks</b> (the <b>M</b> tool in the plane viewer, key <b>4</b>) cut elliptical patches out of the picture before it is delensed. Light from the lens galaxy is otherwise traced back like everything else and spread over the source plane; mask it out. Their outlines show over the picture in the <b>Lensed image</b> view.<br><br>
+            The Background section's <b>Brightness</b> scales the delensed picture too.`)}
+        </div>
+        <div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
+          <div class="sl-global-input">
+            <label title="Arcseconds per pixel of the background image as supplied">Pixel scale</label>
+            <input type="number" class="sl-scrub" id="sl-delens-px" style="width:96px" min="${BG_PIXEL_MIN}" max="${BG_PIXEL_MAX}" step="${_numStep(state.bgPixel || 0.05)}" value="${has && state.bgPixel > 0 ? state.bgPixel : ''}" ${has ? '' : 'disabled'}>
+            <span class="sl-unit">″/px</span>
+          </div>
+          <p class="sl-muted-note" id="sl-delens-readout" style="margin:4px 0 0">${delensReadoutHtml()}</p>
+          <p class="sl-muted-note" style="margin:6px 0 0">${delensMaskNote()}</p>
+          ${note ? `<p class="sl-muted-note" style="margin:6px 0 0">${note}</p>` : ''}
+        </div>
+      </div>`;
+}
+
+// How many masks are cutting the picture, and how to add one.
+function delensMaskNote() {
+  let n = 0;
+  for (const pl of state.planes) for (const o of pl.objects) if (o.type === 'mask' && !o.hidden) n++;
+  if (!n) return 'No masks. Add one with the <b>M</b> tool in the plane viewer (<b>4</b>), e.g. over the lens galaxy.';
+  const over = n > MAX_MASKS ? ` Only the first ${MAX_MASKS} are applied.` : '';
+  return `${n} mask${n > 1 ? 's' : ''} cutting the picture.${over}`;
+}
+
+function delensReadoutHtml() {
+  const sky = bgSkySize();
+  if (!sky) return '';
+  return `${state.bgNatW} × ${state.bgNatH} px, so ${sky[0].toFixed(2)}″ × ${sky[1].toFixed(2)}″ on the sky`;
+}
+
+// Refresh it without rebuilding the panel, so it stays live under a scrub.
+function _refreshDelensReadout() {
+  const el = document.getElementById('sl-delens-readout');
+  if (el) el.innerHTML = delensReadoutHtml();
+  const bg = document.getElementById('sl-bg-pxnote');   // the Background section's note
+  if (bg) bg.textContent = `${+state.bgPixel.toPrecision(4)}″/px`;
+}
+
 // ── View tab: Background image section ───────────────────────────────────────
 // An uploaded picture replaces the flat black (or, in light theme, white) field
 // behind the lensed image, and is unaffected by the theme itself. The image panel
@@ -4325,8 +4518,14 @@ function backgroundSectionHtml() {
   const has = !!state.bgCanvas;
   const dis = has ? '' : 'disabled';
   const hid = has && state.bgHidden;
+  // With a pixel scale the picture is placed on the sky, so the framing controls
+  // have nothing to do until it is released back to them.
+  const cal  = !!bgSkySize();
+  const fdis = has && !cal ? '' : 'disabled';
+  const delensView = state.vizMode === 9 && !state.lineArt;
   // A loaded image that isn't currently visible: say why rather than looking broken.
   const inertNote = !has || bgImageActive() ? ''
+    : delensView     ? 'This view delenses it into the source plane (see <b>Delensed Image</b> below).'
     : hid            ? 'Hidden. Use the eye button to show it again.'
     : state.lineArt  ? 'Line art draws its own background; switch it off to see the image.'
     : 'Shown in the lensed-image view only, not on the quantity maps.';
@@ -4342,6 +4541,7 @@ function backgroundSectionHtml() {
             <b>Field color</b> sets the empty field itself, with or without a picture loaded, and also fills the margins a <b>Contain</b> fit leaves over. It is the companion to a pasted-image source: match the two and the rectangular boundary of the pasted image stops being visible. <b>Match image</b> does that in one click, by averaging the colour around the border of the pasted image; the source's own <b>Edge blend</b> then softens whatever is left.<br><br>
             <b>Fit</b>: the image panel is square. <b>Cover</b> fills it and crops the long axis, <b>Contain</b> fits the whole image and leaves the rest empty, <b>Stretch</b> distorts it to the square, <b>Tile</b> fits it and mirror-repeats to fill.<br><br>
             <b>Zoom</b> and <b>Offset X / Y</b> then frame it by hand (offsets are in half-panel widths). <b>Brightness</b> fades the picture toward the empty field (0) or past its supplied brightness (above 1), and affects the backdrop only. <b>Zoom with FOV</b> pins the backdrop to the sky instead of the viewport, so zooming the field magnifies it too.<br><br>
+            A <b>pixel scale</b>, set in the <b>Delensed image</b> view (<b>U</b>), replaces all of that framing: the picture is then placed on the sky at that many arcseconds per pixel, centred on the axis, in every view.<br><br>
             The eye button takes the picture off the plot without unloading it. Config files save the framing, and the file name only for the images shipped with the site (as the <b>Image recreation</b> preset does); a picture you upload yourself is not saved.`)}
         </div>
         ${_bgExpanded ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
@@ -4352,6 +4552,7 @@ function backgroundSectionHtml() {
           </div>
           ${has ? `<div class="sl-bg-file" title="${_escHtml(state.bgName)}">${_escHtml(state.bgName)} · ${state.bgCanvas.width}×${state.bgCanvas.height}</div>` : ''}
           ${inertNote ? `<p class="sl-muted-note" style="margin:6px 0 0">${inertNote}</p>` : ''}
+          ${cal ? `<p class="sl-muted-note" style="margin:6px 0 0">Placed on the sky at <b id="sl-bg-pxnote">${+state.bgPixel.toPrecision(4)}″/px</b>, its pixel scale, centred on the axis. Fit, Zoom and Offset are off while it has one.${delensView ? '' : ` <button id="sl-bg-uncal" type="button" style="font-size:11px;background:none;border:none;color:var(--muted);text-decoration:underline;cursor:pointer;padding:0">Use Fit framing</button>`}</p>` : ''}
           <div class="sl-global-input" style="margin-top:8px">
             <label title="Colour of the empty field behind the lensed image and behind (or around) the backdrop picture">Field color</label>
             <input type="color" id="sl-bg-color" class="sl-color-input" value="${_bgColorDisplay()}"
@@ -4361,7 +4562,7 @@ function backgroundSectionHtml() {
           </div>
           <div class="sl-global-input">
             <label>Fit</label>
-            <select id="sl-bg-fit" style="flex:1 1 auto;min-width:0" ${dis}>
+            <select id="sl-bg-fit" style="flex:1 1 auto;min-width:0" ${fdis}>
               <option value="cover"   ${state.bgFit==='cover'  ?'selected':''}>Cover (crop)</option>
               <option value="contain" ${state.bgFit==='contain'?'selected':''}>Contain (fit)</option>
               <option value="stretch" ${state.bgFit==='stretch'?'selected':''}>Stretch</option>
@@ -4370,17 +4571,17 @@ function backgroundSectionHtml() {
           </div>
           <div class="sl-global-input">
             <label>Zoom</label>
-            <input type="range" id="sl-bg-zoom" data-disp-dec="2" min="${BG_ZOOM_MIN}" max="${BG_ZOOM_MAX}" step="any" data-drag-step="0.05" value="${state.bgZoom}" ${dis}>
+            <input type="range" id="sl-bg-zoom" data-disp-dec="2" min="${BG_ZOOM_MIN}" max="${BG_ZOOM_MAX}" step="any" data-drag-step="0.05" value="${state.bgZoom}" ${fdis}>
             <span class="sl-tone-param-val">${state.bgZoom.toFixed(2)}</span>
           </div>
           <div class="sl-global-input">
             <label>Offset X</label>
-            <input type="range" id="sl-bg-offx" data-disp-dec="2" min="${-BG_OFF_MAX}" max="${BG_OFF_MAX}" step="any" data-drag-step="0.02" value="${state.bgOffX}" ${dis}>
+            <input type="range" id="sl-bg-offx" data-disp-dec="2" min="${-BG_OFF_MAX}" max="${BG_OFF_MAX}" step="any" data-drag-step="0.02" value="${state.bgOffX}" ${fdis}>
             <span class="sl-tone-param-val">${state.bgOffX.toFixed(2)}</span>
           </div>
           <div class="sl-global-input">
             <label>Offset Y</label>
-            <input type="range" id="sl-bg-offy" data-disp-dec="2" min="${-BG_OFF_MAX}" max="${BG_OFF_MAX}" step="any" data-drag-step="0.02" value="${state.bgOffY}" ${dis}>
+            <input type="range" id="sl-bg-offy" data-disp-dec="2" min="${-BG_OFF_MAX}" max="${BG_OFF_MAX}" step="any" data-drag-step="0.02" value="${state.bgOffY}" ${fdis}>
             <span class="sl-tone-param-val">${state.bgOffY.toFixed(2)}</span>
           </div>
           <div class="sl-global-input">
@@ -4389,7 +4590,7 @@ function backgroundSectionHtml() {
             <span class="sl-tone-param-val">${state.bgBright.toFixed(2)}</span>
           </div>
           <div class="sl-checkbox-row">
-            <label class="${has?'':'sl-label-disabled'}" title="Anchor the backdrop to the sky instead of the viewport: it is framed as you see it now at ${(state.bgAngSize||state.fov).toFixed(2)}″, and zooming the field of view magnifies it along with the lensed image"><input type="checkbox" id="sl-bg-skylock" ${state.bgSkyLock?'checked':''} ${dis}> Zoom with FOV</label>
+            <label class="${fdis?'sl-label-disabled':''}" title="Anchor the backdrop to the sky instead of the viewport: it is framed as you see it now at ${(state.bgAngSize||state.fov).toFixed(2)}″, and zooming the field of view magnifies it along with the lensed image"><input type="checkbox" id="sl-bg-skylock" ${state.bgSkyLock?'checked':''} ${fdis}> Zoom with FOV</label>
           </div>
           <div style="margin-top:4px">
             <button id="sl-bg-reset" type="button" style="font-size:11px;background:none;border:none;color:var(--muted);text-decoration:underline;cursor:pointer;padding:0">Reset framing</button>
@@ -4662,6 +4863,7 @@ function renderViewPanel() {
           </div>
         </div>
       </div>` : ''}
+      ${state.vizMode === 9 ? delensSectionHtml() : ''}
     </div>`;
 
   const _fovEl = document.getElementById('sl-fov');
@@ -4819,6 +5021,20 @@ function renderViewPanel() {
     state.imageNumberSize    = CONFIG_DEFAULTS.imageNumberSize;
     renderSidebar(); redraw();
   });
+  // Delensed Image section: the background image's pixel scale.
+  const _dpxEl = document.getElementById('sl-delens-px');
+  if (_dpxEl) {
+    const apply = (v) => {
+      if (!isFinite(v) || v <= 0) return;
+      v = Math.min(BG_PIXEL_MAX, Math.max(BG_PIXEL_MIN, v));
+      _dpxEl.value = v;
+      state.bgPixel = v;
+      _refreshDelensReadout();
+      redraw();
+    };
+    _dpxEl.addEventListener('change', e => apply(parseFloat(e.target.value)));
+    _attachScrub(_dpxEl, { lo: BG_PIXEL_MIN, hi: BG_PIXEL_MAX, onChange: apply });
+  }
   document.getElementById('sl-fermat-use-src')?.addEventListener('change', e => {
     state.fermatUseSourcePos = e.target.checked;
     renderSidebar(); redraw();
@@ -4864,7 +5080,14 @@ function renderViewPanel() {
 
   // ── Background image section ───────────────────────────────────────────────
   document.getElementById('sl-bg-pick')?.addEventListener('click', pickBackgroundImage);
-  document.getElementById('sl-bg-clear')?.addEventListener('click', clearBackgroundImage);
+  document.getElementById('sl-bg-clear')?.addEventListener('click', () => {
+    state.bgPixel = 0;   // the pixel scale was this picture's; the next one starts without
+    clearBackgroundImage();
+  });
+  document.getElementById('sl-bg-uncal')?.addEventListener('click', () => {
+    state.bgPixel = 0;
+    renderSidebar(); redraw();
+  });
   document.getElementById('sl-bg-vis')?.addEventListener('click', () => {
     state.bgHidden = !state.bgHidden;
     renderSidebar(); redraw();
@@ -4912,9 +5135,10 @@ function renderViewPanel() {
     renderSidebar(); redraw();
   });
   document.getElementById('sl-bg-reset')?.addEventListener('click', () => {
-    for (const k of ['bgFit', 'bgZoom', 'bgOffX', 'bgOffY', 'bgBright', 'bgSkyLock', 'bgHidden'])
+    for (const k of ['bgFit', 'bgZoom', 'bgOffX', 'bgOffY', 'bgBright', 'bgSkyLock', 'bgHidden', 'bgPixel'])
       state[k] = CONFIG_DEFAULTS[k];
     state.bgAngSize = state.fov;
+    if (state.vizMode === 9) seedBgPixel();   // that view cannot do without one
     renderSidebar(); redraw();
   });
 }
@@ -5461,7 +5685,8 @@ function planesForZs(planes, dist, zs) {
 // export ask for the same curves, often every frame.
 const _critMemo = new Map();
 function computeCritCurvesForZs(planes, dist, zs, fovArcsec, gridN) {
-  const key = [JSON.stringify(planes.map(p => [p.z, p.objects.map(o => [o.type, o.model, o.cx, o.cy, o.hidden, o.params])])),
+  // Masks play no part in the lensing, so moving one must not invalidate the curves.
+  const key = [JSON.stringify(planes.map(p => [p.z, p.objects.filter(o => o.type !== 'mask').map(o => [o.type, o.model, o.cx, o.cy, o.hidden, o.params])])),
                zs, fovArcsec, gridN, state.H0, state.Omega_m].join('|');
   if (_critMemo.has(key)) return _critMemo.get(key);
   const t = planesForZs(planes, dist, zs);
@@ -5877,12 +6102,16 @@ function drawOverlay() {
   if (state.lineArt) drawLineArtBase(W, H, dpr);
 
   const hasLens     = state.planes.some(p => p.objects.some(o => o.type === 'lens'));
-  // The image-number map is drawn in the source plane, so the overlay drops the
-  // image-plane features (critical curves, image dots and their time delays, stretch
-  // whiskers). Sources are hidden too, and cannot be dragged here (hitTestImage): the
-  // map is about where a source could be, while the lenses that shape it stay
-  // visible and editable. Line art replaces the raster view, so it keeps its usual overlay.
-  const _srcPlaneView = state.vizMode === 8 && !state.lineArt;
+  // The image-number map and the delensed image are drawn in the source plane, so
+  // the overlay drops the image-plane features (critical curves, image dots and
+  // their time delays, stretch whiskers). On the image-number map sources are hidden
+  // too, and cannot be dragged (hitTestImage): the map is about where a source could
+  // be, while the lenses that shape it stay visible and editable. The delensed view
+  // keeps them, since a source marker sits at its own source-plane position and can
+  // be laid over the reconstruction. Line art replaces the raster view, so it keeps
+  // its usual overlay.
+  const _srcPlaneView = (state.vizMode === 8 || state.vizMode === 9) && !state.lineArt;
+  const _imgNumView   = state.vizMode === 8 && !state.lineArt;
   // The hide-overlays master switch (View tab) suppresses annotations for a clean
   // plot; point-source image circles stay (they ARE the lensed light), and critical
   // curves / caustics stay too (they are structure, not a labelling annotation).
@@ -5890,6 +6119,9 @@ function drawOverlay() {
   const showMk = state.showMarkers && !hideOv;
   const needCurve   = (state.showCritCurves || state.showCaustics) && state.dist && hasLens;
   const needEllipse      = !hideOv && state.planes.some(pl => pl.objects.some(o => o.showShape));
+  // Mask outlines are drawn in the lensed-image view, over the picture they cover.
+  const needMaskOutline  = !hideOv && state.vizMode === 0 && !state.lineArt &&
+                           state.planes.some(pl => pl.objects.some(o => o.type === 'mask' && !o.hidden));
   const needPointSources = state.planes.some(pl => pl.objects.some(o => o.type === 'source' && o.model === 'pointsource' && !o.hidden));
   const needFermatPts = !hideOv && state.fermatPoints && state.fermatPoints.length > 0;
   const needRuler = !hideOv && state.showRuler && ((state.rulers && state.rulers.length) || state.rulerDraft);
@@ -5897,7 +6129,7 @@ function drawOverlay() {
   const needStretch = state.showStretch && state.dist && hasLens && !_srcPlaneView;
   const needParityLegend = state.vizMode === 7 && state.showLegend && !hideOv;
   if (!needCurve && !showMk && !needEllipse && !needPointSources && !needFermatPts && !needRuler && !needScale
-      && !needStretch && !needParityLegend && !_srcPlaneView) return;
+      && !needStretch && !needParityLegend && !_srcPlaneView && !needMaskOutline) return;
 
   const Wl = W/dpr, Hl = H/dpr;
   overlayCtx.save();
@@ -5909,7 +6141,19 @@ function drawOverlay() {
 
   // ── Image number: one numbered, coloured cell per grid source position ───────
   // Drawn first so the caustics and source markers sit on top of it.
-  if (_srcPlaneView && state.dist) drawImageNumberGrid(Wl, Hl);
+  if (_imgNumView && state.dist) drawImageNumberGrid(Wl, Hl);
+
+  // Delensed view with nothing to delens: say where the input goes, since the
+  // panel is otherwise just an empty field.
+  if (_srcPlaneView && !_imgNumView && !hideOv) {
+    const msg = renderer && !renderer.delensSupported ? 'The delensed view needs WebGL2 float render targets'
+              : !state.bgCanvas ? 'Upload a lensed image under View → Background' : '';
+    if (msg) {
+      overlayCtx.save();
+      _pillLabel(overlayCtx, msg, Wl / 2, Hl / 2, window.innerWidth <= 640 ? 12 : 14);
+      overlayCtx.restore();
+    }
+  }
 
   // ── Point source image circles ─────────────────────────────────────────────────────
   const _psAll = [];  // collected for the Data tab's CSV export
@@ -5988,8 +6232,8 @@ function drawOverlay() {
     overlayCtx.setLineDash([5, 4]);
     for (const plane of state.planes) {
       for (const obj of plane.objects) {
-        if (!obj.showShape || obj.hidden) continue;
-        if (_srcPlaneView && obj.type === 'source' && !obj.hybridId) continue;
+        if (!obj.showShape || obj.hidden || obj.type === 'mask') continue;
+        if (_imgNumView && obj.type === 'source' && !obj.hybridId) continue;
         // Follow the marker color (palette-driven in line art, hybrid-aware).
         const col = _pal ? _pal[obj.hybridId ? 'hybrid' : obj.type] : typeColorHex(obj.type);
         const p = obj.params;
@@ -6102,6 +6346,33 @@ function drawOverlay() {
     overlayCtx.globalAlpha = 1;
   }
 
+  // ── 0b. Mask outlines: the patch of the picture each mask removes ───────────
+  // Solid with a light fill, unlike the dashed show-shape outlines, since the
+  // outline is the mask itself rather than a guide to an object's profile.
+  if (needMaskOutline) {
+    overlayCtx.save();
+    const mcol = typeColorHex('mask');
+    for (const plane of state.planes) {
+      for (const obj of plane.objects) {
+        if (obj.type !== 'mask' || obj.hidden) continue;
+        const p = obj.params;
+        const [px, py] = toPixel(obj.cx, obj.cy);
+        const a_px = Math.max((p.r ?? 0.3) / state.fov * Wl, 2);
+        const b_px = Math.max(a_px * Math.max(p.q ?? 1, 0.01), 1);
+        overlayCtx.beginPath();
+        overlayCtx.ellipse(px, py, a_px, b_px, -(p.phi ?? 0), 0, Math.PI * 2);
+        overlayCtx.globalAlpha = 0.22;
+        overlayCtx.fillStyle   = mcol;
+        overlayCtx.fill();
+        overlayCtx.globalAlpha = 0.9;
+        overlayCtx.strokeStyle = mcol;
+        overlayCtx.lineWidth   = 1.5;
+        overlayCtx.stroke();
+      }
+    }
+    overlayCtx.restore();
+  }
+
   // ── 1. Position markers: same style as the plane-view canvases ─────────────
   if (showMk) {
     const RAD = window.innerWidth <= 640 ? 10 : 6;
@@ -6112,7 +6383,8 @@ function drawOverlay() {
           if (drawnHybrids.has(obj.hybridId)) continue;
           drawnHybrids.add(obj.hybridId);
         }
-        if (_srcPlaneView && obj.type === 'source' && !obj.hybridId) continue;
+        if (_imgNumView && obj.type === 'source' && !obj.hybridId) continue;
+        if (obj.type === 'mask' && !masksShown()) continue;
         const markerType = obj.hybridId ? 'hybrid' : obj.type;
         const col = _pal ? _pal[markerType] : typeColorHex(markerType);
         const [px, py] = toPixel(obj.cx, obj.cy);
@@ -6252,11 +6524,13 @@ function drawOverlay() {
   }
   if (showMk) {
     const hasLensObj   = state.planes.some(p => p.objects.some(o => o.type === 'lens'   && !o.hybridId));
-    const hasSrcObj    = !_srcPlaneView && state.planes.some(p => p.objects.some(o => o.type === 'source' && !o.hybridId));
+    const hasSrcObj    = !_imgNumView && state.planes.some(p => p.objects.some(o => o.type === 'source' && !o.hybridId));
     const hasHybridObj = state.planes.some(p => p.objects.some(o => o.hybridId));
     if (hasLensObj)   legendItems.push({ color: _pal ? _pal.lens   : typeColorHex('lens'),   label: 'Lens',   isDot: true, markerType: 'lens'   });
     if (hasSrcObj)    legendItems.push({ color: _pal ? _pal.source : typeColorHex('source'), label: 'Source', isDot: true, markerType: 'source' });
     if (hasHybridObj) legendItems.push({ color: _pal ? _pal.hybrid : typeColorHex('hybrid'), label: 'Hybrid', isDot: true, markerType: 'hybrid' });
+    if (masksShown() && state.planes.some(p => p.objects.some(o => o.type === 'mask')))
+      legendItems.push({ color: typeColorHex('mask'), label: 'Mask', isDot: true, markerType: 'mask' });
   }
   // Dashed-ellipse "show shape" outlines get a legend entry so the dotted line reads.
   // Only the ellipse-drawing models qualify; the external-field models (shear /
@@ -6266,7 +6540,7 @@ function drawOverlay() {
   const _anyShape = (type, models) => state.planes.some(p => p.objects.some(o =>
     o.showShape && !o.hidden && o.type === type && models.has(o.model)));
   if (_anyShape('lens',   _ELLIPSE_LENS)) legendItems.push({ color: typeColorHex('lens'),   label: 'Lens shape',   isDash: true });
-  if (!_srcPlaneView && _anyShape('source', _ELLIPSE_SRC)) legendItems.push({ color: typeColorHex('source'), label: 'Source shape', isDash: true });
+  if (!_imgNumView && _anyShape('source', _ELLIPSE_SRC)) legendItems.push({ color: typeColorHex('source'), label: 'Source shape', isDash: true });
 
   if (state.showLegend && !hideOv && legendItems.length > 0) {
     const _mob  = window.innerWidth <= 640;
@@ -6814,7 +7088,10 @@ function downloadBlob(blob, filename) {
 
 // PNG snapshot.
 function captureSnapshot() {
-  // Ensure the frame is fully drawn first.
+  // Ensure the frame is fully drawn first, from current settings: the backdrop,
+  // masks and detector are otherwise pushed into the renderer only by the next
+  // _doRedraw(), which may still be pending.
+  syncBackdrop(); syncDetector();
   if (renderer && state.dist) {
     const isDark  = document.documentElement.getAttribute('data-theme') === 'dark' ? 1 : 0;
     const sorted  = [...state.planes].sort((a, b) => a.z - b.z);
@@ -6950,7 +7227,8 @@ function addToProgram() {
     planeId:    pl.id,
     initialPos: { cx: staging.initialPos.cx, cy: staging.initialPos.cy },
     finalPos:   { cx: staging.finalPos.cx,   cy: staging.finalPos.cy   },
-    label:      `${obj.type === 'lens' ? 'Lens' : 'Source'} z=${pl.z.toFixed(2)} (${obj.model})`,
+    label:      obj.type === 'mask' ? `Mask z=${pl.z.toFixed(2)}`
+              : `${obj.type === 'lens' ? 'Lens' : 'Source'} z=${pl.z.toFixed(2)} (${obj.model})`,
   });
   // Clear this object's staging after committing.
   recState.progStaging.delete(obj.id);

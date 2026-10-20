@@ -24,6 +24,7 @@
   --lens-color:   #4a7fc8;
   --src-color:    #f59e0b;
   --hybrid-color: #9b7dd4;
+  --mask-color:   #6b7280;   /* must match typeColorHex('mask') in main.js */
 }
 
 html[data-theme="dark"] {
@@ -45,6 +46,7 @@ html[data-theme="dark"] {
   --lens-color:   #7bbfcc;
   --src-color:    #fbbf24;
   --hybrid-color: #b09ac8;
+  --mask-color:   #9ca3af;
 }
 
 /* ── Reset / base ─────────────────────────────────────────────────────────── */
@@ -1425,6 +1427,8 @@ html[data-theme="light"] #sl-gl-canvas:not(.sl-viz-active) { filter: invert(1); 
   font-size: 12.5px;
 }
 .sl-global-input input[type="range"] { flex: 1; min-width: 0; }
+.sl-global-input input[type="range"]:disabled,
+.sl-global-input select:disabled { opacity: 0.45; cursor: default; }
 /* Drag horizontally to scrub the value (also typeable / spinner-adjustable).
    touch-action: pan-y keeps a horizontal touch drag delivering pointer events
    (instead of being claimed as a scroll and pointercancelled) while a vertical
@@ -2087,6 +2091,7 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
 .sl-ctool-btn[data-tool="lens"].active   { background: var(--lens-color);   border-color: var(--lens-color);   color: #fff; }
 .sl-ctool-btn[data-tool="source"].active { background: var(--src-color);    border-color: var(--src-color);    color: #fff; }
 .sl-ctool-btn[data-tool="hybrid"].active { background: var(--hybrid-color); border-color: var(--hybrid-color); color: #fff; }
+.sl-ctool-btn[data-tool="mask"].active   { background: var(--mask-color);   border-color: var(--mask-color);   color: #fff; }
 
 /* ── Plane card body: tool column on the left, viewer filling the rest ────── */
 .sl-plane-body {

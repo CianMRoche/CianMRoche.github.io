@@ -65,8 +65,9 @@ uniform float u_vizScaleParam; // γ for power, softening a for asinh
 uniform float u_vizMin;        // lower data limit mapped to colorbar 0
 uniform float u_vizMax;        // upper data limit mapped to colorbar 1
 uniform int   u_colormap;      // palette: 0=default 1=viridis 2=inferno 3=plasma 4=turbo 5=gray
-uniform int   u_vizMode;      // 0=surface brightness, 1=κ, 2=γ, 3=|μ|, 4=signed μ, 5=|α|, 6=φ (Fermat), 7=parity, 8=image number
+uniform int   u_vizMode;      // 0=surface brightness, 1=κ, 2=γ, 3=|μ|, 4=signed μ, 5=|α|, 6=φ (Fermat), 7=parity, 8=image number, 9=delensed (β grid pass)
 uniform int   u_vizSrcIdx;    // target plane index for visualization Jacobian
+uniform vec2  u_traceSpan;    // delensed β pass: image-plane field covered by the target (arcsec, per axis)
 uniform int   u_isDark;       // 1 = dark theme, 0 = light theme
 uniform float u_saddlePhi[8]; // φ values at Type-II saddle images (Fermat mode)
 uniform int   u_nSaddle;      // number of valid entries in u_saddlePhi
@@ -137,9 +138,28 @@ uniform vec3  u_fieldColor;
 
 // ── Lens deflection angles ────────────────────────────────────────────────────
 
+// Small arguments go through the Taylor series. The isothermal deflections call
+// these as A·f(√(1−q²)·…) with A ∝ 1/√(1−q²), so as q → 1 (where √(1−q²) is
+// floored at √EPS and A is ~10⁴·b) a tiny argument is multiplied back up. There
+// the log form loses about three digits to cancellation in 1 ± x (and atan is
+// only as good as the GPU's), which put ~10⁻³″ of noise on β: invisible in the
+// lensed image, but enough to swamp a finite-difference Jacobian. Below 0.1 the
+// series is exact to float precision; above it |x| ≤ √(1−q²) bounds A, so the
+// closed forms are accurate enough.
 float atanh_approx(float x) {
   x = clamp(x, -0.9999, 0.9999);
+  if (abs(x) < 0.1) {
+    float x2 = x * x;
+    return x * (1.0 + x2 * (1.0/3.0 + x2 * (1.0/5.0 + x2 * (1.0/7.0 + x2 * (1.0/9.0)))));
+  }
   return 0.5 * log((1.0 + x) / (1.0 - x));
+}
+float atan_stable(float x) {
+  if (abs(x) < 0.1) {
+    float x2 = x * x;
+    return x * (1.0 - x2 * (1.0/3.0 - x2 * (1.0/5.0 - x2 * (1.0/7.0 - x2 * (1.0/9.0)))));
+  }
+  return atan(x);
 }
 
 vec2 deflectPointMass(vec2 u, float b) {
@@ -158,7 +178,7 @@ vec2 deflectSIE(vec2 u, float b, float q, float phi) {
   float s = SIE_SOFT;
   float r = sqrt(qs * qs * (xr * xr + s * s) + yr * yr);
   float A = b * qs / sqf;
-  float ax = A * atan(sqf * xr / (r + s));
+  float ax = A * atan_stable(sqf * xr / (r + s));
   float ay = A * atanh_approx(sqf * yr / (r + qs * qs * s));
   return vec2(cp * ax - sp * ay, sp * ax + cp * ay);
 }
@@ -175,7 +195,7 @@ vec2 deflectNIE(vec2 u, float b, float q, float phi, float rc) {
   float s = max(rc, SIE_SOFT);
   float r = sqrt(qs * qs * (xr * xr + s * s) + yr * yr);
   float A = b * qs / sqf;
-  float ax = A * atan(sqf * xr / (r + s));
+  float ax = A * atan_stable(sqf * xr / (r + s));
   float ay = A * atanh_approx(sqf * yr / (r + qs * qs * s));
   return vec2(cp * ax - sp * ay, sp * ax + cp * ay);
 }
@@ -809,6 +829,26 @@ vec3 computeViz(vec2 theta) {
 void main() {
   vec2 theta = (v_uv - 0.5) * u_fov;
 
+  // Delensed view, first pass: one fragment per node of the image-plane grid,
+  // writing into a float target the node's source-plane position β (xy), its |μ|
+  // (z), and the shortest axis of the image patch one unit of the source plane
+  // maps onto (w, the smaller singular value of the inverse Jacobian, 1/σ_max(A)).
+  // The mesh pass (DELENS_MESH_VERT) places each vertex at its β, weights it by
+  // |μ|, and picks the texture's mip level from w. The field is set per axis
+  // because the grid follows the background image's aspect ratio (u_res is the
+  // grid here). The Jacobian is by central differences with a step of a quarter node.
+  if (u_vizMode == 9) {
+    vec2 th = (v_uv - 0.5) * u_traceSpan;
+    vec2 h  = 0.25 * u_traceSpan / u_res;
+    vec2 dx = (traceToPlane(th + vec2(h.x, 0.0), u_vizSrcIdx) - traceToPlane(th - vec2(h.x, 0.0), u_vizSrcIdx)) / (2.0 * h.x);
+    vec2 dy = (traceToPlane(th + vec2(0.0, h.y), u_vizSrcIdx) - traceToPlane(th - vec2(0.0, h.y), u_vizSrcIdx)) / (2.0 * h.y);
+    float detJ = abs(dx.x * dy.y - dy.x * dx.y);
+    float fro2 = dot(dx, dx) + dot(dy, dy);                  // sum of squared entries of A
+    float sMax = sqrt(0.5 * (fro2 + sqrt(max(fro2 * fro2 - 4.0 * detJ * detJ, 0.0))));
+    fragColor = vec4(traceToPlane(th, u_vizSrcIdx), 1.0 / max(detJ, 1.0e-6), 1.0 / max(sMax, 1.0e-6));
+    return;
+  }
+
   // Visualization modes bypass normal rendering.
   if (u_vizMode != 0) {
     fragColor = vec4(computeViz(theta), 1.0);
@@ -924,6 +964,119 @@ void main() {
   fragColor = vec4(acc / max(n, 1.0), 1.0);
 }`;
 
+// ── Delensed view shaders ─────────────────────────────────────────────────────
+// The background image is an observation: it lives in the image plane. Delensing
+// paints it into the source plane by drawing the image-plane grid as a triangle
+// mesh whose vertices sit at their traced β (read from the float target the main
+// shader filled in mode 9) and whose texture coordinates are their θ. Rasterising
+// the mesh lays each image's pixels where its light came from; triangles stretch
+// to fill the gaps a per-pixel scatter would leave where magnification is high,
+// and where the mesh folds (inside the caustics) several images land on one β
+// and are averaged, see DELENS_MESH_FRAG. Drawn without attributes: gl_VertexID
+// picks the cell and the corner, two triangles per cell.
+const DELENS_GRID = 512;   // β-grid nodes along the image's long axis
+const DELENS_MESH_VERT =
+`#version 300 es
+precision highp float;
+precision highp sampler2D;
+uniform sampler2D u_beta;   // β (xy), |μ| (z), footprint minor axis (w) per node, RGBA32F
+uniform ivec2 u_nodes;      // grid nodes per axis
+uniform vec2  u_half;       // half-size of the image on the sky (arcsec)
+uniform float u_fov;        // visible source-plane field (arcsec)
+out vec2  v_theta;
+out float v_mu;
+out float v_minor;
+void main() {
+  int cell = gl_VertexID / 6;
+  int k    = gl_VertexID - cell * 6;
+  int cols = u_nodes.x - 1;
+  ivec2 c  = ivec2(cell - (cell / cols) * cols, cell / cols);
+  // Corners: (0,0) (1,0) (0,1) | (0,1) (1,0) (1,1).
+  if (k == 1 || k == 4) c.x += 1;
+  else if (k == 2 || k == 3) c.y += 1;
+  else if (k == 5) c += ivec2(1, 1);
+  vec4 node = texelFetch(u_beta, c, 0);
+  v_theta = (vec2(c) / vec2(u_nodes - 1) - 0.5) * 2.0 * u_half;
+  v_mu    = node.z;
+  v_minor = node.w;
+  gl_Position = vec4(node.xy / (0.5 * u_fov), 0.0, 1.0);
+}`;
+
+// Each fragment adds the image colour weighted by |μ| into an RGBA16F target
+// (additive blending, weight in alpha), and the resolve pass divides it out.
+// Weighting by |μ| makes the result the average over all image pixels that land
+// on a source pixel, which is what a per-pixel scatter would compute: a more
+// magnified image samples the source more finely, so it carries more pixels.
+// |μ| is traced per node and interpolated, not taken from the triangle's screen
+// derivatives: the cells are often smaller than a pixel (most of all on a
+// magnified arc), where the rasteriser's sub-pixel vertex snapping makes those
+// derivatives noisy by tens of percent.
+// Triangles below DELENS_MU_MIN are dropped. Those are the most demagnified
+// regions, chiefly around a singular lens centre, which map a few image pixels
+// across a wide patch of the source plane; their weight is already small, but
+// where nothing else covers a source pixel they would otherwise fill it with a
+// smear of whatever sits at the lens centre. The cap keeps the thin, nearly
+// degenerate triangles that straddle a critical curve from swamping a pixel.
+const DELENS_MU_MIN = 0.05;
+const DELENS_MU_MAX = 100.0;
+// Masks (the Delensed view's mask objects) cut elliptical patches out of the
+// observed picture before it is delensed, e.g. over the lens galaxy, whose own
+// light would otherwise be spread across the source plane. They are tested at
+// the fragment's image-plane position θ, so the cut is exact to the pixel in the
+// source plane whatever the mesh resolution.
+export const MAX_MASKS = 16;
+const DELENS_MESH_FRAG =
+`#version 300 es
+precision highp float;
+in  vec2  v_theta;
+in  float v_mu;
+in  float v_minor;
+out vec4 fragColor;
+uniform sampler2D u_img;
+uniform vec2  u_half;
+uniform float u_pixRatio;   // render pixel (source plane) over image texel, both in arcsec
+uniform int   u_numMasks;
+uniform vec4  u_mask   [${MAX_MASKS}];   // centre (xy), semi-major axis r, axis ratio q
+uniform vec2  u_maskRot[${MAX_MASKS}];   // cos φ, sin φ of the major axis
+void main() {
+  vec2 uv = v_theta / (2.0 * u_half) + 0.5;
+  uv.y = 1.0 - uv.y;        // first data row (image top) is at t=0
+  // Mip level set explicitly. The implicit one comes from screen derivatives of
+  // uv, which on sub-pixel triangles are as noisy as the vertex snapping, and as
+  // the GPU picks the level per 2×2 quad that showed up as a speckle of 2×2
+  // blocks. A source pixel covers a long thin patch of the image along an arc;
+  // the level follows its short axis, since along the long one every image pixel
+  // comes from that same source pixel and nothing is lost by sampling it once.
+  float lod = log2(max(u_pixRatio * v_minor, 1.0));
+  vec3 col = textureLod(u_img, clamp(uv, 0.0, 1.0), lod).rgb;
+  if (v_mu < ${DELENS_MU_MIN.toFixed(4)}) discard;
+  // Same elliptical radius as the analytic sources: r is the semi-major axis.
+  for (int i = 0; i < ${MAX_MASKS}; i++) {
+    if (i >= u_numMasks) break;
+    vec2  d  = v_theta - u_mask[i].xy;
+    vec2  cs = u_maskRot[i];
+    float xr = cs.x * d.x + cs.y * d.y;
+    float yr = (cs.x * d.y - cs.y * d.x) / u_mask[i].w;
+    if (xr * xr + yr * yr <= u_mask[i].z * u_mask[i].z) discard;
+  }
+  float w = min(v_mu, ${DELENS_MU_MAX.toFixed(1)});
+  fragColor = vec4(col * w, w);
+}`;
+
+// Divide the accumulated colour by its weight and apply the backdrop's Brightness;
+// untouched pixels (no unmasked image of the field lands there) get the empty field.
+const DELENS_RESOLVE_FRAG =
+`#version 300 es
+precision highp float;
+out vec4 fragColor;
+uniform sampler2D u_acc;
+uniform vec3  u_empty;
+uniform float u_bright;
+void main() {
+  vec4 a = texelFetch(u_acc, ivec2(gl_FragCoord.xy), 0);
+  fragColor = vec4(a.a > 0.0 ? clamp(a.rgb / a.a * u_bright, 0.0, 1.0) : u_empty, 1.0);
+}`;
+
 // ── Renderer class ────────────────────────────────────────────────────────────
 
 export class Renderer {
@@ -965,7 +1118,15 @@ export class Renderer {
     // framing controls. Kept as renderer properties rather than setScene()
     // arguments so every existing call site picks the backdrop up unchanged.
     this._bg     = null;
-    this.bgOpts  = null;   // { fit, zoom, offX, offY, bright, skyLock, angSize }
+    this.bgOpts  = null;   // { fit, zoom, offX, offY, bright, skyLock, angSize, sky }
+    // Delensed view: the background image's size on the sky, [w, h] in arcsec,
+    // from its pixel scale. Set whether or not the backdrop is hidden, since in
+    // that view the picture is the data being delensed rather than decoration.
+    this.delensSky = null;
+    this.delensMasks  = [];  // [[cx, cy, r, q, phi], …] in arcsec / radians, at most MAX_MASKS
+    this.delensBright = 1;   // the backdrop's Brightness, applied to the delensed picture
+    this._delens   = null;   // programs + empty VAO, built on first use
+    this._delensOk = null;   // float render targets available (null = not yet checked)
     // Empty-field colour, [r,g,b] in 0-1, pre-inverted by the caller when the
     // canvas is CSS-inverted. Null keeps the shader's black-is-empty convention.
     this.fieldColor = null;
@@ -1049,7 +1210,10 @@ export class Renderer {
 
   // Create or resize an offscreen colour target. LINEAR sampling so the blur can
   // read between texels; the detector pass hits texel centres exactly either way.
-  _ensureFbo(name, w, h) {
+  // The float formats (delensed view) are only ever read with texelFetch, so they
+  // take NEAREST, which also spares them OES_texture_float_linear. A given name
+  // always keeps the format it was created with.
+  _ensureFbo(name, w, h, fmt = 'rgba8') {
     const { gl } = this;
     let t = this._fbo[name];
     if (t && t.w === w && t.h === h) return t;
@@ -1057,12 +1221,16 @@ export class Renderer {
       t = { fb: gl.createFramebuffer(), tex: gl.createTexture(), w: 0, h: 0 };
       this._fbo[name] = t;
     }
+    const [ifmt, type, filt] =
+        fmt === 'rgba32f' ? [gl.RGBA32F, gl.FLOAT,         gl.NEAREST]
+      : fmt === 'rgba16f' ? [gl.RGBA16F, gl.HALF_FLOAT,    gl.NEAREST]
+      :                     [gl.RGBA,    gl.UNSIGNED_BYTE, gl.LINEAR];
     gl.bindTexture(gl.TEXTURE_2D, t.tex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texImage2D(gl.TEXTURE_2D, 0, ifmt, w, h, 0, gl.RGBA, type, null);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filt);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filt);
     gl.bindFramebuffer(gl.FRAMEBUFFER, t.fb);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t.tex, 0);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -1130,9 +1298,22 @@ export class Renderer {
   // scales it by fov/angSize so the backdrop magnifies with the field of view,
   // and the offsets pan by a fraction of the viewport — negated so that a
   // positive offset moves the image right / up rather than the sample window.
+  //
+  // A picture with a pixel scale (o.sky, its [w, h] on the sky in arcsec) skips
+  // all of that: it sits on the sky centred on the optical axis, so the viewport
+  // spans fov / sky of the texture on each axis whatever the zoom.
   _bgUniforms(fovArcsec, spanRatio = 1) {
     const b = this._bg, o = this.bgOpts;
     if (!b || !o) return null;
+    if (o.sky) {
+      return {
+        scale:  [fovArcsec / o.sky[0] * spanRatio, fovArcsec / o.sky[1] * spanRatio],
+        offset: [0, 0],
+        bright: o.bright ?? 1,
+        invert: !!o.invert,
+        tile:   false,
+      };
+    }
     const ar   = b.w / b.h;
     const tile = o.fit === 'tile';
     let sx, sy;
@@ -1212,6 +1393,10 @@ export class Renderer {
     if (this._bg) gl.deleteTexture(this._bg.tex);
     for (const t of Object.values(this._fbo)) { gl.deleteFramebuffer(t.fb); gl.deleteTexture(t.tex); }
     if (this._post) { gl.deleteProgram(this._post.blurProg); gl.deleteProgram(this._post.detProg); }
+    if (this._delens) {
+      gl.deleteProgram(this._delens.meshProg); gl.deleteProgram(this._delens.resolveProg);
+      gl.deleteVertexArray(this._delens.vao);
+    }
     gl.deleteTexture(this._dummyTex);
   }
 
@@ -1235,6 +1420,10 @@ export class Renderer {
           pixel: this.detectorOpts.pixel }
       : { applied: false, nPix: 0, ss: 0, samples: 0, pixel: this.detectorOpts?.pixel ?? 0 };
     const scene     = det?.applied ? this._ensureFbo('scene', det.res, det.res) : null;
+    // Likewise the delensed view's targets, created here before any of the scene's
+    // textures are bound: _ensureFbo binds a target's texture on the active unit,
+    // and left on a unit the main program samples it would be a feedback loop.
+    const delens    = vizMode === 9 ? this._delensTargets() : null;
     const renderFov = det?.applied ? det.fovFbo : fovArcsec;
     const outW      = scene ? scene.w : this.canvas.width;
     const outH      = scene ? scene.h : this.canvas.height;
@@ -1428,6 +1617,8 @@ export class Renderer {
     // Set whether or not a picture is loaded: it is the field behind everything.
     gl.uniform3fv(_locs.u_fieldColor, this.fieldColor ?? [0, 0, 0]);
 
+    if (vizMode === 9) { this._drawDelensed(delens, fovArcsec, isDark); return; }
+
     gl.drawArrays(gl.TRIANGLES, 0, 6);
 
     if (det?.applied) this._runDetectorPasses(det, scene);
@@ -1455,6 +1646,139 @@ export class Renderer {
     gl.uniform1f(post.det.u_nPix, det.nPix);
     gl.uniform1i(post.det.u_ss,   det.ss);
     this._drawQuad(post.det.a_pos);
+  }
+
+  // Whether the delensed view can be drawn here: its β grid and accumulator are
+  // float render targets, which WebGL2 offers only through EXT_color_buffer_float
+  // (supported almost everywhere, but not guaranteed).
+  get delensSupported() {
+    if (this._delensOk === null) this._delensOk = !!this.gl.getExtension('EXT_color_buffer_float');
+    return this._delensOk;
+  }
+
+  _initDelens() {
+    if (this._delens) return this._delens;
+    const { gl } = this;
+    const meshProg    = this._buildProgram(DELENS_MESH_VERT, DELENS_MESH_FRAG);
+    const resolveProg = this._buildProgram(VERT_SRC, DELENS_RESOLVE_FRAG);
+    const m = n => gl.getUniformLocation(meshProg, n);
+    this._delens = {
+      meshProg, resolveProg,
+      vao: gl.createVertexArray(),   // no attributes: the mesh is built from gl_VertexID
+      mesh: {
+        u_beta: m('u_beta'), u_nodes: m('u_nodes'), u_half: m('u_half'), u_fov: m('u_fov'),
+        u_img:  m('u_img'),  u_pixRatio: m('u_pixRatio'),
+        u_numMasks: m('u_numMasks'), u_mask: m('u_mask'), u_maskRot: m('u_maskRot'),
+      },
+      resolve: {
+        a_pos:   gl.getAttribLocation(resolveProg, 'a_pos'),
+        u_acc:   gl.getUniformLocation(resolveProg, 'u_acc'),
+        u_empty: gl.getUniformLocation(resolveProg, 'u_empty'),
+        u_bright: gl.getUniformLocation(resolveProg, 'u_bright'),
+      },
+    };
+    return this._delens;
+  }
+
+  // The delensed view's two float targets, or null when there is nothing to draw
+  // (no picture, no pixel scale, or no float render targets on this GPU).
+  //
+  // Grid nodes per axis follow the image's aspect ratio, with the first and last
+  // nodes on the image edges.
+  _delensTargets() {
+    const sky = this.delensSky;
+    if (!this._bg || !sky || !(sky[0] > 0 && sky[1] > 0) || !this.delensSupported) return null;
+    const long = Math.max(sky[0], sky[1]);
+    const nx = Math.max(2, Math.round((DELENS_GRID - 1) * sky[0] / long) + 1);
+    const ny = Math.max(2, Math.round((DELENS_GRID - 1) * sky[1] / long) + 1);
+    const t = {
+      sky, nx, ny,
+      beta: this._ensureFbo('delensBeta', nx, ny, 'rgba32f'),
+      acc:  this._ensureFbo('delensAcc', this.canvas.width, this.canvas.height, 'rgba16f'),
+    };
+    const { gl } = this;
+    for (const f of [t.beta, t.acc]) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, f.fb);
+      if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+        this._delensOk = false;
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        return null;
+      }
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return t;
+  }
+
+  // Delensed view. Called from _draw() with the main program bound and the whole
+  // scene already packed into its uniforms, so the β pass reuses the shader's own
+  // multiplane tracer unchanged; only the target and u_traceSpan differ.
+  _drawDelensed(t, fovArcsec, isDark) {
+    const { gl } = this;
+    const W = this.canvas.width, H = this.canvas.height;
+    const empty = isDark ? [0, 0, 0] : [1, 1, 1];
+    if (!t) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, W, H);
+      gl.clearColor(empty[0], empty[1], empty[2], 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      return;
+    }
+    const { sky, nx, ny, beta, acc } = t;
+
+    // A fragment at texel centre i of the β target traces θ = ((i + ½)/N − ½)·span,
+    // so span = 2·half·N/(N − 1) lands node 0 at −half and node N−1 at +half,
+    // matching v_theta in the mesh shader.
+    gl.bindFramebuffer(gl.FRAMEBUFFER, beta.fb);
+    gl.viewport(0, 0, nx, ny);
+    gl.uniform2f(this._locs.u_traceSpan, sky[0] * nx / (nx - 1), sky[1] * ny / (ny - 1));
+    gl.uniform2f(this._locs.u_res, nx, ny);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+    const d = this._initDelens();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, acc.fb);
+    gl.viewport(0, 0, W, H);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    gl.useProgram(d.meshProg);
+    gl.bindVertexArray(d.vao);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, beta.tex);
+    gl.uniform1i(d.mesh.u_beta, 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this._bg.tex);
+    // The image view may have left it wrapping (Tile); outside the image is no data.
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.uniform1i(d.mesh.u_img, 1);
+    gl.uniform2i(d.mesh.u_nodes, nx, ny);
+    gl.uniform2f(d.mesh.u_half, sky[0] / 2, sky[1] / 2);
+    gl.uniform1f(d.mesh.u_fov, fovArcsec);
+    gl.uniform1f(d.mesh.u_pixRatio, (fovArcsec / W) / (sky[0] / this._bg.w));
+    const masks = (this.delensMasks ?? []).slice(0, MAX_MASKS);
+    const mBuf = new Float32Array(4 * MAX_MASKS), rBuf = new Float32Array(2 * MAX_MASKS);
+    masks.forEach(([cx, cy, r, q, phi], i) => {
+      mBuf.set([cx, cy, r, Math.max(q, 0.01)], 4 * i);
+      rBuf.set([Math.cos(phi), Math.sin(phi)], 2 * i);
+    });
+    gl.uniform1i (d.mesh.u_numMasks, masks.length);
+    gl.uniform4fv(d.mesh.u_mask,     mBuf);
+    gl.uniform2fv(d.mesh.u_maskRot,  rBuf);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE);
+    gl.drawArrays(gl.TRIANGLES, 0, 6 * (nx - 1) * (ny - 1));
+    gl.disable(gl.BLEND);
+    gl.bindVertexArray(null);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, W, H);
+    gl.useProgram(d.resolveProg);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, acc.tex);
+    gl.uniform1i(d.resolve.u_acc, 0);
+    gl.uniform3fv(d.resolve.u_empty, empty);
+    gl.uniform1f (d.resolve.u_bright, this.delensBright ?? 1);
+    this._drawQuad(d.resolve.a_pos);
   }
 
   _buildProgram(vertSrc, fragSrc) {
@@ -1516,6 +1840,7 @@ export class Renderer {
       u_colormap:      u('u_colormap'),
       u_vizMode:      u('u_vizMode'),
       u_vizSrcIdx:    u('u_vizSrcIdx'),
+      u_traceSpan:    u('u_traceSpan'),
       u_isDark:       u('u_isDark'),
       u_pastedFeather: u('u_pastedFeather'),
       u_pastedStretch: u('u_pastedStretch'),
