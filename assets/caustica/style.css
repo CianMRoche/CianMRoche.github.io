@@ -2416,8 +2416,8 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
   }
   .sl-dcard {
     position: relative;
-    flex: 0 0 auto;
-    width: 292px;
+    flex: 1 0 212px;
+    max-width: 320px;
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -2484,8 +2484,8 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
   .sl-dcard-canvas {
     flex: 0 0 auto;
     display: block;
-    width: 104px;
-    height: 104px;
+    width: 88px;
+    height: 88px;
     border: 1.5px solid var(--hairline);
     border-radius: 6px;
     touch-action: none;
@@ -2494,7 +2494,7 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
   .sl-dcard[data-effective-type="source"] .sl-dcard-canvas { border-color: color-mix(in srgb, var(--src-color) 60%, transparent); }
   .sl-dcard[data-effective-type="hybrid"] .sl-dcard-canvas { border-color: color-mix(in srgb, var(--hybrid-color) 60%, transparent); }
   .sl-dcard-side { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-  .sl-dcard-objs { display: flex; flex-direction: column; gap: 1px; max-height: 76px; overflow-y: auto; }
+  .sl-dcard-objs { display: flex; flex-direction: column; gap: 1px; max-height: 64px; overflow-y: auto; }
   .sl-dobj {
     display: flex;
     align-items: center;
@@ -2517,11 +2517,11 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
   .sl-dobj-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .sl-dobj-val { margin-left: auto; padding-left: 6px; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .sl-dcard-empty { padding: 3px 2px; font-size: 11.5px; line-height: 1.35; color: var(--muted); }
-  .sl-dcard-place { display: flex; align-items: center; gap: 4px; margin-top: auto; padding-top: 4px; }
+  .sl-dcard-place { display: flex; align-items: center; gap: 3px; margin-top: auto; padding-top: 4px; }
   .sl-dcard-place-lbl { margin-right: 2px; font-size: 11.5px; color: var(--muted); }
   .sl-dplace-btn {
-    width: 26px;
-    height: 26px;
+    width: 24px;
+    height: 24px;
     border: 1px solid var(--hairline);
     border-radius: 6px;
     background: var(--bg);
@@ -2531,7 +2531,7 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
   }
   .sl-dplace-btn.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 
-  .sl-dcard-bg { width: 190px; }
+  .sl-dcard-bg { flex: 0 0 168px; }
   .sl-dbg-open {
     display: flex;
     flex-direction: column;
@@ -2544,8 +2544,8 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
     text-align: left;
     cursor: pointer;
   }
-  .sl-dbg-thumb { display: block; width: 168px; height: 84px; border-radius: 6px; background: #000; }
-  .sl-dbg-name { max-width: 170px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sl-dbg-thumb { display: block; width: 148px; height: 74px; border-radius: 6px; background: #000; }
+  .sl-dbg-name { max-width: 148px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sl-dbg-meta { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .sl-dbg-upload { display: none; }
   .sl-dcard-bg-none .sl-dbg-open { display: none; }

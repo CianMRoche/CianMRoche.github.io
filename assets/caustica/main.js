@@ -1682,6 +1682,7 @@ function init() {
   invalidateDistances();
   _defaultConfigYaml = configToYaml();  // snapshot the default scene for the "Presets…" entry
   attachHandlers();
+  _syncSwitcher();
   renderPlaneCard();
   renderSidebar();
   updateCanvasTools();  // highlight the initial (select) viewer tool
@@ -1698,7 +1699,7 @@ function init() {
 
   // Redraw axis when crossing the mobile breakpoint (e.g. wide→narrow→wide).
   window.matchMedia('(max-width: 640px)').addEventListener('change', () => {
-    setTimeout(drawAxisCanvas, 150);
+    setTimeout(() => { drawAxisCanvas(); _drawerBgFor = null; renderDrawer(); renderPlaneCard(); }, 150);
   });
 }
 
@@ -2707,6 +2708,12 @@ function _objGlyph(type, hidden) {
   return `<svg class="sl-dobj-glyph" width="10" height="10" viewBox="0 0 16 16" aria-hidden="true"><path d="${d}" fill="${col}"/></svg>`;
 }
 
+// The drawer is display:none on phones and when tucked away; its viewers are
+// only worth drawing when they can be seen (a hidden canvas can't measure itself).
+function _drawerShown() {
+  return _drawerOpen && !!document.getElementById('sl-drawer')?.offsetParent;
+}
+
 function _drawerPlaneById(id) { return state.planes.find(p => p.id === id) ?? null; }
 
 function _makeDrawerCard(pl) {
@@ -2783,7 +2790,8 @@ function renderDrawer() {
   // Drop cards whose plane is gone, then lay the rest out in z order.
   const live = new Set(state.planes.map(p => p.id));
   for (const [id, c] of _drawerCards) if (!live.has(id)) { c.el.remove(); _drawerCards.delete(id); }
-  const mask = maskToolAvailable();
+  const mask  = maskToolAvailable();
+  const shown = _drawerShown();
   state.planes.forEach(pl => {
     let c = _drawerCards.get(pl.id);
     if (!c) { c = _makeDrawerCard(pl); _drawerCards.set(pl.id, c); }
@@ -2812,7 +2820,7 @@ function renderDrawer() {
       b.classList.toggle('active', sel && state.addMode === b.dataset.tool);
       if (b.dataset.tool === 'mask') b.style.display = mask ? '' : 'none';
     });
-    if (_drawerOpen) drawPlaneCanvas(c.canvas, pl);
+    if (shown) drawPlaneCanvas(c.canvas, pl);
   });
   host.appendChild(_drawerBgCard());
 }
@@ -2837,10 +2845,10 @@ function _drawerBgCard() {
     _drawerBg.querySelector('.sl-dbg-meta').textContent = state.bgPixel > 0
       ? `${+state.bgPixel.toPrecision(3)}″/px${state.bgHidden ? ' · hidden' : ''}`
       : `${state.bgCanvas.width}×${state.bgCanvas.height}${state.bgHidden ? ' · hidden' : ''}`;
-    if (_drawerBgFor !== state.bgCanvas && _drawerOpen) {
+    if (_drawerBgFor !== state.bgCanvas && _drawerShown()) {
       // Redraw the thumbnail only when the picture itself changes.
       const t = _drawerBg.querySelector('.sl-dbg-thumb');
-      const dpr = window.devicePixelRatio || 1, W = 168, H = 84;
+      const dpr = window.devicePixelRatio || 1, W = 148, H = 74;
       t.width = W * dpr; t.height = H * dpr;
       const ctx = t.getContext('2d');
       const s = Math.max(W / state.bgCanvas.width, H / state.bgCanvas.height);
@@ -4316,7 +4324,7 @@ function redrawPlaneCanvas(plane) {
   if (!plane) return;
   // The desktop drawer has a viewer for every plane...
   const dc = _drawerCards.get(plane.id);
-  if (dc && _drawerOpen) drawPlaneCanvas(dc.canvas, plane);
+  if (dc && _drawerShown()) drawPlaneCanvas(dc.canvas, plane);
   // ...the phone plane card only for the selected one.
   if (plane.id !== state.selectedPlaneId) return;
   const cvs = document.getElementById('sl-plane-canvas');
@@ -4888,7 +4896,7 @@ function delensSectionHtml() {
 function delensMaskNote() {
   let n = 0;
   for (const pl of state.planes) for (const o of pl.objects) if (o.type === 'mask' && !o.hidden) n++;
-  if (!n) return 'No masks. Add one with the <b>M</b> tool in the plane viewer (<b>4</b>), e.g. over the lens galaxy.';
+  if (!n) return 'No masks. Add one with a plane\'s <b>M</b> tool (<b>4</b>), e.g. over the lens galaxy.';
   const over = n > MAX_MASKS ? ` Only the first ${MAX_MASKS} are applied.` : '';
   return `${n} mask${n > 1 ? 's' : ''} cutting the picture.${over}`;
 }
@@ -8131,7 +8139,24 @@ function _tourShowImage() {
 
 const TOUR_STEPS = [
   {
+    target: '#sl-drawer',
+    desktopOnly: true,
+    onEnter: () => { _tourOpenPlaneSetup(); if (!_drawerOpen) setDrawerOpen(true); },
+    arrow: 'above',
+    label: 'Scene drawer',
+    text: 'The drawer holds your line of sight: one card per plane, in order of redshift, then the background image. Each card has its own viewer showing the true positions of the objects on that plane. Type a plane\'s redshift in its <b>z</b> box (or drag sideways on it to scrub), add a plane behind the farthest with <b>+ Plane</b>, and use <b>⋯</b> to clear or delete one. The chevron tucks the drawer away when you only want to look.',
+  },
+  {
+    target: '.sl-dcard',
+    desktopOnly: true,
+    onEnter: _tourOpenPlaneSetup,
+    arrow: 'above',
+    label: 'Placing objects',
+    text: 'Pick <b>L</b>, <b>S</b> or <b>H</b> on a card, then click its viewer to place a <b>Lens</b> that bends light, a <b>Source</b> that emits it, or a <b>Hybrid</b> that does both (keys <kbd>1</kbd>, <kbd>2</kbd>, <kbd>3</kbd> arm them on the selected plane). Click the lit letter again, or press <kbd>Esc</kbd>, to stop placing. Drag objects in a viewer to move them, and click a row in a card\'s list to edit that object. <kbd>[</kbd> and <kbd>]</kbd> step through the planes.',
+  },
+  {
     target: '.sl-axis-wrap',
+    mobileOnly: true,
     onEnter: _tourOpenPlaneSetup,
     arrow: 'above',
     label: 'Redshift timeline',
@@ -8139,6 +8164,7 @@ const TOUR_STEPS = [
   },
   {
     target: '#sl-plane-card',
+    mobileOnly: true,
     onEnter: _tourOpenPlaneSetup,
     arrow: 'left',
     label: 'Plane viewer',
@@ -8169,7 +8195,8 @@ const TOUR_STEPS = [
     },
     arrow: 'right',
     label: 'Critical curves',
-    text: 'The <b>Critical curves</b> are where magnification formally diverges, and the <b>caustics</b> are the critical curves mapped onto the source plane. Press <kbd>C</kbd> to toggle them, use the chips beside the view dropdown, or the View tab.',
+    text: 'The <b>Critical curves</b> are where magnification formally diverges, and the <b>caustics</b> are the critical curves mapped onto the source plane. Press <kbd>C</kbd> to toggle them, or use the toggles above the image or the <b>Overlays</b> panel.',
+    mobileText: 'The <b>Critical curves</b> are where magnification formally diverges, and the <b>caustics</b> are the critical curves mapped onto the source plane. Press <kbd>C</kbd> to toggle them, use the chips beside the view dropdown, or the View tab.',
   },
   {
     target: '#sl-viz-mode',
@@ -8205,21 +8232,25 @@ const TOUR_STEPS = [
     text: 'The plane viewer works the same way: <b>swipe left or right</b> across its canvas to step through the planes.',
   },
   {
-    target: '.sl-rail-tab-btn[data-tab="view"]',
+    target: '.sl-cat-btn[data-cat="view"]',
+    mobileTarget: '.sl-rail-tab-btn[data-tab="view"]',
     onEnter: () => { _tourSetTab('view'); setVizMode(0); },
     arrow: 'left',
-    label: 'View tab',
-    text: 'View holds everything about how the scene is displayed: the field of view, the reference source redshift z<sub>s</sub> used by the quantity maps and critical curves, overlay toggles, and the color mapping / brightness stretch.',
+    label: 'Control panels',
+    text: 'The icons down the right edge choose what this panel shows: the selected <b>Object</b>; <b>View</b>, with the field of view, the reference source redshift z<sub>s</sub> used by the quantity maps and critical curves, and the color mapping / brightness stretch; <b>Overlays</b> such as curves, markers, legend and ruler; the <b>Background</b> image; the <b>Instrument</b> model; <b>Line art</b>; <b>Export</b>; and <b>Settings</b> at the bottom.',
+    mobileText: 'View holds everything about how the scene is displayed: the field of view, the reference source redshift z<sub>s</sub> used by the quantity maps and critical curves, overlay toggles, and the color mapping / brightness stretch.',
   },
   {
-    target: '.sl-rail-tab-btn[data-tab="export"]',
+    target: '.sl-cat-btn[data-cat="export"]',
+    mobileTarget: '.sl-rail-tab-btn[data-tab="export"]',
     onEnter: () => { _tourSetTab('export'); },
     arrow: 'left',
     label: 'Export tab',
     text: 'Export saves pictures, movies, and data. <b>Live</b> recording captures whatever you do as a WebM or GIF (key <kbd>R</kbd> starts and stops it); <b>Programmatic</b> animates objects between set start and end positions; Save PNG grabs a still. The <b>Data</b> section exports critical curves, caustics, and point-source image positions as CSV.',
   },
   {
-    target: '.sl-rail-tab-btn[data-tab="quality"]',
+    target: '.sl-cat-btn[data-cat="settings"]',
+    mobileTarget: '.sl-rail-tab-btn[data-tab="quality"]',
     onEnter: () => { _tourSetTab('quality'); },
     arrow: 'left',
     label: 'Settings',
@@ -8267,7 +8298,7 @@ function _positionSpotlight(targetRect) {
 
 const tour = {
   active: false, step: 0,
-  steps: [],      // TOUR_STEPS filtered for this run (mobileOnly steps drop out on desktop)
+  steps: [],      // TOUR_STEPS filtered for this run (mobileOnly / desktopOnly steps by width)
   cleanup: null,  // per-step teardown (e.g. the swipe hint), run on step change / tour end
   backdrop: null, spotlight: null, tooltip: null, quitBtn: null,
 };
@@ -8351,7 +8382,8 @@ function startTour() {
   tour.active = true;
   tour.step   = 0;
   // Mobile-only steps (touch gestures) drop out of the sequence on desktop.
-  tour.steps  = TOUR_STEPS.filter(s => !s.mobileOnly || window.innerWidth <= 640);
+  const mob = window.innerWidth <= 640;
+  tour.steps  = TOUR_STEPS.filter(s => mob ? !s.desktopOnly : !s.mobileOnly);
 
   tour.backdrop  = document.createElement('div');
   tour.backdrop.className = 'tutorial-backdrop';
@@ -8403,7 +8435,7 @@ function _renderTourStep() {
   tour.tooltip.innerHTML = `
     <div class="tt-arrow"></div>
     <div class="tt-step">Step ${tour.step + 1} / ${tour.steps.length} · ${s.label || ''}</div>
-    <div class="tt-body">${s.text}</div>
+    <div class="tt-body">${(window.innerWidth <= 640 && s.mobileText) || s.text}</div>
     <div class="tt-actions">
       <button class="tt-skip" id="tt-skip">${isFinal ? 'Close' : 'Skip'}</button>
       <button class="primary tt-next" id="tt-next">${isFinal ? 'Finish' : 'Next →'}</button>
