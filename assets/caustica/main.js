@@ -1951,7 +1951,23 @@ function buildDOM() {
             <span>Tap to add a plane</span>
           </div>
         </div>
+        <!-- Scene drawer (desktop): one card per plane, sorted by z, plus the
+             background image. Replaces the timeline and the plane viewer there;
+             phones keep those. Cards are built by renderDrawer(). -->
+        <section class="sl-drawer" id="sl-drawer" aria-label="Scene">
+          <button class="sl-drawer-handle" id="sl-drawer-handle" type="button" title="Show or tuck away the scene drawer" aria-label="Show or tuck away the scene drawer" aria-expanded="true"></button>
+          <div class="sl-drawer-hdr">
+            <span class="sl-drawer-title">Scene</span>
+            <span class="sl-drawer-sum" id="sl-drawer-sum"></span>
+            <button class="sl-drawer-btn" id="sl-drawer-add" type="button" title="Add a plane behind the farthest one">+ Plane</button>
+            <button class="sl-drawer-toggle" id="sl-drawer-toggle" type="button" title="Show or tuck away the scene drawer" aria-label="Show or tuck away the scene drawer" aria-expanded="true">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+            </button>
+          </div>
+          <div class="sl-drawer-cards" id="sl-drawer-cards"></div>
+        </section>
         <div class="sl-rail" id="sl-rail">
+          <div class="sl-insp-title" id="sl-insp-title">Object</div>
           <div class="sl-rail-tabs" id="sl-rail-tabs">
             <button class="sl-rail-tab-btn sl-mobile-only-tab" data-tab="object">Object</button>
             <button class="sl-rail-tab-btn active" data-tab="scene"><span class="sl-tablabel-obj">Object</span><span class="sl-tablabel-scene">Scene</span></button>
@@ -1997,6 +2013,11 @@ function buildDOM() {
               <div class="sl-plane-empty" id="sl-plane-empty" style="display:none">Click the redshift timeline to add a plane, or click a marker to select one.</div>
           </div>
         </div>
+        <!-- Inspector categories (desktop): picks what the rail shows. The view
+             categories all live in the View tab, filtered by setInspectorCat(). -->
+        <nav class="sl-switcher" id="sl-switcher" aria-label="Controls">
+          ${INSPECTOR_CATS.map(c => `<button class="sl-cat-btn${c.key === 'object' ? ' active' : ''}" type="button" data-cat="${c.key}" title="${c.label}" aria-label="${c.label}" aria-pressed="${c.key === 'object'}"${c.key === 'settings' ? ' style="margin-top:auto"' : ''}>${c.icon}</button>`).join('')}
+        </nav>
       </div>
       <div class="sl-rotate-overlay" id="sl-rotate-overlay" role="alert">
         <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -2155,6 +2176,7 @@ function attachHandlers() {
     e.target.value = '';
   });
   attachPlaneCardHandlers(document.getElementById('sl-plane-canvas'));
+  attachDrawerHandlers();
 
   // Timeline z_max control (static DOM, wired once).
   const _zmaxEl = document.getElementById('sl-zmax');
@@ -2550,6 +2572,14 @@ function updateCanvasTools() {
     b.classList.toggle('active', state.addMode === b.dataset.tool);
     if (b.dataset.tool === 'mask') b.style.display = maskToolAvailable() ? '' : 'none';
   });
+  // The drawer's Place buttons light up on the selected plane's card only.
+  document.querySelectorAll('.sl-dcard').forEach(card => {
+    const sel = +card.dataset.planeId === state.selectedPlaneId;
+    card.querySelectorAll('.sl-dplace-btn').forEach(b => {
+      b.classList.toggle('active', sel && state.addMode === b.dataset.tool);
+      if (b.dataset.tool === 'mask') b.style.display = maskToolAvailable() ? '' : 'none';
+    });
+  });
 }
 
 // Select the previous/next plane along the z-sorted list (plane-viewer arrows,
@@ -2582,9 +2612,365 @@ function setRailTab(tab) {
     document.getElementById(`sl-tab-${t}`)?.classList.toggle('active', t === container);
   const body = document.querySelector('.sl-body');
   if (body) body.dataset.tab = tab;
+  // Keep the desktop category switcher in step when a tab is chosen directly
+  // (the tour, the mobile tab bar): a category that lives in another tab gives
+  // way to that tab's default one.
+  const catTab = INSPECTOR_CATS.find(c => c.key === activeCat)?.tab;
+  if (catTab !== container) activeCat = INSPECTOR_CATS.find(c => c.tab === container)?.key ?? 'object';
+  _syncSwitcher();
   renderSidebar();
   // Hidden canvases can't measure themselves; redraw once the tab reveals them.
   if (container === 'scene') requestAnimationFrame(() => { drawAxisCanvas(); renderPlaneCard(); });
+}
+
+// ── Inspector categories (desktop switcher) ──────────────────────────────────
+// The right-hand icon bar. Each category shows one rail tab; the five view
+// categories share the View tab and filter its sections by their data-cat
+// wrappers (.sl-cat), so renderViewPanel() stays a single template. The first
+// category of each tab is the one a bare setRailTab(tab) falls back to.
+const _catIcon = d => `<svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const INSPECTOR_CATS = [
+  { key: 'object',     tab: 'scene',   label: 'Object',
+    icon: _catIcon('<path d="M8 2.5L14 13H2z"/>') },
+  { key: 'view',       tab: 'view',    label: 'View: field, colour map and the active view\'s settings',
+    icon: _catIcon('<circle cx="8" cy="8" r="6"/><path d="M8 2a6 6 0 010 12z" fill="currentColor"/>') },
+  { key: 'overlays',   tab: 'view',    label: 'Overlays: curves, markers, legend, ruler',
+    icon: _catIcon('<circle cx="6" cy="8" r="4"/><circle cx="10" cy="8" r="4"/>') },
+  { key: 'background', tab: 'view',    label: 'Background image',
+    icon: _catIcon('<rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 11l4-4 3 3 2-2 3 3"/>') },
+  { key: 'instrument', tab: 'view',    label: 'Instrument',
+    icon: _catIcon('<rect x="2.5" y="2.5" width="11" height="11"/><path d="M2.5 6.2h11M2.5 9.8h11M6.2 2.5v11M9.8 2.5v11"/>') },
+  { key: 'lineart',    tab: 'view',    label: 'Line art',
+    icon: _catIcon('<path d="M2 12c2.5-6 5-8 6-4s3.5 2 6-4"/>') },
+  { key: 'export',     tab: 'export',  label: 'Export',
+    icon: _catIcon('<path d="M8 2v8M4.5 6.5L8 10l3.5-3.5M2.5 13.5h11"/>') },
+  { key: 'settings',   tab: 'quality', label: 'Settings: cosmology and quality',
+    icon: _catIcon('<circle cx="8" cy="8" r="2.3"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/>') },
+];
+const _CAT_TITLES = { object: 'Object', view: 'View', overlays: 'Overlays', background: 'Background image',
+                      instrument: 'Instrument', lineart: 'Line art', export: 'Export', settings: 'Settings' };
+let activeCat = 'object';
+
+function setInspectorCat(cat) {
+  const c = INSPECTOR_CATS.find(x => x.key === cat);
+  if (!c) return;
+  activeCat = cat;
+  setRailTab(c.tab);   // shows the tab, then _syncSwitcher() stamps the filter
+  document.getElementById(`sl-tab-${c.tab}`)?.scrollTo(0, 0);
+}
+
+function _syncSwitcher() {
+  document.querySelectorAll('#sl-switcher .sl-cat-btn').forEach(b => {
+    const on = b.dataset.cat === activeCat;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  const view = document.getElementById('sl-tab-view');
+  if (view) view.dataset.cat = INSPECTOR_CATS.find(c => c.key === activeCat)?.tab === 'view' ? activeCat : '';
+  const title = document.getElementById('sl-insp-title');
+  if (title) title.textContent = _CAT_TITLES[activeCat] ?? '';
+}
+
+// ── Scene drawer (desktop) ───────────────────────────────────────────────────
+// One card per plane in z order, then the background image. Cards are keyed by
+// plane id and updated in place, never rebuilt: each owns a plane-viewer canvas
+// whose pointer handlers may be mid-drag when a render comes through.
+const _drawerCards = new Map();   // plane id → { el, canvas, refs }
+let   _drawerOpen  = true;
+try { _drawerOpen = localStorage.getItem('caustica-drawer') !== 'closed'; } catch (_) {}
+
+const _PLANE_TITLES = { lens: 'Lens plane', source: 'Source plane', hybrid: 'Lens + source plane', empty: 'Empty plane' };
+const _OBJ_NAMES = {
+  sie: 'SIE', nie: 'NIE', epl: 'EPL', pointmass: 'Point mass', shear: 'External shear',
+  convergence: 'Convergence', deflection: 'Deflection', gaussian: 'Gaussian', exponential: 'Exponential',
+  point: 'Uniform disc', pointsource: 'Point source', pastedimage: 'Image', mask: 'Mask',
+};
+// The one parameter that best tells two objects of a kind apart, for the row.
+function _objKeyParam(o) {
+  const p = o.params || {};
+  const f = (v, d = 2) => (+v).toFixed(d);
+  switch (o.model) {
+    case 'sie': case 'nie': case 'epl': case 'pointmass': return `b ${f(p.b)}″`;
+    case 'shear':       return `γ ${f(p.gamma, 3)}`;
+    case 'convergence': return `κ ${f(p.kappa, 3)}`;
+    case 'deflection':  return `α ${f(p.alpha)}″`;
+    case 'mask':        return `r ${f(p.r)}″`;
+    case 'pastedimage': return '';
+    default:            return p.sigma != null ? `${f(p.sigma)}″` : '';
+  }
+}
+function _objGlyph(type, hidden) {
+  const col = hidden ? 'var(--muted)' : `var(--${type === 'source' ? 'src' : type}-color)`;
+  if (type === 'mask')   return `<span class="sl-dobj-glyph" style="border-radius:50%;background:${col}"></span>`;
+  if (type === 'hybrid') return `<span class="sl-dobj-glyph" style="transform:rotate(45deg) scale(.8);background:${col}"></span>`;
+  const d = type === 'source' ? 'M8 14L14.5 3H1.5z' : 'M8 2L14.5 13H1.5z';
+  return `<svg class="sl-dobj-glyph" width="10" height="10" viewBox="0 0 16 16" aria-hidden="true"><path d="${d}" fill="${col}"/></svg>`;
+}
+
+function _drawerPlaneById(id) { return state.planes.find(p => p.id === id) ?? null; }
+
+function _makeDrawerCard(pl) {
+  const el = document.createElement('section');
+  el.className = 'sl-dcard';
+  el.dataset.planeId = pl.id;
+  el.innerHTML = `
+    <div class="sl-dcard-hdr">
+      <span class="sl-dcard-dot"></span>
+      <span class="sl-dcard-title"></span>
+      <label class="sl-dcard-z" title="Redshift of this plane. Drag sideways to scrub.">z <input type="number" class="sl-dcard-z-input" min="0.01" max="10" step="0.01" aria-label="Plane redshift"></label>
+      <button type="button" class="sl-dcard-menu-btn" title="Plane actions" aria-label="Plane actions" aria-haspopup="true">⋯</button>
+      <div class="sl-dcard-menu" role="menu" hidden>
+        <button type="button" role="menuitem" data-act="paste">Load image…</button>
+        <button type="button" role="menuitem" data-act="clear">Clear objects</button>
+        <button type="button" role="menuitem" data-act="delete">Delete plane</button>
+      </div>
+    </div>
+    <div class="sl-dcard-body">
+      <canvas class="sl-dcard-canvas" aria-label="Plane viewer: true positions on this plane"></canvas>
+      <div class="sl-dcard-side">
+        <div class="sl-dcard-objs"></div>
+        <div class="sl-dcard-place" role="group" aria-label="Place on this plane">
+          <span class="sl-dcard-place-lbl">Place</span>
+          <button type="button" class="sl-dplace-btn" data-tool="lens"   title="Place lenses on this plane: click its viewer (1). Click again to stop.">L</button>
+          <button type="button" class="sl-dplace-btn" data-tool="source" title="Place sources on this plane: click its viewer (2). Click again to stop.">S</button>
+          <button type="button" class="sl-dplace-btn" data-tool="hybrid" title="Place hybrids on this plane: click its viewer (3). Click again to stop.">H</button>
+          <button type="button" class="sl-dplace-btn" data-tool="mask"   title="Place masks: they cut patches out of the background image before it is delensed (4). Click again to stop.">M</button>
+        </div>
+      </div>
+    </div>`;
+  const canvas = el.querySelector('canvas');
+  const zIn    = el.querySelector('.sl-dcard-z-input');
+  const applyZ = v => _drawerApplyZ(pl.id, v);
+  zIn.addEventListener('change', e => { record(); applyZ(parseFloat(e.target.value)); });
+  _attachScrub(zIn, { lo: 0.01, hi: 10, onChange: applyZ });
+  attachPlaneCardHandlers(canvas, { getPlane: () => _drawerPlaneById(pl.id), swipe: false });
+  return { el, canvas, zIn };
+}
+
+function _drawerApplyZ(id, v) {
+  const pl = _drawerPlaneById(id);
+  if (!pl || !isFinite(v)) return;
+  const z = Math.max(0.01, Math.min(10, Math.round(v * 100) / 100));
+  // The timeline that sets z_max is a phone control; here the box itself is the
+  // only way to move a plane, so let it carry z_max along instead of clamping.
+  if (z > state.zMax) {
+    state.zMax = Math.min(10, Math.ceil(z));
+    const zm = document.getElementById('sl-zmax'); if (zm) zm.value = state.zMax;
+  }
+  pl.z = z;
+  state.planes.sort((a, b) => a.z - b.z);
+  invalidateDistances();
+  drawAxisCanvas(); renderPlaneCard(); redraw();
+  if (id === state.selectedPlaneId) {
+    const zEl = document.querySelector('#sl-obj-panel .sl-params-z');
+    if (zEl) zEl.textContent = `z: ${pl.z.toFixed(2)}`;
+    updateThetaEReadout();
+  }
+}
+
+function renderDrawer() {
+  const host = document.getElementById('sl-drawer-cards');
+  if (!host) return;
+  const drawer = document.getElementById('sl-drawer');
+  drawer.classList.toggle('sl-drawer-closed', !_drawerOpen);
+  for (const b of [document.getElementById('sl-drawer-handle'), document.getElementById('sl-drawer-toggle')])
+    b?.setAttribute('aria-expanded', _drawerOpen ? 'true' : 'false');
+
+  const nObj = state.planes.reduce((n, p) => n + p.objects.filter(o => !(o.hybridId && o.type === 'source')).length, 0);
+  const sum  = document.getElementById('sl-drawer-sum');
+  if (sum) sum.textContent = `${state.planes.length} plane${state.planes.length === 1 ? '' : 's'} · ${nObj} object${nObj === 1 ? '' : 's'}${state.bgCanvas ? ' · background image' : ''}`;
+
+  // Drop cards whose plane is gone, then lay the rest out in z order.
+  const live = new Set(state.planes.map(p => p.id));
+  for (const [id, c] of _drawerCards) if (!live.has(id)) { c.el.remove(); _drawerCards.delete(id); }
+  const mask = maskToolAvailable();
+  state.planes.forEach(pl => {
+    let c = _drawerCards.get(pl.id);
+    if (!c) { c = _makeDrawerCard(pl); _drawerCards.set(pl.id, c); }
+    host.appendChild(c.el);   // moves an existing card into z order
+    const sel  = pl.id === state.selectedPlaneId;
+    const type = planeEffectiveType(pl);
+    c.el.classList.toggle('sl-dcard-sel', sel);
+    c.el.dataset.effectiveType = type;
+    c.el.querySelector('.sl-dcard-title').textContent = _PLANE_TITLES[type];
+    if (document.activeElement !== c.zIn) c.zIn.value = pl.z.toFixed(2);
+    c.el.querySelector('[data-act="paste"]').hidden = !pl.objects.some(o => o.model === 'pastedimage');
+    // Object rows: a hybrid pair is one row, reached through its lens half.
+    const rows = [];
+    for (const o of pl.objects) {
+      if (o.hybridId && o.type !== 'lens') continue;
+      const partner = o.hybridId ? hybridPartner(pl, o) : null;
+      const kind    = o.hybridId ? 'hybrid' : o.type;
+      const hidden  = o.hidden && (!partner || partner.hidden);
+      const on      = sel && (state.selectedObjId === o.id || (partner && state.selectedObjId === partner.id));
+      const name    = o.hybridId ? `${_OBJ_NAMES[o.model] ?? o.model} + ${_OBJ_NAMES[partner?.model] ?? 'source'}` : (_OBJ_NAMES[o.model] ?? o.model);
+      rows.push(`<button type="button" class="sl-dobj${on ? ' active' : ''}${hidden ? ' sl-dobj-hidden' : ''}" data-obj-id="${o.id}" title="${hidden ? 'Hidden. ' : ''}Select and edit">${_objGlyph(kind, hidden)}<span class="sl-dobj-name">${_escHtml(name)}</span><span class="sl-dobj-val">${_objKeyParam(o)}</span></button>`);
+    }
+    c.el.querySelector('.sl-dcard-objs').innerHTML = rows.length ? rows.join('')
+      : `<div class="sl-dcard-empty">No objects yet. Pick L, S or H, then click the viewer.</div>`;
+    c.el.querySelectorAll('.sl-dplace-btn').forEach(b => {
+      b.classList.toggle('active', sel && state.addMode === b.dataset.tool);
+      if (b.dataset.tool === 'mask') b.style.display = mask ? '' : 'none';
+    });
+    if (_drawerOpen) drawPlaneCanvas(c.canvas, pl);
+  });
+  host.appendChild(_drawerBgCard());
+}
+
+// The background-image card: a thumbnail and its scale, opening the Background
+// category; with no picture, a button to upload one.
+let _drawerBg = null, _drawerBgFor = null;
+function _drawerBgCard() {
+  if (!_drawerBg) {
+    _drawerBg = document.createElement('section');
+    _drawerBg.className = 'sl-dcard sl-dcard-bg';
+    _drawerBg.innerHTML = `
+      <div class="sl-dcard-hdr"><span class="sl-dcard-title">Background</span></div>
+      <button type="button" class="sl-dbg-open" title="Background image settings"><canvas class="sl-dbg-thumb"></canvas><span class="sl-dbg-name"></span><span class="sl-dbg-meta"></span></button>
+      <button type="button" class="sl-dbg-upload">Upload image…</button>`;
+  }
+  const has = !!state.bgCanvas;
+  _drawerBg.classList.toggle('sl-dcard-bg-none', !has);
+  _drawerBg.classList.toggle('sl-dobj-hidden', has && state.bgHidden);
+  if (has) {
+    _drawerBg.querySelector('.sl-dbg-name').textContent = state.bgName || 'image';
+    _drawerBg.querySelector('.sl-dbg-meta').textContent = state.bgPixel > 0
+      ? `${+state.bgPixel.toPrecision(3)}″/px${state.bgHidden ? ' · hidden' : ''}`
+      : `${state.bgCanvas.width}×${state.bgCanvas.height}${state.bgHidden ? ' · hidden' : ''}`;
+    if (_drawerBgFor !== state.bgCanvas && _drawerOpen) {
+      // Redraw the thumbnail only when the picture itself changes.
+      const t = _drawerBg.querySelector('.sl-dbg-thumb');
+      const dpr = window.devicePixelRatio || 1, W = 168, H = 84;
+      t.width = W * dpr; t.height = H * dpr;
+      const ctx = t.getContext('2d');
+      const s = Math.max(W / state.bgCanvas.width, H / state.bgCanvas.height);
+      const w = state.bgCanvas.width * s, h = state.bgCanvas.height * s;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, W, H);
+      ctx.drawImage(state.bgCanvas, (W - w) / 2, (H - h) / 2, w, h);
+      _drawerBgFor = state.bgCanvas;
+    }
+  } else {
+    _drawerBgFor = null;
+  }
+  return _drawerBg;
+}
+
+function _closeDrawerMenus(except) {
+  document.querySelectorAll('.sl-dcard-menu').forEach(m => { if (m !== except) m.hidden = true; });
+}
+
+function setDrawerOpen(open) {
+  _drawerOpen = open;
+  try { localStorage.setItem('caustica-drawer', open ? 'open' : 'closed'); } catch (_) {}
+  renderDrawer();
+  _drawerBgFor = null;
+  // The stage just changed height; the canvases resize through their observer.
+  requestAnimationFrame(() => renderDrawer());
+}
+
+// Select a plane from the drawer (keeping the object if it is on that plane).
+function _drawerSelectPlane(pl) {
+  if (pl.id === state.selectedPlaneId) return;
+  state.selectedPlaneId = pl.id;
+  state.selectedObjId   = pl.objects[0]?.id ?? null;
+  clearRulerSelectionForObject();
+}
+
+function attachDrawerHandlers() {
+  const drawer = document.getElementById('sl-drawer');
+  if (!drawer) return;
+  _attachHistoryBoundary(drawer);
+  document.getElementById('sl-drawer-handle').addEventListener('click', () => setDrawerOpen(!_drawerOpen));
+  document.getElementById('sl-drawer-toggle').addEventListener('click', () => setDrawerOpen(!_drawerOpen));
+  document.getElementById('sl-drawer-add').addEventListener('click', () => {
+    const top = state.planes.length ? state.planes[state.planes.length - 1].z : 0;
+    const z   = Math.min(10, Math.round((top + 0.5) * 100) / 100);
+    if (state.planes.length >= MAX_PLANES) { showToast(`Limit reached: at most ${MAX_PLANES} planes.`); return; }
+    record();
+    if (z > state.zMax) state.zMax = Math.min(10, Math.ceil(z));
+    const pl = addPlane(z);
+    state.selectedPlaneId = pl.id;
+    state.selectedObjId   = null;
+    renderPlaneCard(); renderSidebar(); drawAxisCanvas(); redraw();
+    _drawerCards.get(pl.id)?.el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  });
+
+  document.getElementById('sl-drawer-cards').addEventListener('click', e => {
+    if (e.target.closest('.sl-dbg-open'))   { setInspectorCat('background'); return; }
+    if (e.target.closest('.sl-dbg-upload')) { pickBackgroundImage(); return; }
+    const cardEl = e.target.closest('.sl-dcard[data-plane-id]');
+    const pl = cardEl && _drawerPlaneById(+cardEl.dataset.planeId);
+    if (!pl) return;
+
+    const menuBtn = e.target.closest('.sl-dcard-menu-btn');
+    if (menuBtn) {
+      const menu = cardEl.querySelector('.sl-dcard-menu');
+      _closeDrawerMenus(menu);
+      menu.hidden = !menu.hidden;
+      return;
+    }
+    const act = e.target.closest('.sl-dcard-menu [data-act]')?.dataset.act;
+    if (act) {
+      _closeDrawerMenus();
+      if (act === 'clear') {
+        record();
+        pl.objects.filter(o => o.model === 'pastedimage').forEach(o => renderer?.clearPastedTexture(o.id));
+        pl.objects = [];
+        if (pl.id === state.selectedPlaneId) state.selectedObjId = null;
+      } else if (act === 'delete') {
+        record();
+        removePlane(pl.id);
+      } else if (act === 'paste') {
+        _drawerSelectPlane(pl);
+        document.getElementById('sl-plane-file')?.click();
+      }
+      renderPlaneCard(); renderSidebar(); drawAxisCanvas(); redraw();
+      return;
+    }
+
+    const place = e.target.closest('.sl-dplace-btn');
+    if (place) {
+      const tool = place.dataset.tool;
+      if (pl.id !== state.selectedPlaneId) {
+        // Arming a tool on another plane moves the selection there; the tool
+        // stays armed rather than toggling off.
+        _drawerSelectPlane(pl);
+        if (tool !== 'mask' || maskToolAvailable()) state.addMode = tool;
+        updateCanvasTools();
+        renderPlaneCard(); renderSidebar(); redraw();
+      } else {
+        setCanvasTool(tool);
+        renderDrawer();
+      }
+      return;
+    }
+
+    const row = e.target.closest('.sl-dobj');
+    if (row) {
+      state.selectedPlaneId = pl.id;
+      state.selectedObjId   = +row.dataset.objId;
+      clearRulerSelectionForObject();
+      setInspectorCat('object');
+      renderPlaneCard(); redraw();
+      return;
+    }
+    // Anywhere else on a card (its header, the empty note) selects the plane.
+    if (!e.target.closest('input, canvas')) {
+      _drawerSelectPlane(pl);
+      renderPlaneCard(); renderSidebar(); redraw();
+    }
+  });
+  // A menu closes on any click outside it, and on Escape.
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.sl-dcard-menu, .sl-dcard-menu-btn')) _closeDrawerMenus();
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') _closeDrawerMenus(); });
+
+  document.getElementById('sl-switcher')?.addEventListener('click', e => {
+    const b = e.target.closest('.sl-cat-btn');
+    if (b) setInspectorCat(b.dataset.cat);
+  });
 }
 
 // ── Quality tab ───────────────────────────────────────────────────────────────
@@ -3373,6 +3759,7 @@ function attachAxisHandlers() {
 // plane; the redshift axis is the surface for selecting, adding, and moving
 // planes. The card skeleton is static DOM (buildDOM); this just refreshes it.
 function renderPlaneCard() {
+  renderDrawer();
   const card  = document.getElementById('sl-plane-card');
   if (!card) return;
   const pl    = selectedPlane();
@@ -3405,10 +3792,11 @@ function renderPlaneCard() {
 const HIT_R = 10; // px desktop
 function hitRadius() { return window.innerWidth <= 640 ? 18 : HIT_R; }
 
-function attachPlaneCardHandlers(canvas) {
+function attachPlaneCardHandlers(canvas, { getPlane = selectedPlane, swipe = true } = {}) {
   // 'idle' | 'hit-pending' | 'dragging' | 'add-pending' | 'add-dragging' | 'swiping'
-  // The card always shows the selected plane; resolve it at pointerdown so one
-  // persistent set of listeners serves every plane.
+  // The phone card always shows the selected plane; resolve it at pointerdown so
+  // one persistent set of listeners serves every plane. A drawer card passes its
+  // own plane, and touching it selects that plane; drawer cards don't swipe.
   let istate  = 'idle';
   let hitObj  = null;
   let plane   = null;
@@ -3421,7 +3809,7 @@ function attachPlaneCardHandlers(canvas) {
 
   canvas.addEventListener('pointermove', e => {
     if (istate === 'idle') {
-      const selPl = selectedPlane();
+      const selPl = getPlane();
       canvas.style.cursor = selPl && hitTestPlane(selPl, canvas, e) ? 'grab' : addCursor();
       return;
     }
@@ -3430,7 +3818,7 @@ function attachPlaneCardHandlers(canvas) {
 
     // Touch swipe that began on empty space switches the selected plane
     // (committed on release); starting on an object still drags the object.
-    if (istate === 'add-pending' && pStart.touch &&
+    if (istate === 'add-pending' && pStart.touch && swipe &&
         Math.abs(e.clientX - pStart.clientX) > SWIPE_SLOP) {
       istate = 'swiping';
     }
@@ -3481,8 +3869,15 @@ function attachPlaneCardHandlers(canvas) {
     // A second finger (a pinch attempt) must never place an object: cancel
     // whatever gesture the first finger started.
     if (!e.isPrimary) { istate = 'idle'; hitObj = null; plane = null; return; }
-    plane = selectedPlane();
+    plane = getPlane();
     if (!plane) return;
+    if (plane.id !== state.selectedPlaneId) {
+      state.selectedPlaneId = plane.id;
+      state.selectedObjId   = null;
+      clearRulerSelectionForObject();
+      updateCanvasTools();
+      renderPlaneCard(); renderSidebar();
+    }
     e.preventDefault();
     canvas.setPointerCapture(e.pointerId);
     const touch = e.pointerType === 'touch' || e.pointerType === 'pen';
@@ -3528,7 +3923,7 @@ function attachPlaneCardHandlers(canvas) {
       invalidateDistances(); redraw();
     }
     istate = 'idle'; hitObj = null; plane = null;
-    const selPl = selectedPlane();
+    const selPl = getPlane();
     canvas.style.cursor = selPl && hitTestPlane(selPl, canvas, e) ? 'grab' : addCursor();
   });
 }
@@ -3918,8 +4313,12 @@ function hitTestPlane(plane, canvas, e) {
 }
 
 function redrawPlaneCanvas(plane) {
-  // Only the selected plane is on screen (the plane card); others have no canvas.
-  if (!plane || plane.id !== state.selectedPlaneId) return;
+  if (!plane) return;
+  // The desktop drawer has a viewer for every plane...
+  const dc = _drawerCards.get(plane.id);
+  if (dc && _drawerOpen) drawPlaneCanvas(dc.canvas, plane);
+  // ...the phone plane card only for the selected one.
+  if (plane.id !== state.selectedPlaneId) return;
   const cvs = document.getElementById('sl-plane-canvas');
   if (cvs) drawPlaneCanvas(cvs, plane);
 }
@@ -4458,7 +4857,7 @@ function delensSectionHtml() {
   if (renderer && !renderer.delensSupported)
     note = 'This browser cannot draw the delensed view: it needs WebGL2 float render targets (<code>EXT_color_buffer_float</code>), which this GPU does not offer.';
   else if (!has)
-    note = 'Upload the lensed image in the <b>Background</b> section above. This view traces it back to the source plane through the current lens model.';
+    note = 'Upload the lensed image under <b>Background</b>. This view traces it back to the source plane through the current lens model.';
   else if (state.lineArt)
     note = 'Line art draws its own vectors; switch it off to see the delensed image.';
   return `
@@ -4525,7 +4924,7 @@ function backgroundSectionHtml() {
   const delensView = state.vizMode === 9 && !state.lineArt;
   // A loaded image that isn't currently visible: say why rather than looking broken.
   const inertNote = !has || bgImageActive() ? ''
-    : delensView     ? 'This view delenses it into the source plane (see <b>Delensed Image</b> below).'
+    : delensView     ? 'This view delenses it into the source plane (see <b>Delensed Image</b> in the view settings).'
     : hid            ? 'Hidden. Use the eye button to show it again.'
     : state.lineArt  ? 'Line art draws its own background; switch it off to see the image.'
     : 'Shown in the lensed-image view only, not on the quantity maps.';
@@ -4613,22 +5012,12 @@ function renderViewPanel() {
   el.innerHTML = `
     <div class="sl-panel">
 
-      <label class="sl-hide-all-row" title="Hide every overlay and on-canvas control (markers, curves, legend, ruler, scale bar, colorbar, tool buttons) for a clean plot until switched back off">
-        <span style="flex:1">Hide all overlays</span>
-        <input type="checkbox" id="sl-hide-overlays" ${state.hideOverlays?'checked':''}>
-      </label>
-
+      <!-- Each .sl-cat wrapper names the desktop inspector category it belongs
+           to (setInspectorCat); on phones every section shows, in this order. -->
+      <div class="sl-cat" data-cat="view">
       <div class="sl-hybrid-section">
         <div class="sl-view-hdr">
-          <span class="sl-panel-title" style="flex:1">Display</span>
-          ${infoSection('sl-display-info', `
-            <b>FOV</b>: field of view (″).<br>
-            <b>z<sub>s</sub> ref</b>: source redshift for the quantity maps and curves. <b>Auto</b> uses the highest source plane.<br>
-            <b>Legend</b>, <b>Scale bar</b>, <b>Colorbar</b>: on-image keys (the colorbar for quantity maps only). <b>Legend BG</b>: panel behind the legend.<br>
-            <b>Positions</b>: object markers.<br>
-            <b>Stretch</b>: whiskers along the local image distortion, longer where it is stronger.<br>
-            <b>Ruler</b> (<b>L</b>): measure distances and angles.<br>
-            <b>Time delays</b>: arrival times of point-source images, in days. Needs a point source behind a lens.`)}
+          <span class="sl-panel-title" style="flex:1">Field</span>
         </div>
         <div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
           <div class="sl-global-input">
@@ -4644,6 +5033,27 @@ function renderViewPanel() {
             </select>
             <input type="number" id="sl-crit-zs-gen" min="0.1" max="15" step="0.1" value="${ezs.toFixed(2)}" ${auto?'disabled':''}>
           </div>
+        </div>
+      </div>
+      </div>
+
+      <div class="sl-cat" data-cat="overlays">
+      <label class="sl-hide-all-row" title="Hide every overlay and on-canvas control (markers, curves, legend, ruler, scale bar, colorbar, tool buttons) for a clean plot until switched back off">
+        <span style="flex:1">Hide all overlays</span>
+        <input type="checkbox" id="sl-hide-overlays" ${state.hideOverlays?'checked':''}>
+      </label>
+
+      <div class="sl-hybrid-section">
+        <div class="sl-view-hdr">
+          <span class="sl-panel-title" style="flex:1">Display</span>
+          ${infoSection('sl-display-info', `
+            <b>Legend</b>, <b>Scale bar</b>, <b>Colorbar</b>: on-image keys (the colorbar for quantity maps only). <b>Legend BG</b>: panel behind the legend.<br>
+            <b>Positions</b>: object markers.<br>
+            <b>Stretch</b>: whiskers along the local image distortion, longer where it is stronger.<br>
+            <b>Ruler</b> (<b>L</b>): measure distances and angles.<br>
+            <b>Time delays</b>: arrival times of point-source images, in days. Needs a point source behind a lens.`)}
+        </div>
+        <div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
           <div class="sl-checkbox-row">
             <label><input type="checkbox" id="sl-show-legend"  ${state.showLegend ?'checked':''}> Legend</label>
             <label class="${state.showLegend?'':'sl-label-disabled'}" title="Translucent panel behind the legend"><input type="checkbox" id="sl-legend-bg" ${state.legendBg?'checked':''} ${state.showLegend?'':'disabled'}> Legend BG</label>
@@ -4692,9 +5102,11 @@ function renderViewPanel() {
           </div>` : ''}
         </div>` : ''}
       </div>
+      </div>
 
-      ${instrumentSectionHtml()}
+      <div class="sl-cat" data-cat="instrument">${instrumentSectionHtml()}</div>
 
+      <div class="sl-cat" data-cat="lineart">
       <div class="sl-hybrid-section" style="padding:5px 0">
         <div class="sl-view-hdr" style="padding:0">
           <span class="sl-panel-title" style="flex:1">Line art</span>
@@ -4734,7 +5146,9 @@ function renderViewPanel() {
           </div>
         </div>` : '' }
       </div>
+      </div>
 
+      <div class="sl-cat" data-cat="overlays">
       <div class="sl-hybrid-section" style="padding:5px 0">
         <div class="sl-view-hdr" style="padding:0">
           <span class="sl-panel-title" style="flex:1">Annotation color</span>
@@ -4746,7 +5160,9 @@ function renderViewPanel() {
             Ink for the plot furniture that isn't tied to an object: scale bar, legend, ruler, time-delay pills, Fermat markers. <b>Auto</b> snaps it to white or black with the page theme; picking a color pins it instead.`)}
         </div>
       </div>
+      </div>
 
+      <div class="sl-cat" data-cat="view">
       ${vizModeHasScale(state.vizMode) ? `
       <div class="sl-hybrid-section">
         <div class="sl-view-hdr" style="padding:0">
@@ -4807,9 +5223,11 @@ function renderViewPanel() {
           })()}
         </div>` : ''}
       </div>` : ''}
+      </div>
 
-      ${backgroundSectionHtml()}
+      <div class="sl-cat" data-cat="background">${backgroundSectionHtml()}</div>
 
+      <div class="sl-cat" data-cat="view">
       ${state.vizMode === 6 ? `
       <div class="sl-hybrid-section">
         <div class="sl-view-hdr">
@@ -4864,6 +5282,7 @@ function renderViewPanel() {
         </div>
       </div>` : ''}
       ${state.vizMode === 9 ? delensSectionHtml() : ''}
+      </div>
     </div>`;
 
   const _fovEl = document.getElementById('sl-fov');
