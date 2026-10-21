@@ -1297,7 +1297,7 @@ function loadConfigFromYaml(yaml) {
     // seeds itself on arrival (_installBackground); one already on screen, and not
     // about to be replaced, is seeded now.
     const _bgPending = isPresetBgName(cfg.bgImage) && cfg.bgImage !== state.bgSrc;
-    if (state.vizMode === 9 && !_bgPending) seedBgPixel();
+    if (_delensShowing() && !_bgPending) seedBgPixel();
     // Detector model.
     state.instrument   = INSTRUMENTS[cfg.instrument] ? cfg.instrument : CONFIG_DEFAULTS.instrument;
     state.instrPixel   = _clampNum(cfg.instrPixel,   1e-4, INSTR_PIXEL_MAX, CONFIG_DEFAULTS.instrPixel);
@@ -1409,8 +1409,15 @@ function addPlane(z) {
 }
 
 function removePlane(id) {
+  const i = state.planes.findIndex(p => p.id === id);
   state.planes = state.planes.filter(p => p.id !== id);
-  if (state.selectedPlaneId === id) { state.selectedPlaneId = null; state.selectedObjId = null; }
+  // The selection moves to a neighbour (the next plane out, else the one before),
+  // so the drawer keeps a selected card and the placement tools a target plane.
+  if (state.selectedPlaneId === id) {
+    state.selectedPlaneId = (state.planes[i] ?? state.planes[i - 1])?.id ?? null;
+    state.selectedObjId = null;
+    state.multiSel = new Set();
+  }
   invalidateDistances();
 }
 
@@ -2063,7 +2070,7 @@ function buildDOM() {
           <button class="sl-drawer-handle" id="sl-drawer-handle" type="button" title="Show or tuck away the scene drawer" aria-label="Show or tuck away the scene drawer" aria-expanded="true"></button>
           <div class="sl-drawer-hdr">
             <span class="sl-drawer-title">Scene</span>
-            <div class="sl-sight" id="sl-sight" role="img" aria-label="Line of sight: the observer, then each plane at its redshift. Drag a mark to move its plane."></div>
+            <div class="sl-sight" id="sl-sight" role="img" aria-label="Line of sight: the observer, then each plane at its redshift. Drag a mark to move its plane; click a blank stretch to add a plane there."></div>
             <label class="sl-sight-zmax" title="Far end of the redshift strip. Type a value, or drag sideways on the box to scrub.">z<sub>max</sub><input type="number" id="sl-drawer-zmax" min="0.1" max="10" step="0.01" aria-label="Maximum redshift of the strip"></label>
             <button class="sl-drawer-btn" id="sl-drawer-add" type="button" title="Add a plane behind the farthest one">+ Plane</button>
             <button class="sl-drawer-toggle" id="sl-drawer-toggle" type="button" title="Show or tuck away the scene drawer" aria-label="Show or tuck away the scene drawer" aria-expanded="true">
@@ -2831,6 +2838,9 @@ let   _drawerOpen  = true;
 try { _drawerOpen = localStorage.getItem('caustica-drawer') !== 'closed'; } catch (_) {}
 let   _sightHot    = null;        // plane under the pointer, on the strip or its card
 let   _sightDrag   = null;        // { id, top, x0, moved } while a strip mark is dragged
+let   _sightAdd    = null;        // { x0, z } while a press on a blank stretch of the strip is held
+let   _sightGhost  = null;        // z under the pointer on a blank stretch (a click adds a plane there)
+let   _drawerHold  = false;       // a press in a card's viewer: the card layout waits for its release
 
 const _PLANE_TITLES = { lens: 'Lens plane', source: 'Source plane', hybrid: 'Lens + source', empty: 'Empty plane' };
 
@@ -2864,7 +2874,7 @@ function _makeDrawerCard(pl) {
   const applyZ = v => _drawerApplyZ(pl.id, v);
   zIn.addEventListener('change', e => { record(); applyZ(parseFloat(e.target.value)); });
   _attachScrub(zIn, { lo: 0.01, hi: 10, onChange: applyZ });
-  attachPlaneCardHandlers(canvas, { getPlane: () => _drawerPlaneById(pl.id), swipe: false });
+  attachPlaneCardHandlers(canvas, { getPlane: () => _drawerPlaneById(pl.id), swipe: false, drawer: true });
   // Hovering a card lights its mark on the line-of-sight strip.
   el.addEventListener('pointerenter', () => _setSightHot(pl.id));
   el.addEventListener('pointerleave', () => _setSightHot(null));
@@ -2888,8 +2898,8 @@ function _drawerApplyZ(id, v) {
   const pl = _drawerPlaneById(id);
   if (!pl || !isFinite(v)) return;
   const z = Math.max(0.01, Math.min(10, Math.round(v * 100) / 100));
-  // The timeline that sets z_max is a phone control; here the box itself is the
-  // only way to move a plane, so let it carry z_max along instead of clamping.
+  // A redshift typed past the strip's end carries z_max along rather than being
+  // clamped (a drag on the strip stays within it).
   if (z > state.zMax) setZMax(Math.ceil(z));
   pl.z = z;
   state.planes.sort((a, b) => a.z - b.z);
@@ -2915,13 +2925,19 @@ function renderDrawer() {
   for (const [id, c] of _drawerCards) if (!live.has(id)) { c.el.remove(); _drawerCards.delete(id); }
   if (!live.has(_sightHot)) _sightHot = null;
   const shown = _drawerShown();
-  state.planes.forEach(pl => {
+  state.planes.forEach((pl, i) => {
     let c = _drawerCards.get(pl.id);
     if (!c) { c = _makeDrawerCard(pl); _drawerCards.set(pl.id, c); }
-    host.appendChild(c.el);   // moves an existing card into z order
+    // Into z order, moving a card only when it is out of place: a moved node loses
+    // the pointer capture of a press in its viewer, and the release with it.
+    if (host.children[i] !== c.el) host.insertBefore(c.el, host.children[i] ?? null);
     const sel  = pl.id === state.selectedPlaneId;
     const type = planeEffectiveType(pl);
     c.el.classList.toggle('sl-dcard-sel', sel);
+    // The selected card opens to show the plane's controls. During a press in a
+    // viewer the open card stays put, so a press that selects another plane does
+    // not slide its viewer out from under the pointer; it opens on release.
+    if (!_drawerHold) c.el.classList.toggle('sl-dcard-open', sel);
     c.el.classList.toggle('sl-dcard-hot', pl.id === _sightHot);
     c.el.dataset.effectiveType = type;
     c.el.setAttribute('aria-label', `${_PLANE_TITLES[type]} at z ${pl.z.toFixed(2)}${sel ? ', selected' : ''}`);
@@ -2973,6 +2989,13 @@ function renderSightLine() {
     const x = _sightX(z, W, top).toFixed(1);
     p.push(`<path class="sl-sight-tick" d="M${x} ${y - 3}V${y + 3}"/>`);
   }
+  // A blank stretch under the pointer: a dashed mark where a click adds a plane.
+  if (_sightGhost != null && !_sightDrag) {
+    const x = _sightX(_sightGhost, W, top), s = 4;
+    const right = x < W - 64;
+    p.push(`<g class="sl-sight-ghost"><path d="M${x.toFixed(1)} ${y - s}l${s} ${s}l${-s} ${s}l${-s} ${-s}z"/>` +
+      `<text x="${(x + (right ? 9 : -9)).toFixed(1)}" y="${y + 3.5}" text-anchor="${right ? 'start' : 'end'}">+ z ${_sightGhost.toFixed(2)}</text></g>`);
+  }
   // Selected and hovered marks are drawn last so they sit on top of a neighbour.
   const order = [...state.planes].sort((a, b) =>
     (a.id === state.selectedPlaneId) - (b.id === state.selectedPlaneId) || (a.id === _sightHot) - (b.id === _sightHot));
@@ -3013,10 +3036,45 @@ function _sightHit(e) {
   return best;
 }
 
+// The redshift of a blank stretch of the strip under the pointer, or null over a
+// mark (_sightHit) or the observer.
+function _sightBlankZ(e) {
+  const el = document.getElementById('sl-sight');
+  const r  = el.getBoundingClientRect();
+  const mx = (e.clientX - r.left) * el.clientWidth / r.width;
+  if (mx < _SIGHT_X0 - 4 || _sightHit(e)) return null;
+  const top = _sightTop();
+  return Math.max(0.01, Math.min(top, Math.round(_sightZ(mx, el.clientWidth, top) * 100) / 100));
+}
+function _setSightGhost(z) {
+  if (_sightGhost === z) return;
+  _sightGhost = z;
+  renderSightLine();
+}
+
+// Add a plane at z and select it (+ Plane, and a click on a blank stretch of the strip).
+function _drawerAddPlaneAt(z) {
+  if (state.planes.length >= MAX_PLANES) { showToast(`Limit reached: at most ${MAX_PLANES} planes.`); return; }
+  record();
+  if (z > state.zMax) setZMax(Math.ceil(z));
+  const pl = addPlane(z);
+  state.selectedPlaneId = pl.id;
+  state.selectedObjId   = null;
+  renderPlaneCard(); renderSidebar(); drawAxisCanvas(); redraw();
+  _drawerCards.get(pl.id)?.el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
+
 function attachSightHandlers() {
   const el = document.getElementById('sl-sight');
   if (!el) return;
   el.addEventListener('pointermove', e => {
+    // A release the strip never saw would leave a drag running with no button down.
+    if ((_sightDrag || _sightAdd) && e.pointerType === 'mouse' && !(e.buttons & 1)) end();
+    if (_sightAdd) {
+      // A press on a blank stretch adds a plane only as a click: moving off cancels.
+      if (Math.abs(e.clientX - _sightAdd.x0) >= 4) { _sightAdd = null; _setSightGhost(null); }
+      return;
+    }
     if (_sightDrag) {
       e.preventDefault();
       const pl = _drawerPlaneById(_sightDrag.id);
@@ -3036,15 +3094,29 @@ function attachSightHandlers() {
       return;
     }
     const hit = _sightHit(e);
-    el.style.cursor = hit ? 'grab' : '';
+    const gz  = hit ? null : _sightBlankZ(e);
+    el.style.cursor = hit ? 'grab' : gz != null ? 'copy' : '';
     _setSightHot(hit?.id ?? null);
+    _setSightGhost(gz);
   });
-  el.addEventListener('pointerleave', () => { if (!_sightDrag) _setSightHot(null); });
+  el.addEventListener('pointerleave', () => {
+    if (!_sightDrag) _setSightHot(null);
+    if (!_sightAdd) _setSightGhost(null);
+  });
   el.addEventListener('pointerdown', e => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     const hit = _sightHit(e);
-    if (!hit) return;
+    if (!hit) {
+      const z = _sightBlankZ(e);
+      if (z == null) return;
+      e.preventDefault();
+      el.setPointerCapture(e.pointerId);
+      _sightAdd = { x0: e.clientX, z };
+      _setSightGhost(z);
+      return;
+    }
     e.preventDefault();
+    _setSightGhost(null);
     el.setPointerCapture(e.pointerId);
     _sightDrag = { id: hit.id, top: _sightTop(), x0: e.clientX, moved: false };
     el.style.cursor = 'grabbing';
@@ -3055,6 +3127,12 @@ function attachSightHandlers() {
     }
   });
   const end = () => {
+    if (_sightAdd) {
+      const { z } = _sightAdd;
+      _sightAdd = null; _sightGhost = null;
+      _drawerAddPlaneAt(z);
+      return;
+    }
     if (!_sightDrag) return;
     const { id, moved } = _sightDrag;
     _sightDrag = null;
@@ -3063,7 +3141,10 @@ function attachSightHandlers() {
     if (!moved) _drawerCards.get(id)?.el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   };
   el.addEventListener('pointerup', end);
-  el.addEventListener('pointercancel', end);
+  el.addEventListener('pointercancel', () => {
+    if (_sightAdd) { _sightAdd = null; _setSightGhost(null); }   // a cancelled press adds nothing
+    end();
+  });
   new ResizeObserver(() => renderSightLine()).observe(el);
 }
 
@@ -3092,15 +3173,7 @@ function attachDrawerHandlers() {
   document.getElementById('sl-drawer-toggle').addEventListener('click', () => setDrawerOpen(!_drawerOpen));
   document.getElementById('sl-drawer-add').addEventListener('click', () => {
     const top = state.planes.length ? state.planes[state.planes.length - 1].z : 0;
-    const z   = Math.min(10, Math.round((top + 0.5) * 100) / 100);
-    if (state.planes.length >= MAX_PLANES) { showToast(`Limit reached: at most ${MAX_PLANES} planes.`); return; }
-    record();
-    if (z > state.zMax) setZMax(Math.ceil(z));
-    const pl = addPlane(z);
-    state.selectedPlaneId = pl.id;
-    state.selectedObjId   = null;
-    renderPlaneCard(); renderSidebar(); drawAxisCanvas(); redraw();
-    _drawerCards.get(pl.id)?.el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    _drawerAddPlaneAt(Math.min(10, Math.round((top + 0.5) * 100) / 100));
   });
 
   document.getElementById('sl-drawer-cards').addEventListener('click', e => {
@@ -3151,7 +3224,7 @@ function _updatePlaceHint() {
   if (state.addMode === 'select' || !_splitAllowed()) { el.hidden = true; return; }
   const pl   = selectedPlane();
   const what = { lens: 'Lens', source: 'Source', hybrid: 'Hybrid', mask: 'Mask' }[state.addMode] ?? 'Object';
-  el.textContent = pl ? `${what} → z ${pl.z.toFixed(2)}` : 'Add a plane first';
+  el.textContent = pl ? `${what} → z ${pl.z.toFixed(2)}` : (state.planes.length ? 'Select a plane first' : 'Add a plane first');
   el.dataset.type = state.addMode;
 }
 function _movePlaceHint(e) {
@@ -4271,9 +4344,9 @@ function attachImageHandlers(wrap) {
       return;
     }
 
-    // 3. Otherwise: deselect any ruler, then hit-test / drag objects. The main
-    //    image never creates objects (creation lives in the plane viewer), so
-    //    empty-space presses and pinches are always safe here.
+    // 3. Otherwise: deselect any ruler, then hit-test / drag objects. Objects are
+    //    created here only with a placement tool armed (desktop); otherwise
+    //    empty-space presses select by box, swipe, or pinch.
     if (state.selectedRulerId) { state.selectedRulerId = null; updateRulerUI(); drawOverlay(); }
     const hit = hitTestImage(wrap, e);
     // With a placement tool armed (desktop), empty space places a new object on
@@ -4281,7 +4354,11 @@ function attachImageHandlers(wrap) {
     // and it can be dragged into place before release.
     if (!hit && state.addMode !== 'select' && _splitAllowed()) {
       const pl = selectedPlane();
-      if (!pl) { showToast('Add a plane first: + Plane in the scene drawer.'); return; }
+      if (!pl) {
+        showToast(state.planes.length ? 'Select a plane first: click its card in the scene drawer.'
+                                      : 'Add a plane first: + Plane in the scene drawer.');
+        return;
+      }
       e.preventDefault();
       wrap.setPointerCapture(e.pointerId);
       record();
@@ -4454,7 +4531,9 @@ function attachImageHandlers(wrap) {
     if (marq) {
       const { moved, additive } = marq;
       marq = null; state._marquee = null;
-      if (!moved && !additive) selectSingle(null, null);   // a plain click on empty space
+      // A plain click on empty space drops the object selection; the plane stays
+      // selected, as the drawer's controls and the placement tools work on it.
+      if (!moved && !additive) selectSingle(selectedPlane(), null);
       renderPlaneCard(); renderSidebar(); redraw();
       return;
     }
@@ -4620,11 +4699,12 @@ function renderPlaneCard() {
 const HIT_R = 10; // px desktop
 function hitRadius() { return window.innerWidth <= 640 ? 18 : HIT_R; }
 
-function attachPlaneCardHandlers(canvas, { getPlane = selectedPlane, swipe = true } = {}) {
+function attachPlaneCardHandlers(canvas, { getPlane = selectedPlane, swipe = true, drawer = false } = {}) {
   // 'idle' | 'hit-pending' | 'dragging' | 'add-pending' | 'add-dragging' | 'swiping'
   // The phone card always shows the selected plane; resolve it at pointerdown so
   // one persistent set of listeners serves every plane. A drawer card passes its
-  // own plane, and touching it selects that plane; drawer cards don't swipe.
+  // own plane, and touching it selects that plane; drawer cards don't swipe, and
+  // hold the drawer's card layout from press to release (_drawerHold).
   let istate  = 'idle';
   let hitObj  = null;
   let plane   = null;
@@ -4634,8 +4714,24 @@ function attachPlaneCardHandlers(canvas, { getPlane = selectedPlane, swipe = tru
   const DRAG_THRESH = 3;  // px — object-drag / create-drag threshold (mouse)
   const SWIPE_SLOP  = 10; // px — touch: moving beyond this becomes a plane swipe
   const SWIPE_MIN   = 36; // px — horizontal travel needed to switch planes
+  const hold = on => {
+    if (!drawer || _drawerHold === on) return;
+    _drawerHold = on;
+    if (!on) renderDrawer();   // open the card of a plane selected by the press
+  };
+  // End the gesture without its click actions (placing, deselecting), keeping
+  // whatever a drag has already moved.
+  const finish = () => {
+    if (istate === 'dragging' || istate === 'add-dragging') { invalidateDistances(); redraw(); }
+    istate = 'idle'; hitObj = null; plane = null;
+    canvas.style.cursor = addCursor();
+    hold(false);
+  };
 
   canvas.addEventListener('pointermove', e => {
+    // A release this canvas never saw (its pointer capture was lost) would leave
+    // the gesture running, dragging an object with no button down.
+    if (istate !== 'idle' && e.pointerType === 'mouse' && !(e.buttons & 1)) finish();
     if (istate === 'idle') {
       const selPl = getPlane();
       canvas.style.cursor = selPl && hitTestPlane(selPl, canvas, e) ? 'grab' : addCursor();
@@ -4705,6 +4801,7 @@ function attachPlaneCardHandlers(canvas, { getPlane = selectedPlane, swipe = tru
     if (!plane) return;
     e.preventDefault();
     canvas.setPointerCapture(e.pointerId);
+    hold(true);
     const touch = e.pointerType === 'touch' || e.pointerType === 'pen';
     const pos   = canvasToArcsec(canvas, e);
     hitObj      = hitTestPlane(plane, canvas, e);
@@ -4717,6 +4814,7 @@ function attachPlaneCardHandlers(canvas, { getPlane = selectedPlane, swipe = tru
       if (!toggleSelected(plane, hitObj)) {
         istate = 'idle'; hitObj = null;
         renderPlaneCard(); renderSidebar(); redraw();
+        hold(false);
         return;
       }
       group = _groupStart();
@@ -4746,7 +4844,8 @@ function attachPlaneCardHandlers(canvas, { getPlane = selectedPlane, swipe = tru
     }
   });
 
-  canvas.addEventListener('pointercancel', () => { istate = 'idle'; hitObj = null; plane = null; canvas.style.cursor = addCursor(); });
+  canvas.addEventListener('pointercancel', finish);
+  canvas.addEventListener('lostpointercapture', () => { if (istate !== 'idle') finish(); });
 
   canvas.addEventListener('pointerup', e => {
     if (istate === 'swiping') {
@@ -4773,6 +4872,7 @@ function attachPlaneCardHandlers(canvas, { getPlane = selectedPlane, swipe = tru
       renderPlaneCard(); renderSidebar(); redraw();
     }
     istate = 'idle'; hitObj = null; plane = null;
+    hold(false);
     const selPl = getPlane();
     canvas.style.cursor = selPl && hitTestPlane(selPl, canvas, e) ? 'grab' : addCursor();
   });
@@ -4847,7 +4947,7 @@ function _installBackground(img, name, src) {
   state.bgAngSize = state.fov;   // sky-lock reference: identical framing at this FOV
   state.bgNatW    = iw;
   state.bgNatH    = ih;
-  if (state.vizMode === 9) seedBgPixel();
+  if (_delensShowing()) seedBgPixel();
   renderer?.setBackdrop(cvs);
   syncBackdrop();
   renderSidebar(); redraw();
@@ -4992,6 +5092,11 @@ function _bgImpliedPixel() {
   const A = state.bgAngSize > 0 ? state.bgAngSize : state.fov;
   const p = A * z / Math.sqrt(sx * state.bgNatW * sy * state.bgNatH);
   return _clampNum(+p.toPrecision(4), BG_PIXEL_MIN, BG_PIXEL_MAX, 0);
+}
+
+// Whether some pane shows the delensed view (on phones, the one view shown).
+function _delensShowing() {
+  return _isSplit() ? [0, 1].some(i => _paneMode(i) === 9) : state.vizMode === 9;
 }
 
 // The delensed view maps image pixels to angles, so it needs a pixel scale. One the
@@ -5702,9 +5807,9 @@ function _refreshInstrReadout() {
 }
 
 // ── View tab: Delensed Image section ─────────────────────────────────────────
-// Shown in the delensed view (vizMode 9) only. Its one control is the background
-// image's pixel scale, which fixes the angle each image pixel subtends; the image
-// itself is loaded in the Background section.
+// Shown in the delensed view (vizMode 9) only: notes on what the view needs and
+// how many masks are on. The picture and its pixel scale, which fixes the angle
+// each image pixel subtends, are set in the Background section.
 function delensSectionHtml() {
   const has = !!state.bgCanvas;
   let note = '';
@@ -5721,17 +5826,12 @@ function delensSectionHtml() {
           ${infoSection('sl-delens-info', `
             Each pixel of the <b>Background</b> image is traced through the lens model to the source plane at <b>z<sub>s</sub> ref</b> and painted where its light came from. Where several images of the same point overlap they are averaged, weighted by magnification, so a more magnified image (which samples the source more finely) counts for more.<br><br>
             With the right lens model the images line up into a single source. With a wrong one you see offset copies: move or reshape the lenses here and watch them merge. <b>Caustics</b> (<b>C</b>) can be drawn on top.<br><br>
-            <b>Pixel scale</b>: arcseconds per pixel of the image as supplied. It also places the picture on the sky in the lensed-image view, so the model you line up against the arcs there is the one delensed here. It starts at the scale that matches the image's framing when it was loaded.<br><br>
+            <b>Pixel scale</b>, set under <b>Background</b>: arcseconds per pixel of the image as supplied. It also places the picture on the sky in the lensed-image view, so the model you line up against the arcs there is the one delensed here. It starts at the scale that matches the image's framing when this view opens.<br><br>
             <b>Masks</b> (the <b>M</b> tool in the plane viewer, key <b>4</b>) cut elliptical patches out of the picture before it is delensed. Light from the lens galaxy is otherwise traced back like everything else and spread over the source plane; mask it out. Their outlines show over the picture in the <b>Lensed image</b> view.<br><br>
             The Background section's <b>Brightness</b> scales the delensed picture too.`)}
         </div>
         <div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
-          <div class="sl-global-input">
-            <label title="Arcseconds per pixel of the background image as supplied">Pixel scale</label>
-            <input type="number" class="sl-scrub" id="sl-delens-px" style="width:96px" min="${BG_PIXEL_MIN}" max="${BG_PIXEL_MAX}" step="${_numStep(state.bgPixel || 0.05)}" value="${has && state.bgPixel > 0 ? state.bgPixel : ''}" ${has ? '' : 'disabled'}>
-            <span class="sl-unit">″/px</span>
-          </div>
-          <p class="sl-muted-note" id="sl-delens-readout" style="margin:4px 0 0">${delensReadoutHtml()}</p>
+          ${has ? `<p class="sl-muted-note" style="margin:0">Pixel scale <b id="sl-delens-pxval">${+state.bgPixel.toPrecision(4)}″/px</b>, set under <b>Background</b>.</p>` : ''}
           <p class="sl-muted-note" style="margin:6px 0 0">${delensMaskNote()}</p>
           ${note ? `<p class="sl-muted-note" style="margin:6px 0 0">${note}</p>` : ''}
         </div>
@@ -5747,18 +5847,20 @@ function delensMaskNote() {
   return `${n} mask${n > 1 ? 's' : ''} cutting the picture.${over}`;
 }
 
-function delensReadoutHtml() {
+// The Background section's line under Pixel scale: the picture's size on the sky,
+// or what frames it while it has no scale.
+function bgPixelReadoutHtml() {
   const sky = bgSkySize();
-  if (!sky) return '';
-  return `${state.bgNatW} × ${state.bgNatH} px, so ${sky[0].toFixed(2)}″ × ${sky[1].toFixed(2)}″ on the sky`;
+  if (!sky) return 'None: Fit, Zoom and Offset frame the picture. Give it one to place it on the sky.';
+  return `${state.bgNatW} × ${state.bgNatH} px, so ${sky[0].toFixed(2)}″ × ${sky[1].toFixed(2)}″ on the sky, centred on the axis. Fit, Zoom and Offset are off while it has one.`;
 }
 
-// Refresh it without rebuilding the panel, so it stays live under a scrub.
+// Refresh the readouts without rebuilding the panel, so they stay live under a scrub.
 function _refreshDelensReadout() {
-  const el = document.getElementById('sl-delens-readout');
-  if (el) el.innerHTML = delensReadoutHtml();
-  const bg = document.getElementById('sl-bg-pxnote');   // the Background section's note
-  if (bg) bg.textContent = `${+state.bgPixel.toPrecision(4)}″/px`;
+  const el = document.getElementById('sl-bg-pxread');
+  if (el) el.innerHTML = bgPixelReadoutHtml();
+  const dv = document.getElementById('sl-delens-pxval');   // the Delensed Image section's note
+  if (dv) dv.textContent = `${+state.bgPixel.toPrecision(4)}″/px`;
 }
 
 // ── View tab: Background image section ───────────────────────────────────────
@@ -5831,6 +5933,7 @@ function backgroundSectionHtml() {
   const cal  = !!bgSkySize();
   const fdis = has && !cal ? '' : 'disabled';
   const delensView = state.vizMode === 9 && !state.lineArt;
+  const delensOn   = _delensShowing();   // then it cannot do without a pixel scale
   // A loaded image that isn't currently visible: say why rather than looking broken.
   const inertNote = !has || bgImageActive() ? ''
     : delensView     ? 'This view delenses it into the source plane (see <b>Delensed Image</b> in the view settings).'
@@ -5849,7 +5952,7 @@ function backgroundSectionHtml() {
             The empty field around the picture (and the margins a <b>Contain</b> fit leaves over) is the <b>Field</b> color, set under <b>Colors</b>.<br><br>
             <b>Fit</b>: the image panel is square. <b>Cover</b> fills it and crops the long axis, <b>Contain</b> fits the whole image and leaves the rest empty, <b>Stretch</b> distorts it to the square, <b>Tile</b> fits it and mirror-repeats to fill.<br><br>
             <b>Zoom</b> and <b>Offset X / Y</b> then frame it by hand (offsets are in half-panel widths). <b>Brightness</b> fades the picture toward the empty field (0) or past its supplied brightness (above 1), and affects the backdrop only. <b>Zoom with FOV</b> pins the backdrop to the sky instead of the viewport, so zooming the field magnifies it too.<br><br>
-            A <b>pixel scale</b>, set in the <b>Delensed image</b> view (<b>U</b>), replaces all of that framing: the picture is then placed on the sky at that many arcseconds per pixel, centred on the axis, in every view.<br><br>
+            A <b>Pixel scale</b> (arcseconds per pixel of the image as supplied) replaces all of that framing: the picture is then placed on the sky at that scale, centred on the axis, in every view. The <b>Delensed image</b> view (<b>U</b>) needs one, and when it opens it gives a picture without one the scale its framing implies.<br><br>
             The eye button takes the picture off the plot without unloading it. Config files save the framing, and the file name only for the images shipped with the site (as the <b>Image recreation</b> preset does); a picture you upload yourself is not saved.`)}
         </div>
         ${_open(_bgExpanded) ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
@@ -5860,7 +5963,12 @@ function backgroundSectionHtml() {
           </div>
           ${has ? `<div class="sl-bg-file" title="${_escHtml(state.bgName)}">${_escHtml(state.bgName)} · ${state.bgCanvas.width}×${state.bgCanvas.height}</div>` : ''}
           ${inertNote ? `<p class="sl-muted-note" style="margin:6px 0 0">${inertNote}</p>` : ''}
-          ${cal ? `<p class="sl-muted-note" style="margin:6px 0 0">Placed on the sky at <b id="sl-bg-pxnote">${+state.bgPixel.toPrecision(4)}″/px</b>, its pixel scale, centred on the axis. Fit, Zoom and Offset are off while it has one.${delensView ? '' : ` <button id="sl-bg-uncal" type="button" style="font-size:11px;background:none;border:none;color:var(--muted);text-decoration:underline;cursor:pointer;padding:0">Use Fit framing</button>`}</p>` : ''}
+          ${has ? `<div class="sl-global-input" style="margin-top:8px">
+            <label title="Arcseconds per pixel of the background image as supplied. With one, the picture is placed on the sky at that scale, centred on the axis, in every view.">Pixel scale</label>
+            <input type="number" class="sl-scrub" id="sl-bg-px" style="width:96px" min="${BG_PIXEL_MIN}" max="${BG_PIXEL_MAX}" step="${_numStep(state.bgPixel || 0.05)}" value="${state.bgPixel > 0 ? state.bgPixel : ''}" placeholder="none">
+            <span class="sl-unit">″/px</span>
+          </div>
+          <p class="sl-muted-note" style="margin:4px 0 0"><span id="sl-bg-pxread">${bgPixelReadoutHtml()}</span>${cal && !delensOn ? ` <button id="sl-bg-uncal" type="button" style="font-size:11px;background:none;border:none;color:var(--muted);text-decoration:underline;cursor:pointer;padding:0">Use Fit framing</button>` : ''}</p>` : ''}
           <div class="sl-global-input" style="margin-top:8px">
             <label>Fit</label>
             <select id="sl-bg-fit" style="flex:1 1 auto;min-width:0" ${fdis}>
@@ -6302,20 +6410,6 @@ function renderViewPanel() {
     state.imageNumberSize    = CONFIG_DEFAULTS.imageNumberSize;
     renderSidebar(); redraw();
   });
-  // Delensed Image section: the background image's pixel scale.
-  const _dpxEl = document.getElementById('sl-delens-px');
-  if (_dpxEl) {
-    const apply = (v) => {
-      if (!isFinite(v) || v <= 0) return;
-      v = Math.min(BG_PIXEL_MAX, Math.max(BG_PIXEL_MIN, v));
-      _dpxEl.value = v;
-      state.bgPixel = v;
-      _refreshDelensReadout();
-      redraw();
-    };
-    _dpxEl.addEventListener('change', e => apply(parseFloat(e.target.value)));
-    _attachScrub(_dpxEl, { lo: BG_PIXEL_MIN, hi: BG_PIXEL_MAX, onChange: apply });
-  }
   document.getElementById('sl-fermat-use-src')?.addEventListener('change', e => {
     state.fermatUseSourcePos = e.target.checked;
     renderSidebar(); redraw();
@@ -6365,6 +6459,34 @@ function renderViewPanel() {
     state.bgPixel = 0;   // the pixel scale was this picture's; the next one starts without
     clearBackgroundImage();
   });
+  // Pixel scale. The readouts update in place; the first scale also switches the
+  // framing controls off, which needs the panel rebuilt (after a scrub, on release,
+  // as a rebuild mid-scrub would drop the box from under the pointer).
+  const _bpxEl = document.getElementById('sl-bg-px');
+  if (_bpxEl) {
+    const apply = (v) => {
+      if (!isFinite(v) || v <= 0) return false;
+      v = Math.min(BG_PIXEL_MAX, Math.max(BG_PIXEL_MIN, v));
+      const was = state.bgPixel > 0;
+      _bpxEl.value = v;
+      state.bgPixel = v;
+      _refreshDelensReadout();
+      redraw();
+      return !was;
+    };
+    _bpxEl.addEventListener('change', e => {
+      // An emptied box goes back to Fit framing, unless the delensed view needs it.
+      if (e.target.value.trim() === '') {
+        if (!_delensShowing()) state.bgPixel = 0;
+        renderSidebar(); redraw();
+        return;
+      }
+      if (apply(parseFloat(e.target.value))) renderSidebar();
+    });
+    _attachScrub(_bpxEl, { lo: BG_PIXEL_MIN, hi: BG_PIXEL_MAX, onChange: v => {
+      if (apply(v)) window.addEventListener('pointerup', () => renderSidebar(), { once: true });
+    } });
+  }
   document.getElementById('sl-bg-uncal')?.addEventListener('click', () => {
     state.bgPixel = 0;
     renderSidebar(); redraw();
@@ -6419,7 +6541,7 @@ function renderViewPanel() {
     for (const k of ['bgFit', 'bgZoom', 'bgOffX', 'bgOffY', 'bgBright', 'bgSkyLock', 'bgHidden', 'bgPixel'])
       state[k] = CONFIG_DEFAULTS[k];
     state.bgAngSize = state.fov;
-    if (state.vizMode === 9) seedBgPixel();   // that view cannot do without one
+    if (_delensShowing()) seedBgPixel();   // that view cannot do without one
     renderSidebar(); redraw();
   });
 }
@@ -9056,7 +9178,7 @@ const TOUR_STEPS = [
     onEnter: () => { _tourOpenPlaneSetup(); if (!_drawerOpen) setDrawerOpen(true); },
     arrow: 'above',
     label: 'Scene drawer',
-    text: 'The drawer holds your line of sight. The strip in its header runs from the observer (the circle at its left) out in redshift, with a mark for each plane at its z: drag a mark to move that plane, and point at one to find its card. Below are the planes themselves, in order of redshift, each with a viewer showing the true positions of its objects. Click a card to select its plane, add a plane behind the farthest with <b>+ Plane</b>, and use the chevron to tuck the drawer away when you only want to look.',
+    text: 'The drawer holds your line of sight. The strip in its header runs from the observer (the circle at its left) out in redshift, with a mark for each plane at its z: drag a mark to move that plane, point at one to find its card, and click a blank stretch to add a plane at that redshift. Below are the planes themselves, in order of redshift, each with a viewer showing the true positions of its objects. Click a card to select its plane, add a plane behind the farthest with <b>+ Plane</b>, and use the chevron to tuck the drawer away when you only want to look.',
   },
   {
     target: '#sl-toolcol',

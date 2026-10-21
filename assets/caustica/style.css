@@ -2679,6 +2679,15 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
   .sl-sight-axis { stroke: var(--hairline); stroke-width: 1.5; fill: none; }
   .sl-sight-tick { stroke: var(--muted); stroke-opacity: 0.55; stroke-width: 1; }
   .sl-sight-ring { fill: none; stroke-width: 1.4; }
+  .sl-sight-ghost path { fill: none; stroke: currentColor; stroke-width: 1.2; stroke-dasharray: 2 2; }
+  .sl-sight-ghost text {
+    fill: var(--fg-soft);
+    font: 10.5px system-ui, -apple-system, sans-serif;
+    font-variant-numeric: tabular-nums;
+    paint-order: stroke;
+    stroke: var(--bg);
+    stroke-width: 3px;
+  }
 
   .sl-drawer-cards {
     display: flex;
@@ -2711,8 +2720,8 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
     cursor: default;
   }
   .sl-dcard-side { display: none; }
-  .sl-dcard-sel .sl-dcard-side  { display: flex; flex-direction: column; width: 84px; min-width: 0; }
-  .sl-dcard-sel .sl-dcard-zlabel { display: none; }
+  .sl-dcard-open .sl-dcard-side  { display: flex; flex-direction: column; width: 84px; min-width: 0; }
+  .sl-dcard-open .sl-dcard-zlabel { display: none; }
 
   .sl-dcard-view { position: relative; flex: 0 0 auto; }
   .sl-dcard-canvas {
