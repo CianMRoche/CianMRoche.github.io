@@ -2064,7 +2064,7 @@ function buildDOM() {
           <div class="sl-drawer-hdr">
             <span class="sl-drawer-title">Scene</span>
             <div class="sl-sight" id="sl-sight" role="img" aria-label="Line of sight: the observer, then each plane at its redshift. Drag a mark to move its plane."></div>
-            <label class="sl-sight-zmax" title="Far end of the redshift strip. Type a value, or drag sideways on the box to scrub.">z<sub>max</sub><input type="number" id="sl-drawer-zmax" min="0.1" max="10" step="0.1" aria-label="Maximum redshift of the strip"></label>
+            <label class="sl-sight-zmax" title="Far end of the redshift strip. Type a value, or drag sideways on the box to scrub.">z<sub>max</sub><input type="number" id="sl-drawer-zmax" min="0.1" max="10" step="0.01" aria-label="Maximum redshift of the strip"></label>
             <button class="sl-drawer-btn" id="sl-drawer-add" type="button" title="Add a plane behind the farthest one">+ Plane</button>
             <button class="sl-drawer-toggle" id="sl-drawer-toggle" type="button" title="Show or tuck away the scene drawer" aria-label="Show or tuck away the scene drawer" aria-expanded="true">
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
@@ -2297,9 +2297,9 @@ function attachHandlers() {
   _attachScrub(_zmaxEl, { lo: 0.1, hi: 10, onChange: setZMax });
   const _dzmaxEl = document.getElementById('sl-drawer-zmax');
   if (_dzmaxEl) {
-    _dzmaxEl.value = state.zMax;
+    _dzmaxEl.value = state.zMax.toFixed(2);
     _dzmaxEl.addEventListener('change', e => setZMax(parseFloat(e.target.value)));
-    _attachScrub(_dzmaxEl, { lo: 0.1, hi: 10, onChange: setZMax });
+    _attachScrub(_dzmaxEl, { lo: 0.1, hi: 10, step: 0.01, onChange: setZMax });
   }
 
   // Overlay chips: quick canvas-side toggles for the same state as the View tab.
@@ -2876,11 +2876,11 @@ function _makeDrawerCard(pl) {
 function setZMax(v) {
   if (!isFinite(v) || v <= 0) return;
   const far = state.planes.reduce((m, p) => Math.max(m, p.z), 0);
-  state.zMax = Math.min(10, Math.max(v, Math.ceil(far * 10) / 10, 0.1));
-  for (const id of ['sl-zmax', 'sl-drawer-zmax']) {
-    const el = document.getElementById(id);
-    if (el && document.activeElement !== el) el.value = +state.zMax.toFixed(2);
-  }
+  state.zMax = Math.min(10, Math.max(Math.round(v * 100) / 100, Math.ceil(far * 100) / 100, 0.1));
+  const zm = document.getElementById('sl-zmax');
+  if (zm && document.activeElement !== zm) zm.value = +state.zMax.toFixed(2);
+  const dz = document.getElementById('sl-drawer-zmax');
+  if (dz && document.activeElement !== dz) dz.value = state.zMax.toFixed(2);
   drawAxisCanvas(); renderSightLine();
 }
 
@@ -2942,7 +2942,7 @@ function renderDrawer() {
     host.appendChild(empty);
   } else empty?.remove();
   const dz = document.getElementById('sl-drawer-zmax');
-  if (dz && document.activeElement !== dz) dz.value = +state.zMax.toFixed(2);
+  if (dz && document.activeElement !== dz) dz.value = state.zMax.toFixed(2);
   renderSightLine();
   _updatePlaceHint();
 }
