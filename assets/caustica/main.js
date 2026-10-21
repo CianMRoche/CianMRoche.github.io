@@ -1788,7 +1788,7 @@ function buildDOM() {
         </div>
 <a class="sl-demo-btn sl-topbar-overflow" href="/caustica-documentation/" target="_blank" rel="noopener">Docs</a>
         <button class="sl-demo-btn sl-topbar-overflow" id="sl-demo" title="Walk through a tour of the controls">Tour</button>
-        <button class="sl-demo-btn sl-topbar-overflow" id="sl-kbd-btn" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
+        <button class="sl-demo-btn sl-topbar-overflow" id="sl-kbd-btn" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts"><span class="sl-kbd-long">Shortcuts</span><span class="sl-kbd-short">?</span></button>
         <button class="sl-theme-btn" id="sl-theme" title="Toggle dark mode (D)" aria-label="Toggle dark mode">
           <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
@@ -2689,14 +2689,12 @@ const INSPECTOR_CATS = [
     icon: _catIcon('<path d="M8 2.5L14 13H2z"/>') },
   { key: 'view',       tab: 'view',    label: 'View: field, overlays and the active view\'s settings',
     icon: _catIcon('<circle cx="8" cy="8" r="6"/><path d="M8 2a6 6 0 010 12z" fill="currentColor"/>') },
-  { key: 'colors',     tab: 'view',    label: 'Colors: color map, field, annotations, line art',
+  { key: 'colors',     tab: 'view',    label: 'Colors: color map, field, annotations, and line art',
     icon: _catIcon('<path d="M8 2a6 6 0 100 12c.9 0 1.4-.6 1.4-1.3 0-.8-.7-1.1-.7-1.8 0-.7.6-1.2 1.3-1.2H11.4A2.6 2.6 0 0014 7.1C14 4.2 11.3 2 8 2z"/><circle cx="5" cy="7.2" r=".9" fill="currentColor" stroke="none"/><circle cx="7.4" cy="4.8" r=".9" fill="currentColor" stroke="none"/><circle cx="10.4" cy="5.4" r=".9" fill="currentColor" stroke="none"/>') },
   { key: 'background', tab: 'view',    label: 'Background image',
     icon: _catIcon('<rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 11l4-4 3 3 2-2 3 3"/>') },
   { key: 'instrument', tab: 'view',    label: 'Instrument',
     icon: _catIcon('<rect x="2.5" y="2.5" width="11" height="11"/><path d="M2.5 6.2h11M2.5 9.8h11M6.2 2.5v11M9.8 2.5v11"/>') },
-  { key: 'lineart',    tab: 'view',    label: 'Line art',
-    icon: _catIcon('<path d="M2 12c2.5-6 5-8 6-4s3.5 2 6-4"/>') },
   { key: 'export',     tab: 'export',  label: 'Export',
     icon: _catIcon('<path d="M8 2v8M4.5 6.5L8 10l3.5-3.5M2.5 13.5h11"/>') },
   // The gear the old rail tab bar used.
@@ -2704,7 +2702,7 @@ const INSPECTOR_CATS = [
     icon: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>' },
 ];
 const _CAT_TITLES = { object: 'Object', view: 'View', colors: 'Colors', background: 'Background image',
-                      instrument: 'Instrument', lineart: 'Line art', export: 'Export', settings: 'Settings' };
+                      instrument: 'Instrument', export: 'Export', settings: 'Settings' };
 const _VIZ_NAMES  = { 0: 'Lensed image', 1: 'Convergence κ', 2: 'Shear γ', 3: 'Magnification |μ|', 5: 'Deflection |α|',
                       6: 'Fermat potential φ', 7: 'Parity', 8: 'Image number', 9: 'Delensed image' };
 let activeCat = 'object';
@@ -3706,33 +3704,24 @@ function updateOverlayChips() {
 // Reference-plane chip under the viz dropdown: shows which source redshift the
 // quantity maps and critical curves refer to. Hidden in plain lensed-image view
 // with no curves shown.
-// Each pane's reference-redshift chip, for that pane's view. On a source-plane
-// view it says so, in the source colour, and the pane is framed in that colour.
+// Each pane's reference-redshift chip, for that pane's view.
 function updateZsChip() {
-  _withPane(0, () => _updateZsChipFor('sl-zs-chip', 'sl-image-wrap'));
+  _withPane(0, () => _updateZsChipFor('sl-zs-chip'));
   const two = _isSplit() && _paneMode(1) != null;
-  if (two) _withPane(1, () => _updateZsChipFor('sl-zs-chip2', 'sl-image-wrap2'));
+  if (two) _withPane(1, () => _updateZsChipFor('sl-zs-chip2'));
   else {
     const c2 = document.getElementById('sl-zs-chip2'); if (c2) c2.style.display = 'none';
-    document.getElementById('sl-image-wrap2')?.classList.remove('sl-src-view');
-    document.querySelector('.sl-pane[data-pane="1"]')?.classList.remove('sl-pane-src');
   }
 }
-function _updateZsChipFor(id, wrapId) {
-  const srcView = isSourcePlaneView(state.vizMode);
-  const wrap = document.getElementById(wrapId);
-  wrap?.classList.toggle('sl-src-view', srcView);
-  wrap?.closest('.sl-pane')?.classList.toggle('sl-pane-src', srcView);   // tab and frame in the source colour
+function _updateZsChipFor(id) {
   const chip = document.getElementById(id);
   if (!chip) return;
-  const src      = srcView && !state.lineArt;
   const relevant = state.vizMode !== 0 || state.showCritCurves || state.showCaustics;
   const hasPlane = state.planes.length > 0;
-  chip.classList.toggle('sl-zs-src', src);
   if (!relevant || !hasPlane || state.hideOverlays) { chip.style.display = 'none'; return; }
   const auto = state.critZs === null;
   chip.style.display = '';
-  chip.textContent = `${src ? 'Source plane · ' : ''}zₛ = ${effectiveCritZs().toFixed(2)}${auto ? ' (auto)' : ''}`;
+  chip.textContent = `zₛ = ${effectiveCritZs().toFixed(2)}${auto ? ' (auto)' : ''}`;
 }
 
 // Set the visualization mode and sync the dropdown, colorbar, and canvas class.
@@ -5569,15 +5558,30 @@ function fieldColorSectionHtml() {
       </div>`;
 }
 
-// Colors: the line-art palette and its per-role overrides (used while line art is on).
+// Colors: the line-art switch, and while it is on its fill and smoothing options,
+// palette and per-role colors.
 function lineArtColorsSectionHtml() {
   return `
       <div class="sl-hybrid-section">
         <div class="sl-view-hdr">
           <span class="sl-panel-title" style="flex:1">Line art</span>
+          ${infoSection('sl-lineart-info', `
+            Flat vector line-art of the lensing structure, in place of the rendered image. Only <b>uniform-disc</b> and <b>point</b> sources are drawn; other source types are ignored. Its colors come from the <b>Palette</b>, and each can be changed after; the scale bar, legend, ruler and other annotations take the <b>Annotations</b> ink above.`)}
+          <label style="display:flex;align-items:center;cursor:pointer;margin:0 0 0 4px" title="Vector line-art render mode">
+            <input type="checkbox" id="sl-lineart" ${state.lineArt?'checked':''} style="margin:0">
+          </label>
         </div>
+        ${state.lineArt ? `
         <div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
-          ${state.lineArt ? '' : '<p class="sl-muted-note" style="margin:0 0 6px">Used when line art is on.</p>'}
+          <div class="sl-checkbox-row">
+            <label><input type="checkbox" id="sl-lineart-fill" ${state.lineArtFill?'checked':''}> Fill images</label>
+            <label title="Curvature-aware smoothing: rounds off sampling staircase while preserving genuine cusps"><input type="checkbox" id="sl-lineart-smooth" ${state.lineArtSmooth?'checked':''}> Smooth</label>
+          </div>
+          <div class="sl-global-input" title="Opacity of the lensed-image fill (0 = clear, 1 = solid). Drag left/right to scrub.">
+            <label>Fill alpha</label>
+            <input type="number" class="sl-la-num sl-scrub" id="sl-lineart-fillalpha" min="0" max="1" step="0.05"
+                   value="${state.lineArtFillAlpha}" ${state.lineArtFill ? '' : 'disabled'}>
+          </div>
           <div class="sl-global-input">
             <label>Palette</label>
             <select id="sl-lineart-palette" style="flex:1 1 auto;min-width:0">
@@ -5589,7 +5593,7 @@ function lineArtColorsSectionHtml() {
             ${LINE_ART_ROLES.map(([role, label]) =>
               `<label class="sl-la-color"><span>${label}</span><input type="color" data-la-color="${role}" value="${lineArtPalette()[role]}"></label>`).join('')}
           </div>
-        </div>
+        </div>` : ''}
       </div>`;
 }
 
@@ -5779,32 +5783,6 @@ function renderViewPanel() {
       </div>
 
       <div class="sl-cat" data-cat="instrument">${instrumentSectionHtml()}</div>
-
-      <div class="sl-cat" data-cat="lineart">
-      <div class="sl-hybrid-section" style="padding:5px 0">
-        <div class="sl-view-hdr" style="padding:0">
-          <span class="sl-panel-title" style="flex:1">Line art</span>
-          ${infoSection('sl-lineart-info', `
-            Flat vector line-art of the lensing structure. Only <b>uniform-disc</b> and <b>point</b> sources are drawn; other source types are ignored. Its palette and per-role colors are set under <b>Colors</b>, where <b>Annotations</b> sets the ink of the scale bar, legend, ruler and other annotations.`)}
-          <label style="display:flex;align-items:center;cursor:pointer;margin:0 0 0 4px" title="Vector line-art render mode">
-            <input type="checkbox" id="sl-lineart" ${state.lineArt?'checked':''} style="margin:0">
-          </label>
-        </div>
-        ${ state.lineArt ? `
-        <div class="sl-hybrid-body" style="display:block;padding:8px 2px 2px">
-          <div class="sl-checkbox-row">
-            <label><input type="checkbox" id="sl-lineart-fill" ${state.lineArtFill?'checked':''}> Fill images</label>
-            <label title="Curvature-aware smoothing: rounds off sampling staircase while preserving genuine cusps"><input type="checkbox" id="sl-lineart-smooth" ${state.lineArtSmooth?'checked':''}> Smooth</label>
-          </div>
-          <div class="sl-global-input" title="Opacity of the lensed-image fill (0 = clear, 1 = solid). Drag left/right to scrub.">
-            <label>Fill alpha</label>
-            <input type="number" class="sl-la-num sl-scrub" id="sl-lineart-fillalpha" min="0" max="1" step="0.05"
-                   value="${state.lineArtFillAlpha}" ${state.lineArtFill ? '' : 'disabled'}>
-          </div>
-          <p class="sl-muted-note" style="margin:6px 0 0">Its palette and colors are under <b>Colors</b>.</p>
-        </div>` : '' }
-      </div>
-      </div>
 
       <div class="sl-cat" data-cat="colors">
       ${vizModeHasScale(state.vizMode) ? `

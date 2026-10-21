@@ -2261,6 +2261,11 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
 
 /* ── Scene drawer layout (desktop, ≥641px) ────────────────────────────────── */
 .sl-desk-only { display: none; }
+.sl-kbd-short { display: none; }
+@media (max-width: 880px) {
+  .sl-kbd-long  { display: none; }
+  .sl-kbd-short { display: inline; }
+}
 /* The stage keeps the canvas with a view bar above it, the scene drawer sits
    below it, and the rail is driven by a vertical category switcher on the far
    right. Phones keep the timeline / plane card / tab bar layout above; these
@@ -2291,22 +2296,32 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
 
   /* View panes: one, or two side by side, each a tab strip over a square image.
      Folder tabs: the showing tab and its image share one outline, in the pane's
-     frame colour --fc (teal when focused beside another view, amber for a
-     source-plane view, a hairline otherwise). */
+     frame colour --fc (teal when focused beside another view, a hairline
+     otherwise). */
   .sl-stage { position: relative; padding: 8px 14px 10px; }
   .sl-panes { display: flex; justify-content: center; align-items: flex-start; gap: 14px; width: 100%; height: 100%; }
   .sl-pane { --fc: var(--hairline); --fw: 1px; display: flex; flex-direction: column; min-width: 0; }
-  .sl-pane-src { --fc: color-mix(in srgb, var(--src-color) 70%, transparent); }
   .sl-split .sl-pane-focus { --fc: var(--accent); --fw: 2px; }
-  .sl-split .sl-pane-focus.sl-pane-src { --fc: var(--src-color); }
+  .sl-pane.drop-into { --fc: var(--accent); --fw: 2px; }
   .sl-pane[data-pane="1"]:not([hidden]) { display: flex; }
   .sl-pane[hidden] { display: none; }
   .sl-image-wrap { width: min(100cqw, 100cqh - 36px); }
   .sl-split .sl-image-wrap { width: min((100cqw - 14px) / 2, 100cqh - 36px); }
-  .sl-pane .sl-image-wrap { border: var(--fw) solid var(--fc); }
+  /* The frame is drawn over the canvas rather than around it: as an element
+     border, the canvas clipped to its inner curve and its anti-aliased edge ate
+     into the line at the rounded corners. */
+  .sl-pane .sl-image-wrap { border: none; }
+  .sl-pane .sl-image-wrap::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    border: var(--fw) solid var(--fc);
+    border-radius: inherit;
+    pointer-events: none;
+  }
   /* Under a showing first tab the frame's corner is square, so the two join. */
   .sl-pane:has(.sl-tab.active:first-child) .sl-image-wrap { border-top-left-radius: 0; }
-  .sl-pane.drop-into .sl-image-wrap { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
   .sl-viz-chip, #sl-overlay-chips { display: none; }
   .sl-zs-chip { top: 8px; }
   /* No black behind the canvas: it showed through the anti-aliased rounded
@@ -2337,7 +2352,7 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
   /* The showing tab hangs over the frame's top edge by its border width, hiding
      the frame line beneath it so tab and image read as one shape. */
   .sl-tab.active {
-    z-index: 1;
+    z-index: 22;   /* over the frame line it hides */
     margin-bottom: calc(-1 * var(--fw));
     height: calc(32px + var(--fw));
     padding-bottom: var(--fw);
@@ -2351,7 +2366,7 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
   .sl-tab-caret { flex-shrink: 0; margin-left: -2px; color: var(--muted); }
   .sl-tab-blank .sl-tab-name { font-style: italic; color: var(--muted); }
   .sl-tab-add, .sl-tab-split, .sl-pane-chips { align-self: center; }
-  /* Source-plane views carry the source colour: on the tab, the frame and the z_s chip. */
+  /* A source-plane view says so on its tab. */
   .sl-tab-tag {
     flex-shrink: 0;
     padding: 0 5px;
@@ -2419,7 +2434,6 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
   .sl-rail .sl-mobile-only { display: none; }
   .sl-rail .sl-checkbox-row:not(:has(> label:not(.sl-mobile-only))) { display: none; }
   .sl-tab { padding-left: 10px; }
-  .sl-zs-chip.sl-zs-src { color: var(--src-color); border-color: color-mix(in srgb, var(--src-color) 60%, transparent); font-weight: 600; }
 
   /* A blank pane offers the views, grouped by the plane they show. */
   .sl-chooser {
@@ -2439,7 +2453,7 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
   .sl-chooser[hidden] { display: none; }
   .sl-chooser-title { font-size: 14px; font-weight: 600; color: var(--fg); }
   .sl-chooser-group { display: flex; flex-direction: column; gap: 2px; }
-  .sl-chooser-hdr, .sl-tab-menu-group { padding: 4px 8px 2px; font-size: 11px; font-weight: 600; color: var(--muted); }
+  .sl-chooser-hdr, .sl-tab-menu-group { padding: 6px 8px 2px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
   .sl-chooser-src .sl-chooser-hdr, .sl-tab-menu-group.sl-chooser-src { color: var(--src-color); }
   .sl-chooser button {
     display: flex;
@@ -2514,7 +2528,14 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
     background: var(--bg);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
   }
-  .sl-tab-menu-hdr { padding: 4px 8px 4px; font-size: 11px; color: var(--muted); }
+  .sl-tab-menu-hdr {
+    margin: 0 -4px 4px;
+    padding: 4px 12px 8px;
+    border-bottom: 1px solid var(--hairline);
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--fg);
+  }
   .sl-tab-menu button {
     display: flex;
     align-items: center;
@@ -2543,8 +2564,7 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
   #sl-tab-view[data-cat="view"]       .sl-cat:not([data-cat="view"]),
   #sl-tab-view[data-cat="colors"]     .sl-cat:not([data-cat="colors"]),
   #sl-tab-view[data-cat="background"] .sl-cat:not([data-cat="background"]),
-  #sl-tab-view[data-cat="instrument"] .sl-cat:not([data-cat="instrument"]),
-  #sl-tab-view[data-cat="lineart"]    .sl-cat:not([data-cat="lineart"]) { display: none; }
+  #sl-tab-view[data-cat="instrument"] .sl-cat:not([data-cat="instrument"]) { display: none; }
 
   /* Category switcher. */
   .sl-switcher {
@@ -2741,6 +2761,7 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
     align-items: center;
     gap: 6px;
     padding: 50px 0 12px;
+    border-right: 1px solid var(--hairline);
     background: var(--bg);
   }
   .sl-tool-btn {
@@ -2797,8 +2818,7 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
   #sl-tab-view .sl-cat[data-cat="view"]:not(.sl-cat[data-cat="view"] ~ *) > .sl-hybrid-section:first-child,
   #sl-tab-view .sl-cat[data-cat="colors"]:not(.sl-cat[data-cat="colors"] ~ *) > :first-child,
   #sl-tab-view .sl-cat[data-cat="background"] > .sl-hybrid-section:first-child,
-  #sl-tab-view .sl-cat[data-cat="instrument"] > .sl-hybrid-section:first-child,
-  #sl-tab-view .sl-cat[data-cat="lineart"] > .sl-hybrid-section:first-child { margin-top: 0; }
+  #sl-tab-view .sl-cat[data-cat="instrument"] > .sl-hybrid-section:first-child { margin-top: 0; }
   .sl-rail .sl-hybrid-arrow { display: none; }
   .sl-rail .sl-hybrid-hdr { padding-left: 0; cursor: default; pointer-events: none; }
   .sl-rail .sl-hybrid-hdr > * { pointer-events: auto; }
@@ -2812,17 +2832,25 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
   }
   .sl-rail .sl-hide-all-row { border-bottom: none; padding-bottom: 2px; margin-bottom: 12px; font-size: 12.5px; }
   .sl-desk-only { display: block; }
+  /* View: subtle dividers between its sections (Hide all overlays opens the
+     display group that follows it). */
+  #sl-tab-view .sl-cat[data-cat="view"] > .sl-hybrid-section,
+  #sl-tab-view .sl-cat[data-cat="view"] > .sl-hide-all-row {
+    border-top: 1px solid color-mix(in srgb, var(--hairline) 65%, transparent);
+    padding-top: 14px;
+    margin-top: 14px;
+  }
+  #sl-tab-view .sl-cat[data-cat="view"]:not(.sl-cat[data-cat="view"] ~ *) > .sl-hybrid-section:first-child { border-top: none; padding-top: 0; margin-top: 0; }
+  #sl-tab-view .sl-cat[data-cat="view"] > .sl-hide-all-row + .sl-hybrid-section { border-top: none; padding-top: 0; margin-top: 6px; }
   /* Panels that are one section, and the object panel, use that section's own
      header as the panel title (it carries the ⓘ and any switch). */
   .sl-sel-pre { display: none; }
   #sl-rail[data-cat="object"]:has(#sl-obj-panel .sl-panel-title-row) .sl-insp-title,
   #sl-rail[data-cat="background"] .sl-insp-title,
-  #sl-rail[data-cat="instrument"] .sl-insp-title,
-  #sl-rail[data-cat="lineart"] .sl-insp-title { display: none; }
+  #sl-rail[data-cat="instrument"] .sl-insp-title { display: none; }
   #sl-obj-panel .sl-panel > .sl-panel-title-row:first-child .sl-panel-title,
   #sl-tab-view .sl-cat[data-cat="background"] > .sl-hybrid-section:first-child .sl-panel-title,
-  #sl-tab-view .sl-cat[data-cat="instrument"] > .sl-hybrid-section:first-child .sl-panel-title,
-  #sl-tab-view .sl-cat[data-cat="lineart"] > .sl-hybrid-section:first-child .sl-panel-title { font-size: 14px; }
+  #sl-tab-view .sl-cat[data-cat="instrument"] > .sl-hybrid-section:first-child .sl-panel-title { font-size: 14px; }
 }
 
 @media (min-width: 641px) and (hover: hover) {
