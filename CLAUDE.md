@@ -28,7 +28,7 @@ Cian Roche's personal academic website, forked from [academicpages](https://gith
 Standard Jekyll/minimal-mistakes layout:
 - `_pages/`: standalone pages (`about`, `research`, `side_projects`, `tutorials`, `community`, `ethics`, doc pages)
 - Collections `_publications/`, `_talks/`, `_teaching/`, `_portfolio/`, `_posts/`: each gets `output: true` and a default layout set in `_config.yml`
-- `_layouts/`: page templates. `doc.html` is a custom documentation layout (sticky sidebar TOC, callout styles `doc-key`/`doc-note`/`doc-warning`/`doc-cyan`/`doc-figrow`/`doc-figpair`) used by `_pages/caustica-documentation.md`
+- `_layouts/`: page templates. `doc.html` is the Read the Docs-style documentation layout (page tree with the current page's sections, search over `/caustica-documentation/search.json`, breadcrumbs with an Edit on GitHub link, previous / next links; callout styles `doc-key`/`doc-note`/`doc-warning`/`doc-cyan`/`doc-figrow`/`doc-figpair`) used by the `_caustica_docs/` collection
 - `_includes/`, `_sass/`: theme partials/styles inherited from minimal-mistakes
 - `_data/navigation.yml`: top nav links. `_data/authors.yml`, `_data/ui-text.yml`: theme data
 - `markdown_generator/` and `talkmap.py`/`talkmap.ipynb`: inherited academicpages helper scripts that scaffold `_publications`/`_talks` markdown from `.bib`/`.tsv` files, not part of the regular editing workflow
@@ -44,8 +44,8 @@ Several self-contained vanilla-JS apps live under `assets/`, each with its own `
   - `lens.js`: pure physics (cosmology, deflection models, critical-curve sampling), no DOM access
   - `renderer.js`: WebGL2 renderer; the multiplane lensing computation runs per-pixel in a single GLSL 300 es fragment shader
   - `main.js` (~4900 lines): app shell, covering `state`, DOM construction, event wiring, sidebar rendering, recording/animation, YAML config save/load
-  - Fully documented in `_pages/caustica-documentation.md`, including a "Code structure" section. Read it before making non-trivial changes here.
-  - Any change to Caustica's behavior, UI, physics, or code structure must be followed by a check of `_pages/caustica-documentation.md` for accuracy, and an update if it is now out of date. Treat this as a required step of the change, not an optional cleanup
+  - Fully documented in the `_caustica_docs/` collection (served at `/caustica-documentation/`, one page per section, ordered by each page's `order` front matter; `index.md` is the overview and quick start), including a "Code structure" page (`code-structure.md`). Read it before making non-trivial changes here. Cross-references between pages are written as `<a href="/caustica-documentation/<page>/">§N</a>`; `_data/caustica_docs_redirects.yml` maps the old single-page anchors to their new pages.
+  - Any change to Caustica's behavior, UI, physics, or code structure must be followed by a check of the docs pages in `_caustica_docs/` for accuracy, and an update if they are now out of date. Treat this as a required step of the change, not an optional cleanup
 - `assets/chi_by_eye/`: a chi-by-eye statistics intuition-building browser game (`main.js`, `plot.js`, `stats.js`, `round.js`, `sandbox.js`)
 - `assets/dark_matter_demo/`, `assets/lensing_demo/`: smaller single-file demos
 

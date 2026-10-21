@@ -1,6 +1,6 @@
 # Caustica documentation figures: capture checklist
 
-The docs page (`_pages/caustica-documentation.md`) references figures that live in
+The docs pages (`_caustica_docs/*.md`) reference figures that live in
 `/images/caustica-docs/`. Each figure has a **dark** and a **light** variant; the page shows
 whichever matches the active theme. Until both files exist, the figure renders as a neutral
 placeholder box (no broken page).

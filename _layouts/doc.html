@@ -6,51 +6,201 @@ layout: default
 
 <script>(function(){var t=localStorage.getItem('theme')||'dark';document.documentElement.setAttribute('data-theme',t);})();</script>
 
+{% comment %}
+Caustica documentation, laid out like Read the Docs: a page tree on the left
+(the current page expanded into its sections), search, breadcrumbs with an
+"Edit on GitHub" link, and previous / next links. The pages are the
+caustica_docs collection, ordered by their `order` front matter; the search
+index is /caustica-documentation/search.json (_pages/caustica-docs-search.json).
+{% endcomment %}
+{% assign docs = site.caustica_docs | sort: 'order' %}
+{% assign idx = 0 %}
+{% for d in docs %}{% if d.url == page.url %}{% assign idx = forloop.index0 %}{% endif %}{% endfor %}
+{% assign prev_i = idx | minus: 1 %}
+{% assign next_i = idx | plus: 1 %}
+
 <style>
 .doc-wrap {
   display: flex;
-  max-width: 1100px;
+  max-width: 1180px;
   margin: 0 auto;
-  padding: 32px 24px 80px;
-  gap: 48px;
+  padding: 28px 24px 80px;
+  gap: 44px;
   align-items: flex-start;
 }
+
+/* ── Left sidebar: brand, search, page tree ── */
 .doc-sidebar {
-  flex: 0 0 200px;
+  flex: 0 0 236px;
   position: sticky;
-  top: 80px;
-  max-height: calc(100vh - 120px);
+  top: 72px;
+  max-height: calc(100vh - 96px);
   overflow-y: auto;
   overflow-x: hidden;
+  font-size: 0.85rem;
+  padding-right: 4px;
+}
+.doc-brand {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1f2937;
+  text-decoration: none;
+}
+.doc-brand span { font-weight: 400; color: #6b7280; }
+html[data-theme="dark"] .doc-brand { color: #e6edf3; }
+html[data-theme="dark"] .doc-brand span { color: #8b949e; }
+
+.doc-search { position: relative; margin-bottom: 14px; }
+.doc-search input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 30px 6px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  color: #1f2937;
+  font: inherit;
+  font-size: 0.85rem;
+}
+html[data-theme="dark"] .doc-search input { background: #0d1117; border-color: #30363d; color: #e6edf3; }
+.doc-search input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.15); }
+html[data-theme="dark"] .doc-search input:focus { border-color: #7bbfcc; box-shadow: 0 0 0 3px rgba(123,191,204,0.18); }
+.doc-search-key {
+  position: absolute;
+  right: 8px;
+  top: 7px;
+  padding: 0 5px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  color: #6b7280;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  pointer-events: none;
+}
+html[data-theme="dark"] .doc-search-key { border-color: #30363d; color: #8b949e; }
+.doc-search-results {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 4px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+}
+html[data-theme="dark"] .doc-search-results { background: #0d1117; border-color: #30363d; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+.doc-search-results li { margin: 0; }
+.doc-search-results a {
+  display: block;
+  padding: 6px 8px;
+  border-radius: 6px;
+  color: inherit;
+  text-decoration: none;
+}
+.doc-search-results a.sel, .doc-search-results a:hover { background: #f3f4f6; }
+html[data-theme="dark"] .doc-search-results a.sel, html[data-theme="dark"] .doc-search-results a:hover { background: #1c2128; }
+.doc-search-results b { display: block; font-size: 0.82rem; color: #1f2937; }
+html[data-theme="dark"] .doc-search-results b { color: #e6edf3; }
+.doc-search-results small { display: block; color: #6b7280; font-size: 0.76rem; line-height: 1.35; }
+html[data-theme="dark"] .doc-search-results small { color: #8b949e; }
+.doc-search-results mark { background: rgba(37,99,235,0.15); color: inherit; border-radius: 2px; }
+html[data-theme="dark"] .doc-search-results mark { background: rgba(123,191,204,0.25); }
+.doc-search-empty { padding: 6px 8px; color: #6b7280; font-size: 0.8rem; }
+
+.doc-nav-details > summary {
+  display: none;
+  cursor: pointer;
+  font-weight: 600;
+  padding: 6px 0;
+}
+.doc-nav, .doc-nav-sub { list-style: none; margin: 0; padding: 0; }
+.doc-nav > li { margin: 0 0 1px; }
+.doc-nav a {
+  display: block;
+  padding: 5px 10px;
+  border-radius: 6px;
+  color: #4b5563;
+  text-decoration: none;
+  line-height: 1.35;
+}
+html[data-theme="dark"] .doc-nav a { color: #9da7b3; }
+.doc-nav a:hover { background: #f3f4f6; color: #1f2937; }
+html[data-theme="dark"] .doc-nav a:hover { background: #161b22; color: #e6edf3; }
+.doc-nav > li.current > a {
+  background: #eff4ff;
+  color: #1d4ed8;
+  font-weight: 600;
+}
+html[data-theme="dark"] .doc-nav > li.current > a { background: rgba(123,191,204,0.12); color: #7bbfcc; }
+.doc-nav-sub { margin: 2px 0 6px 12px; padding-left: 8px; border-left: 1px solid #e5e7eb; }
+html[data-theme="dark"] .doc-nav-sub { border-left-color: #30363d; }
+.doc-nav-sub a { padding: 3px 8px; font-size: 0.8rem; color: #6b7280; }
+html[data-theme="dark"] .doc-nav-sub a { color: #8b949e; }
+.doc-nav-sub a.active { color: #2563eb; font-weight: 500; }
+html[data-theme="dark"] .doc-nav-sub a.active { color: #7bbfcc; }
+.doc-open-app {
+  display: block;
+  margin-top: 16px;
+  padding: 7px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  color: #4b5563;
+  text-decoration: none;
   font-size: 0.82rem;
 }
-.doc-sidebar-title {
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: #6b7280;
-  margin-bottom: 10px;
-}
-html[data-theme="dark"] .doc-sidebar-title { color: #8b949e; }
-.doc-toc-list { list-style: none; padding: 0; margin: 0; }
-.doc-toc-list li { margin-bottom: 2px; }
-.doc-toc-list a {
-  display: block;
-  padding: 3px 0;
-  color: #6b7280;
-  text-decoration: none;
-  line-height: 1.4;
-  border-left: 2px solid transparent;
-  padding-left: 8px;
-}
-html[data-theme="dark"] .doc-toc-list a { color: #8b949e; }
-.doc-toc-list a:hover { color: #1f2937; border-left-color: #9ca3af; }
-html[data-theme="dark"] .doc-toc-list a:hover { color: #e6edf3; border-left-color: #6e7681; }
-.doc-toc-list a.active { color: #2563eb; border-left-color: #2563eb; font-weight: 500; }
-html[data-theme="dark"] .doc-toc-list a.active { color: #7bbfcc; border-left-color: #7bbfcc; }
-.doc-toc-list .toc-h3 a { padding-left: 20px; font-size: 0.78rem; }
+html[data-theme="dark"] .doc-open-app { border-color: #30363d; color: #9da7b3; }
+.doc-open-app:hover { color: #1f2937; border-color: #9ca3af; }
+html[data-theme="dark"] .doc-open-app:hover { color: #e6edf3; border-color: #6e7681; }
+
+/* ── Content column: breadcrumbs, the page, previous / next ── */
 .doc-content { flex: 1; min-width: 0; }
+.doc-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 0.82rem;
+  color: #6b7280;
+}
+html[data-theme="dark"] .doc-crumbs { color: #8b949e; }
+.doc-crumbs a { color: inherit; }
+.doc-crumbs .doc-edit { margin-left: auto; }
+.doc-content > h1 { margin-top: 0.2em; }
+.doc-pager {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 3.2em;
+  padding-top: 1.4em;
+  border-top: 1px solid #e5e7eb;
+}
+html[data-theme="dark"] .doc-pager { border-top-color: #30363d; }
+.doc-pager a {
+  display: flex;
+  flex-direction: column;
+  max-width: 48%;
+  padding: 10px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  color: #1f2937;
+  text-decoration: none;
+  font-weight: 600;
+}
+html[data-theme="dark"] .doc-pager a { border-color: #30363d; color: #e6edf3; }
+.doc-pager a:hover { border-color: #2563eb; }
+html[data-theme="dark"] .doc-pager a:hover { border-color: #7bbfcc; }
+.doc-pager a span { font-size: 0.75rem; font-weight: 400; color: #6b7280; }
+html[data-theme="dark"] .doc-pager a span { color: #8b949e; }
+.doc-pager .doc-next { margin-left: auto; text-align: right; }
+
+@media (max-width: 900px) {
+  .doc-wrap { flex-direction: column; padding: 18px 16px 60px; gap: 0; overflow-x: hidden; }
+  .doc-sidebar { position: static; flex: none; width: 100%; max-height: none; margin-bottom: 18px; padding: 0; }
+  .doc-nav-details > summary { display: list-item; }
+  .doc-open-app { display: none; }
+}
 
 /* ── Section headers: each numbered section opens with a top rule + accent bar ── */
 .doc-content h2 {
@@ -202,13 +352,6 @@ html[data-theme="dark"] .doc-content .img-dark { display: block; }
 html[data-theme="dark"] .doc-content .img-light { display: none; }
 
 @media (max-width: 700px) {
-  .doc-wrap {
-    flex-direction: column;
-    padding: 20px 16px 60px;
-    gap: 0;
-    overflow-x: hidden; /* prevent equations/tables from pushing the page wider */
-  }
-  .doc-sidebar { position: static; max-height: none; margin-bottom: 24px; }
   .doc-content {
     font-size: 0.93rem;
     max-width: 100%;
@@ -235,45 +378,172 @@ html[data-theme="dark"] .doc-content .img-light { display: none; }
 </style>
 
 <div class="doc-wrap">
-  <nav class="doc-sidebar" id="doc-toc">
-    <div class="doc-sidebar-title">Contents</div>
-    <ul class="doc-toc-list" id="doc-toc-list"></ul>
-  </nav>
+  <aside class="doc-sidebar" aria-label="Caustica documentation">
+    <a class="doc-brand" href="{{ "/caustica-documentation/" | relative_url }}">Caustica <span>docs</span></a>
+    <div class="doc-search" role="search">
+      <input type="search" id="doc-search" placeholder="Search the docs" aria-label="Search the documentation" autocomplete="off" spellcheck="false">
+      <kbd class="doc-search-key" aria-hidden="true">/</kbd>
+      <ul class="doc-search-results" id="doc-search-results" hidden></ul>
+    </div>
+    <details class="doc-nav-details" id="doc-nav-details" open>
+      <summary>Contents</summary>
+      <ul class="doc-nav">
+        {% for d in docs %}
+        <li{% if d.url == page.url %} class="current"{% endif %}>
+          <a href="{{ d.url | relative_url }}"{% if d.url == page.url %} aria-current="page"{% endif %}>{{ d.nav_title | default: d.title }}</a>
+          {% if d.url == page.url %}<ul class="doc-nav-sub" id="doc-nav-sub"></ul>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </details>
+    <a class="doc-open-app" href="{{ "/assets/caustica/" | relative_url }}">Open Caustica &rarr;</a>
+  </aside>
+
   <div class="doc-content">
-    {% if page.title %}<h1>{{ page.title }}</h1>{% endif %}
+    <div class="doc-crumbs">
+      <a href="{{ "/caustica-documentation/" | relative_url }}">Caustica docs</a>
+      {% if idx > 0 %}<span aria-hidden="true">&rsaquo;</span><span>{{ page.nav_title | default: page.title }}</span>{% endif %}
+      <a class="doc-edit" href="https://github.com/CianMRoche/CianMRoche.github.io/blob/master/{{ page.path }}">Edit on GitHub</a>
+    </div>
+    <h1>{{ page.title }}</h1>
     {{ content }}
+    <nav class="doc-pager" aria-label="Previous and next pages">
+      {% if idx > 0 %}{% assign p = docs[prev_i] %}<a class="doc-prev" href="{{ p.url | relative_url }}"><span>&larr; Previous</span>{{ p.nav_title | default: p.title }}</a>{% endif %}
+      {% if next_i < docs.size %}{% assign n = docs[next_i] %}<a class="doc-next" href="{{ n.url | relative_url }}"><span>Next &rarr;</span>{{ n.nav_title | default: n.title }}</a>{% endif %}
+    </nav>
   </div>
 </div>
 
+{% if page.url == '/caustica-documentation/' %}
+<script>
+// Links into the old single-page docs (/caustica-documentation/#some-heading) go
+// to the page that now holds that heading.
+(function () {
+  var R = {{ site.data.caustica_docs_redirects | jsonify }};
+  var h = decodeURIComponent(location.hash.slice(1));
+  var to = h && R[h];
+  if (to && to.indexOf('/caustica-documentation/#') !== 0) location.replace('{{ site.baseurl }}' + to);
+})();
+</script>
+{% endif %}
+
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-  var list     = document.getElementById('doc-toc-list');
-  var content  = document.querySelector('.doc-content');
-  if (!list || !content) return;
-  var headings = content.querySelectorAll('h2');
-  var links    = [];
+  var content = document.querySelector('.doc-content');
 
-  headings.forEach(function (h) {
-    if (!h.id) {
-      h.id = h.textContent.toLowerCase().replace(/[^\w]+/g, '-').replace(/^-|-$/g, '');
-    }
-    var li = document.createElement('li');
-    li.className = h.tagName === 'H3' ? 'toc-h3' : '';
-    var a  = document.createElement('a');
-    a.href = '#' + h.id;
-    a.textContent = h.textContent;
-    li.appendChild(a);
-    list.appendChild(li);
-    links.push({ el: h, a: a });
-  });
-
-  if (!window.IntersectionObserver) return;
-  var observer = new IntersectionObserver(function (entries) {
-    entries.forEach(function (entry) {
-      var link = links.find(function (l) { return l.el === entry.target; });
-      if (link) link.a.classList.toggle('active', entry.isIntersecting);
+  // The current page's sections, nested under it in the page tree.
+  var sub = document.getElementById('doc-nav-sub');
+  var links = [];
+  if (sub && content) {
+    content.querySelectorAll('h2').forEach(function (h) {
+      if (!h.id) h.id = h.textContent.toLowerCase().replace(/[^\w]+/g, '-').replace(/^-|-$/g, '');
+      var li = document.createElement('li');
+      var a = document.createElement('a');
+      a.href = '#' + h.id;
+      a.textContent = h.textContent;
+      li.appendChild(a);
+      sub.appendChild(li);
+      links.push({ el: h, a: a });
     });
-  }, { rootMargin: '-10% 0px -80% 0px' });
-  links.forEach(function (l) { observer.observe(l.el); });
+    if (!links.length) sub.remove();
+    if (window.IntersectionObserver && links.length) {
+      var observer = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          var link = links.find(function (l) { return l.el === entry.target; });
+          if (link) link.a.classList.toggle('active', entry.isIntersecting);
+        });
+      }, { rootMargin: '-10% 0px -80% 0px' });
+      links.forEach(function (l) { observer.observe(l.el); });
+    }
+  }
+
+  // On narrow screens the page tree folds away under "Contents".
+  var det = document.getElementById('doc-nav-details');
+  if (det && window.matchMedia('(max-width: 900px)').matches) det.removeAttribute('open');
+
+  // ── Search: a client-side index of every page, loaded on first use ──
+  var input = document.getElementById('doc-search');
+  var box = document.getElementById('doc-search-results');
+  if (!input || !box) return;
+  var index = null, loading = null, sel = -1;
+  function load() {
+    if (index || loading) return loading;
+    loading = fetch('{{ "/caustica-documentation/search.json" | relative_url }}')
+      .then(function (r) { return r.json(); })
+      .then(function (pages) {
+        var ta = document.createElement('textarea');
+        var decode = function (t) { ta.innerHTML = t; return ta.value; };   // &amp; and friends
+        index = pages.map(function (p) {
+          var text = decode(p.text), title = decode(p.title);
+          return { title: title, url: p.url, text: text, lower: text.toLowerCase(), tl: title.toLowerCase() };
+        });
+      });
+    return loading;
+  }
+  function esc(s) { return s.replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function mark(s, toks) {
+    var out = esc(s);
+    toks.forEach(function (t) {
+      out = out.replace(new RegExp('(' + esc(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi'), '<mark>$1</mark>');
+    });
+    return out;
+  }
+  function search(q) {
+    var toks = q.toLowerCase().split(/\s+/).filter(function (t) { return t.length > 1; });
+    if (!toks.length || !index) return [];
+    var phrase = q.toLowerCase().trim(), out = [];
+    index.forEach(function (p) {
+      if (!toks.every(function (t) { return p.lower.indexOf(t) >= 0 || p.tl.indexOf(t) >= 0; })) return;
+      var score = 0;
+      toks.forEach(function (t) {
+        if (p.tl.indexOf(t) >= 0) score += 20;
+        score += Math.min(p.lower.split(t).length - 1, 20);
+      });
+      var at = p.lower.indexOf(phrase), len = phrase.length;
+      if (at < 0) { at = p.lower.indexOf(toks[0]); len = toks[0].length; } else score += 15;
+      var snip = at >= 0 ? (at > 50 ? '…' : '') + p.text.slice(Math.max(0, at - 50), at + 100) + '…' : '';
+      out.push({ p: p, score: score, snip: snip, frag: at >= 0 ? p.text.substr(at, len) : '' });
+    });
+    return out.sort(function (a, b) { return b.score - a.score; }).slice(0, 8).map(function (r) { r.toks = toks; return r; });
+  }
+  function render() {
+    var q = input.value.trim();
+    sel = -1;
+    if (q.length < 2) { box.hidden = true; box.innerHTML = ''; return; }
+    load().then(function () {
+      var res = search(q);
+      box.innerHTML = res.length ? res.map(function (r) {
+        // A text fragment scrolls the target page to the match and highlights it.
+        var href = '{{ site.baseurl }}' + r.p.url + (r.frag ? '#:~:text=' + encodeURIComponent(r.frag) : '');
+        return '<li><a href="' + href + '"><b>' + esc(r.p.title) + '</b><small>' + mark(r.snip, r.toks) + '</small></a></li>';
+      }).join('') : '<li class="doc-search-empty">No matches</li>';
+      box.hidden = false;
+    });
+  }
+  function move(d) {
+    var items = box.querySelectorAll('a');
+    if (!items.length) return;
+    sel = (sel + d + items.length) % items.length;
+    items.forEach(function (a, i) { a.classList.toggle('sel', i === sel); });
+    items[sel].scrollIntoView({ block: 'nearest' });
+  }
+  var timer = null;
+  input.addEventListener('focus', load);
+  input.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(render, 120); });
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); move(1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
+    else if (e.key === 'Enter') {
+      var items = box.querySelectorAll('a');
+      if (items.length) { e.preventDefault(); location.href = items[Math.max(sel, 0)].href; }
+    } else if (e.key === 'Escape') { input.value = ''; box.hidden = true; input.blur(); }
+  });
+  document.addEventListener('keydown', function (e) {
+    var t = document.activeElement && document.activeElement.tagName;
+    if (e.key === '/' && t !== 'INPUT' && t !== 'TEXTAREA' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); input.focus(); }
+  });
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('.doc-search')) box.hidden = true;
+  });
 });
 </script>

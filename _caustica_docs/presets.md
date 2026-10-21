@@ -1,0 +1,18 @@
+---
+title: "11. Preset configurations"
+nav_title: "11. Preset configurations"
+order: 12
+---
+
+The *Presets…* dropdown in the top bar loads ready-made scenes; selecting the **Presets…** entry itself reloads the page's default scene. Choosing the preset that is already loaded reloads it too, which is the way to discard your edits and get the scene back as it shipped:
+
+- **Uniform Source**: an NIE main galaxy ($r_c = 0.2$″) and an off-centre SIE companion at $z = 0.5$, lensing a uniform disc source at $z = 1.5$.
+- **Point Source**: one NIE lens at $z = 0.5$ with a point source at $z = 1.5$. Critical curves and caustics (tangential and radial), the numerically solved image positions, and their time delays are shown.
+- **Fermat surface**: an SIE and NIE lens pair at $z = 0.5$ with a uniform disc source at $z = 1.0$. Opens in the Fermat potential view with contours pinned to the source position.
+- **Parity**: one NIE lens ($r_c \approx 0.08$″) at $z = 0.5$ with a point source at $z = 1.5$, opened in the Parity view with only the radial curves shown. The images are marked by parity.
+- **ZigZag Lens**: a point source at $z = 2.38$ lensed twice, by a galaxy at $z = 1.89$ and again by one at $z = 0.18$, so the light path zigzags between planes.
+- **Butterfly Caustic**: two flattened NIE lenses at $z = 0.5$ and with nearly perpendicular position angles. The caustic folds into butterfly metamorphoses at its cusps; [Orban de Xivry & Marshall (2009)](https://ui.adsabs.harvard.edu/abs/2009MNRAS.399....2O/abstract) give an atlas of such exotic lens configurations. Lenses split into two planes for ease of editing, but are effectively coplanar.
+- **Galaxy group**: six SIE galaxies with external shear at $z = 0.5$ in a 40 arcsec field, with background sources at $z = 1.15$, $2.0$, and $3.0$.
+- **Image recreation**: a quadruply imaged quasar, recreated by eye over the observation itself. The preset loads `quad_quasar_image.jpg` as its background image (<a href="/caustica-documentation/background-image/">§7</a>), dimmed to $\beta_\text{bg} = 0.6$ so the solved image positions stay legible over it, and fits it with two SIE lenses at $z = 0.5$ and a point source at $z = 1.34$. It doubles as a template for the same exercise on any other system: upload your own observation as the background, then move the lenses and source until the computed images land on the real ones.
+- **Realistic**: two photographs standing in for the galaxies. An image of an elliptical galaxy and its star field sits at $z = 0.5$, on its own plane alongside (but not behind) an EPL lens at the same redshift, so it is the foreground galaxy you see rather than a lensed one; a spiral galaxy at $z = 2.67$ sits behind that lens and is stretched into arcs. Both are pasted-image sources loaded by name (<a href="/caustica-documentation/source-models/">§6</a>), with the background spiral pushed to contrast $2.4$ and a full edge blend so it reads as light rather than a rectangle.
+- **Line art**: a lensing scene shown in the vector Line art render mode (<a href="/caustica-documentation/critical-curves/">§9</a>).

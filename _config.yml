@@ -187,10 +187,20 @@ collections:
   talks:
     output: true
     permalink: /:collection/:path/
+  # Caustica's documentation, one page per section (layout: doc).
+  caustica_docs:
+    output: true
+    permalink: /caustica-documentation/:name/
 
 
 # Defaults
 defaults:
+  # _caustica_docs
+  - scope:
+      path: ""
+      type: caustica_docs
+    values:
+      layout: doc
   # _posts
   - scope:
       path: ""

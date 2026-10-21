@@ -1,0 +1,8 @@
+---
+layout: null
+permalink: /caustica-documentation/search.json
+sitemap: false
+---
+{% assign docs = site.caustica_docs | sort: 'order' %}[{% for d in docs %}
+{"title": {{ d.title | jsonify }}, "url": {{ d.url | jsonify }}, "text": {{ d.content | strip_html | normalize_whitespace | jsonify }}}{% unless forloop.last %},{% endunless %}{% endfor %}
+]

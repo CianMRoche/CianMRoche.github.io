@@ -3696,12 +3696,12 @@ function renderQualityPanel() {
       <span class="sl-panel-title" style="flex:1">Quality &amp; performance</span>
       ${infoSection('sl-perf-info', `
         <b>Critical curves</b>: how finely the field is sampled when tracing the curves and caustics. Higher is smoother, but slower to redraw.
-        <a href="/caustica-documentation/#9-critical-curves-and-caustics" target="_blank" rel="noopener">Details</a><br><br>
+        <a href="/caustica-documentation/critical-curves/" target="_blank" rel="noopener">Details</a><br><br>
         <b>FOV buffer</b>: the smallest field the curves are traced over. Zoomed in on caustics, their critical curves can lie outside the view; this keeps them in range. Larger is coarser when zoomed in; 0 turns it off.<br><br>
         <b>Point source</b>: how finely the field is searched for point-source images. Finer catches faint or closely spaced ones.
-        <a href="/caustica-documentation/#point-source" target="_blank" rel="noopener">Details</a><br><br>
+        <a href="/caustica-documentation/source-models/#point-source" target="_blank" rel="noopener">Details</a><br><br>
         <b>Render scale</b>: how sharp the plot looks, and how big a saved PNG comes out. Auto suits almost everything; pick Native for a print figure, 1× to keep a heavy scene responsive.
-        <a href="/caustica-documentation/#render-scale" target="_blank" rel="noopener">Details</a>`)}
+        <a href="/caustica-documentation/recording/#render-scale" target="_blank" rel="noopener">Details</a>`)}
     </div>
     <p class="sl-perf-note" style="margin-bottom:8px">These trade accuracy or sharpness against redraw speed.</p>
     <div class="sl-global-input">
@@ -5624,7 +5624,7 @@ function instrumentSectionHtml() {
             Resamples the lensed image onto a telescope's pixels, averaging over each one. Not <b>Render scale</b> (Settings), which sets how finely the sky is computed rather than how coarsely it is sampled.<br><br>
             <b>Include PSF</b> blurs first, using an <b>approximate Gaussian</b> — not the instrument's real PSF, which has diffraction rings, spikes or a seeing halo.<br><br>
             Lensed image only. Needs 2+ computed samples per pixel, or it is skipped with a warning.
-            <a href="/caustica-documentation/#8-instrument-model" target="_blank" rel="noopener">Details and sources</a>`)}
+            <a href="/caustica-documentation/instrument/" target="_blank" rel="noopener">Details and sources</a>`)}
         </div>
         ${_open(_instrExpanded) ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
           <div class="sl-global-input">
