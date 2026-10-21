@@ -5231,21 +5231,26 @@ function clearObservation() {
 // Observation → Use lensed image: the lensed image as it is now becomes the
 // observation. It is drawn under the settings of a pane showing the lensed image
 // (the focused one if it does; else the focused pane's, in the lensed-image view),
-// with no backdrop and a black field, and only the WebGL frame is copied, so no
-// overlay comes with it. Its pixel scale is the field over the frame's width,
-// centred, so it lies on the sky exactly where the light was. It starts hidden,
-// as behind the lensed image it would double the light; the delensed view reads
-// it regardless.
+// with the current observation behind the lensed light if it is shown (its
+// brightness and blend as on screen) but no background, on a black field, and only
+// the WebGL frame is copied, so no overlay comes with it. Its pixel scale is the
+// field over the frame's width, centred, so it lies on the sky exactly where the
+// light was. Brightness and blend are now part of the picture, so both reset. It
+// starts hidden, as behind the lensed image it would double the light; the
+// delensed view reads it regardless.
 function useLensedAsObservation() {
   if (!renderer || !state.dist || !glCanvas) return;
   const i = !_isSplit() || _paneMode(_focusPane) === 0 ? _focusPane
           : ([0, 1].find(k => _paneMode(k) === 0) ?? _focusPane);
   const sorted = [...state.planes].sort((a, b) => a.z - b.z);
   let frame = null, fov = state.fov;
+  const sky = obsSkySize(), withObs = !!(sky && state.obsShown);
   _withPane(i, () => _withView(0, () => {
     syncDetector();
     const keepField = renderer.fieldColor;
-    renderer.bgOpts = null; renderer.obsOpts = null;
+    renderer.bgOpts = null;
+    // The picture's own tones (no light-theme pre-invert: the frame is read raw).
+    renderer.obsOpts = withObs ? { sky, off: [state.obsOffX, state.obsOffY], bright: state.obsBright, edge: state.obsEdge, invert: false } : null;
     renderer.fieldColor = [0, 0, 0];
     try {
       renderer.setScene(sorted, state.dist, state.fov, activeVizSettings(0), 0, 0, 1, [], [0, 0]);
@@ -5258,9 +5263,9 @@ function useLensedAsObservation() {
   if (!frame?.width) return;
   state.obsPixel = _clampNum(+(fov / frame.width).toPrecision(6), OBS_PIXEL_MIN, OBS_PIXEL_MAX, 0);
   state.obsOffX = 0; state.obsOffY = 0;
-  state.obsShown = false; state.obsBright = 1;
+  state.obsShown = false; state.obsBright = 1; state.obsEdge = 0;
   _obsLoadSeq++;   // supersedes any picture still loading
-  _installObservation(frame, 'Lensed image', '');
+  _installObservation(frame, withObs ? 'Lensed image + observation' : 'Lensed image', '');
   showToast(_delensShowing() ? 'The lensed image is now the observation, delensed here.'
                              : 'The lensed image is now the observation. Open the Delensed image view (U) to trace it back.');
 }
@@ -6155,7 +6160,7 @@ function observationSectionHtml() {
           ${infoSection('sl-obs-info', `
             The observed image of a lens: a picture of the sky to line a model up against, and the input of the <b>Delensed image</b> view (<b>U</b>), which traces it back to the source plane through the current lens model. Unlike the <b>Background</b>, which is decoration framed to the panel, it sits on the sky at its <b>Pixel scale</b> (arcseconds per pixel of the image as supplied), with its centre at <b>Offset X / Y</b> (arcseconds), in every view. A new picture starts fitted to the field of view.<br><br>
             <b>Show in the lensed view</b> draws it over the background, behind the lensed light; the delensed view reads it either way. <b>Brightness</b> and <b>Edge blend</b> apply in both.<br><br>
-            <b>Use lensed image</b> takes the lensed image as it is now, its light only (no backdrop, no overlays), as the observation, at its true scale on the sky. It starts unshown, as it would only double the light; delensed through the same lens model it rebuilds the sources.<br><br>
+            <b>Use lensed image</b> takes the lensed image as it is now as the observation, at its true scale on the sky: the lensed light, with the observation behind it if shown, but no background and no overlays. It starts unshown, as it would only double the light; delensed through the same lens model it rebuilds the sources.<br><br>
             <b>Masks</b> cut elliptical patches out of it before it is delensed, typically over the lens galaxy, whose own light would otherwise be spread over the source plane. They sit on the observation's card at the left of the scene drawer, and on the image in every view but line art.<br><br>
             Config files save all of this, and the picture's file name only for the images shipped with the site (as the <b>Image recreation</b> preset does); a picture you upload yourself is not saved.`)}
         </div>
@@ -6165,7 +6170,7 @@ function observationSectionHtml() {
             ${has ? `<button class="sl-rec-mini-btn sl-rec-mini-clear" id="sl-obs-clear" title="Remove the observation (its masks stay)">Remove</button>` : ''}
           </div>
           <div class="sl-capture-row">
-            <button class="sl-capture-btn" id="sl-obs-lensed" title="Take the lensed image as it is now, its light only (no backdrop or overlays), as the observation, at its true scale on the sky">Use lensed image</button>
+            <button class="sl-capture-btn" id="sl-obs-lensed" title="Take the lensed image as it is now as the observation, at its true scale on the sky: the lensed light with the observation behind it if shown, but no background and no overlays">Use lensed image</button>
           </div>
           ${has ? `<div class="sl-bg-file" title="${_escHtml(state.obsName)}">${_escHtml(state.obsName)} · ${state.obsCanvas.width}×${state.obsCanvas.height}</div>
           <div class="sl-checkbox-row" style="margin-top:6px">
