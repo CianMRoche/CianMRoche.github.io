@@ -1814,10 +1814,10 @@ function buildDOM() {
         <!-- Placement tools (desktop): arm one, then click a plane's viewer to place
              on that plane, or the image to place on the selected plane. -->
         <nav class="sl-toolcol" id="sl-toolcol" aria-label="Place objects">
-          <button type="button" class="sl-tool-btn" data-tool="lens"   title="Add lens (1): click the image or a plane's viewer to place. Click again, or Esc, to stop." aria-label="Add lens">L</button>
-          <button type="button" class="sl-tool-btn" data-tool="source" title="Add source (2): click the image or a plane's viewer to place. Click again, or Esc, to stop." aria-label="Add source">S</button>
-          <button type="button" class="sl-tool-btn" data-tool="hybrid" title="Add hybrid, a lens and a source together (3): click the image or a plane's viewer to place. Click again, or Esc, to stop." aria-label="Add hybrid">H</button>
-          <button type="button" class="sl-tool-btn" data-tool="mask"   title="Add mask (4): cuts a patch out of the background image before it is delensed. Click the image or a plane's viewer to place. Click again, or Esc, to stop." aria-label="Add mask" style="display:none">M</button>
+          <button type="button" class="sl-tool-btn" data-tool="lens"   title="Add lens, a mass that bends light (1). Click the image or a plane's viewer to place; click again, or Esc, to stop." aria-label="Add lens">${toolIcon('lens')}</button>
+          <button type="button" class="sl-tool-btn" data-tool="source" title="Add source, something that emits light (2). Click the image or a plane's viewer to place; click again, or Esc, to stop." aria-label="Add source">${toolIcon('source')}</button>
+          <button type="button" class="sl-tool-btn" data-tool="hybrid" title="Add hybrid, a lens and a source together, like a galaxy (3). Click the image or a plane's viewer to place; click again, or Esc, to stop." aria-label="Add hybrid">${toolIcon('hybrid')}</button>
+          <button type="button" class="sl-tool-btn" data-tool="mask"   title="Add mask (4): cuts a patch out of the background image before it is delensed, so it shows in the Delensed image view. Click the image or a plane's viewer to place; click again, or Esc, to stop." aria-label="Add mask">${toolIcon('mask')}</button>
           <button type="button" class="sl-tool-btn sl-tool-del" id="sl-tool-del" title="Delete the selected object" aria-label="Delete the selected object"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 4h11M4 4l.5 7h5l.5-7M5 4V3h4v1"/></svg></button>
         </nav>
         <div class="sl-stage" id="sl-stage">
@@ -2018,10 +2018,10 @@ function buildDOM() {
           <div class="sl-plane-card" id="sl-plane-card" data-effective-type="empty">
               <div class="sl-plane-body" id="sl-plane-body">
                 <div class="sl-plane-tools" id="sl-plane-tools">
-                  <button class="sl-ctool-btn" data-tool="lens"   title="Add lens — click this panel to place (1). Click again to stop adding." aria-label="Add lens tool">L</button>
-                  <button class="sl-ctool-btn" data-tool="source" title="Add source — click this panel to place (2). Click again to stop adding." aria-label="Add source tool">S</button>
-                  <button class="sl-ctool-btn" data-tool="hybrid" title="Add hybrid — click this panel to place (3). Click again to stop adding." aria-label="Add hybrid tool">H</button>
-                  <button class="sl-ctool-btn" data-tool="mask"   title="Add mask: cuts a patch out of the background image before it is delensed. Click this panel to place (4). Click again to stop adding." aria-label="Add mask tool" style="display:none">M</button>
+                  <button class="sl-ctool-btn" data-tool="lens"   title="Add lens, a mass that bends light: tap this panel to place (1). Tap again to stop adding." aria-label="Add lens tool">${toolIcon('lens', 18)}</button>
+                  <button class="sl-ctool-btn" data-tool="source" title="Add source, something that emits light: tap this panel to place (2). Tap again to stop adding." aria-label="Add source tool">${toolIcon('source', 18)}</button>
+                  <button class="sl-ctool-btn" data-tool="hybrid" title="Add hybrid, a lens and a source together: tap this panel to place (3). Tap again to stop adding." aria-label="Add hybrid tool">${toolIcon('hybrid', 18)}</button>
+                  <button class="sl-ctool-btn" data-tool="mask"   title="Add mask: cuts a patch out of the background image before it is delensed. Tap this panel to place (4). Tap again to stop adding." aria-label="Add mask tool">${toolIcon('mask', 18)}</button>
                   <button class="sl-ctool-del" id="sl-card-del-obj" title="Delete selected object" aria-label="Delete selected object"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="1.5" y1="4" x2="12.5" y2="4"/><path d="M4 4l.5 7h5l.5-7"/><path d="M5 4V3h4v1"/></svg></button>
                 </div>
                 <div class="sl-plane-spacer" aria-hidden="true"></div>
@@ -2599,11 +2599,14 @@ function setCanvasTool(tool) {
   updateCanvasTools();
 }
 
-// Masks only act on the delensed view, so that is the only view offering the tool.
-function maskToolAvailable() { return state.vizMode === 9; }
+// Masks act on the delensed view only, so the mask tool is offered while some tab
+// shows that view (on a phone, while it is showing). Masks already placed stay
+// visible and editable in every view (masksShown).
+function maskToolAvailable() {
+  return _splitAllowed() ? _panes.some(p => p.tabs.includes(9)) : state.vizMode === 9;
+}
 
 function updateCanvasTools() {
-  // Leaving the delensed view drops an armed mask tool along with its button.
   if (state.addMode === 'mask' && !maskToolAvailable()) state.addMode = 'select';
   document.querySelectorAll('.sl-ctool-btn[data-tool]').forEach(b => {
     b.classList.toggle('active', state.addMode === b.dataset.tool);
@@ -2657,6 +2660,18 @@ function setRailTab(tab) {
   // Hidden canvases can't measure themselves; redraw once the tab reveals them.
   if (container === 'scene') requestAnimationFrame(() => { drawAxisCanvas(); renderPlaneCard(); });
 }
+
+// ── Placement-tool icons ─────────────────────────────────────────────────────
+// Lens: a mass with a pair of lensed arcs around it. Source: a star. Hybrid (lens and
+// source at once): a galaxy, which does both. Mask: a hatched patch, the area cut away.
+const _toolIcon = (d, size = 16) => `<svg width="${size}" height="${size}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const TOOL_ICON_PATHS = {
+  lens:   '<circle cx="8" cy="8" r="1.9" fill="currentColor" stroke="none"/><path d="M2.6 6.6A5.6 5.6 0 0 1 6.6 2.6M13.4 9.4A5.6 5.6 0 0 1 9.4 13.4" stroke-width="1.6"/>',
+  source: '<path d="M8 1.8l1.8 3.8 4.2.5-3.1 2.9.8 4.1L8 11.1 4.3 13.1l.8-4.1L2 6.1l4.2-.5z"/>',
+  hybrid: '<ellipse cx="8" cy="8" rx="6.4" ry="2.7" transform="rotate(-28 8 8)"/><circle cx="8" cy="8" r="1.7" fill="currentColor" stroke="none"/>',
+  mask:   '<ellipse cx="8" cy="8" rx="5.8" ry="4.6"/><path d="M4.2 10.6l5.4-5.4M6.6 12.1l4.9-4.9M3 7.9l2.6-2.6"/>',
+};
+const toolIcon = (tool, size) => _toolIcon(TOOL_ICON_PATHS[tool], size);
 
 // ── Inspector categories (desktop switcher) ──────────────────────────────────
 // The right-hand icon bar. Each category shows one rail tab; the five view
@@ -3104,11 +3119,12 @@ function _reconcilePanes() {
 
 // Everything that follows a change of the focused view.
 function _afterViewChange() {
+  _reconcilePanes();   // the tabs first: the mask tool's availability reads them
   const mode = state.vizMode;
   if (mode === 9) seedBgPixel();
   const sel = document.getElementById('sl-viz-mode');
   if (sel) sel.value = mode;
-  updateCanvasTools();   // the mask tool comes and goes with the delensed view
+  updateCanvasTools();
   _updateColorbar(); renderSidebar(); renderTabs(); redraw();
 }
 
@@ -3818,7 +3834,7 @@ function hitTestImage(wrap, e) {
       // Sources are hidden on the image-number map (a source-plane view of where a
       // source could be), so they are not draggable there either.
       if (state.vizMode === 8 && !state.lineArt && obj.type === 'source' && !obj.hybridId) continue;
-      // Masks are drawn (and so can be grabbed) only where they mean something.
+      // Masks are drawn (and so can be grabbed) wherever markers are, but not in line art.
       if (obj.type === 'mask' && !masksShown()) continue;
       if (obj.hybridId) {
         if (seenHybrids.has(obj.hybridId)) continue;
@@ -4612,7 +4628,7 @@ function activeMasks() {
 // Views a mask means something in, and so is drawn and draggable in: the lensed
 // image, where it sits over the picture it covers, and the delensed view it acts on.
 function masksShown() {
-  return (state.vizMode === 0 || state.vizMode === 9) && !state.lineArt;
+  return !state.lineArt;
 }
 
 // The background image's [w, h] on the sky in arcsec, from its pixel scale, or null
@@ -4910,7 +4926,7 @@ const LENS_INFO = {
         <b>φ</b>: position angle of the major axis (radians).<br>
         <b>γ'</b>: radial mass-density slope (ρ ∝ r<sup>−γ'</sup>), written with a prime to distinguish it from the external-shear strength γ. γ' = 2 is isothermal (identical to SIE); γ' &lt; 2 shallows the central density, γ' &gt; 2 steepens it. Typical galaxies have γ' ≈ 1.9–2.1.`,
 };
-const MASK_INFO = `Cuts an elliptical patch out of the <b>Background</b> image before it is delensed, for example over the lens galaxy, whose own light would otherwise be spread across the source plane, or over a foreground star. Masked pixels contribute nothing: source points seen only through them become holes, and points with other images are rebuilt from those.<br><br>
+const MASK_INFO = `Changes the <b>Delensed image</b> view only; in other views it is a marker you can select and edit. Cuts an elliptical patch out of the <b>Background</b> image before it is delensed, for example over the lens galaxy, whose own light would otherwise be spread across the source plane, or over a foreground star. Masked pixels contribute nothing: source points seen only through them become holes, and points with other images are rebuilt from those.<br><br>
   <b>Size</b>: semi-major axis (arcsec).<br>
   <b>q</b>: axis ratio (1 = circular).<br>
   <b>φ</b>: position angle of the major axis (radians).<br><br>
@@ -5388,7 +5404,7 @@ function delensSectionHtml() {
 function delensMaskNote() {
   let n = 0;
   for (const pl of state.planes) for (const o of pl.objects) if (o.type === 'mask' && !o.hidden) n++;
-  if (!n) return 'No masks. Add one with a plane\'s <b>M</b> tool (<b>4</b>), e.g. over the lens galaxy.';
+  if (!n) return 'No masks. Add one with the mask tool (<b>4</b>), e.g. over the lens galaxy.';
   const over = n > MAX_MASKS ? ` Only the first ${MAX_MASKS} are applied.` : '';
   return `${n} mask${n > 1 ? 's' : ''} cutting the picture.${over}`;
 }
