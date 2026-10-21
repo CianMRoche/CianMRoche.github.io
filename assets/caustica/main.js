@@ -425,8 +425,10 @@ const CONFIG_DEFAULTS = {
   bgSkyLock:          false,  // false = fixed to the viewport; true = zooms with the FOV
   bgHidden:           false,  // eye toggle: keep the loaded image but stop drawing it
   bgPixel:            0,      // arcsec per pixel of the image as supplied; 0 = none, framed by
-                              // Fit / Zoom / Offset. Set, it places the picture on the sky (centred
-                              // on the axis) in every view, and is what the Delensed view needs.
+                              // Fit / Zoom / Offset. Set, it places the picture on the sky in every
+                              // view, and is what the Delensed view needs.
+  bgSkyOffX:          0,      // with a pixel scale: the picture's centre on the sky, arcsec (+ right)
+  bgSkyOffY:          0,      //   ... and (+ up). The framing offsets above take over without one.
   // Detector model (View tab → Instrument). instrPixel / instrPsfFwhm are only
   // consulted for the 'custom' selection; presets carry their own values.
   instrument:         'off',  // key into INSTRUMENTS
@@ -448,6 +450,7 @@ const BG_ZOOM_MIN   = 0.25, BG_ZOOM_MAX = 5;
 const BG_OFF_MAX    = 1;
 const BG_BRIGHT_MAX = 2;
 const BG_PIXEL_MIN  = 1e-4, BG_PIXEL_MAX = 10;   // arcsec/px
+const BG_SKY_OFF_MAX = 1000;                    // arcsec, the config's sanity bound
 
 // Numeric config field: finite and clamped into range, else the supplied default.
 const _clampNum = (v, lo, hi, d) => isFinite(v) ? Math.min(hi, Math.max(lo, +v)) : d;
@@ -977,6 +980,8 @@ function configToYaml() {
   y += `bgSkyLock: ${state.bgSkyLock}\n`;
   y += `bgHidden: ${state.bgHidden}\n`;
   y += `bgPixel: ${+state.bgPixel.toPrecision(6)}\n`;
+  y += `bgSkyOffX: ${+state.bgSkyOffX.toFixed(5)}\n`;
+  y += `bgSkyOffY: ${+state.bgSkyOffY.toFixed(5)}\n`;
   y += `instrument: ${state.instrument}\n`;
   y += `instrPixel: ${+state.instrPixel.toFixed(5)}\n`;
   y += `instrPsfFwhm: ${+state.instrPsfFwhm.toFixed(5)}\n`;
@@ -1293,6 +1298,8 @@ function loadConfigFromYaml(yaml) {
     state.bgSkyLock = _bool(cfg.bgSkyLock, CONFIG_DEFAULTS.bgSkyLock);
     state.bgHidden  = _bool(cfg.bgHidden,  CONFIG_DEFAULTS.bgHidden);
     state.bgPixel   = cfg.bgPixel > 0 ? _clampNum(cfg.bgPixel, BG_PIXEL_MIN, BG_PIXEL_MAX, 0) : 0;
+    state.bgSkyOffX = _clampNum(cfg.bgSkyOffX, -BG_SKY_OFF_MAX, BG_SKY_OFF_MAX, CONFIG_DEFAULTS.bgSkyOffX);
+    state.bgSkyOffY = _clampNum(cfg.bgSkyOffY, -BG_SKY_OFF_MAX, BG_SKY_OFF_MAX, CONFIG_DEFAULTS.bgSkyOffY);
     // The delensed view needs a pixel scale. A config-named image still loading
     // seeds itself on arrival (_installBackground); one already on screen, and not
     // about to be replaced, is seeded now.
@@ -4956,7 +4963,7 @@ function _applyBackgroundFile(file) {
     if (seq !== _bgLoadSeq) return;
     // A pixel scale belongs to the picture it was set for, so a new upload starts
     // without one (the delensed view seeds a fresh one from its framing).
-    state.bgPixel = 0;
+    state.bgPixel = 0; state.bgSkyOffX = 0; state.bgSkyOffY = 0;
     _installBackground(img, file.name, '');
   };
   img.onerror = () => { URL.revokeObjectURL(url); showToast('Could not read that image.'); };
@@ -5026,11 +5033,13 @@ function syncBackdrop() {
     skyLock: state.bgSkyLock,
     angSize: state.bgAngSize,
     sky:     bgSkySize(),
+    skyOff:  [state.bgSkyOffX, state.bgSkyOffY],
     invert:  glCanvasInverted(),
   } : null;
   // The delensed view reads the picture even while the eye toggle hides it: there
   // it is the data being delensed, not a backdrop. Brightness does apply.
   renderer.delensSky    = bgSkySize();
+  renderer.delensOff    = [state.bgSkyOffX, state.bgSkyOffY];
   renderer.delensBright = state.bgBright;
   renderer.delensMasks  = activeMasks().map(o =>
     [o.cx, o.cy, o.params.r ?? 0.3, o.params.q ?? 1, o.params.phi ?? 0]);
@@ -5073,7 +5082,7 @@ function bgSkySize() {
 // was loaded (at FOV bgAngSize, where the sky-lock option also matches it), so that
 // giving it one moves nothing at that field of view. Every fit but Stretch keeps
 // the aspect ratio, making the two axes agree; for Stretch take their mean.
-// Offsets are not carried over: a picture with a pixel scale is centred on the axis.
+// The offsets carry over separately, as the centre's place on the sky (_seedBgSkyOffset).
 function _bgImpliedPixel() {
   const c = state.bgCanvas;
   if (!c || !(state.bgNatW > 0)) return 0;
@@ -5096,7 +5105,23 @@ function _delensShowing() {
 // The delensed view maps image pixels to angles, so it needs a pixel scale. One the
 // user (or a config) has set is kept; otherwise adopt the framing's own.
 function seedBgPixel() {
-  if (state.bgCanvas && !(state.bgPixel > 0)) state.bgPixel = _bgImpliedPixel();
+  if (state.bgCanvas && !(state.bgPixel > 0)) { state.bgPixel = _bgImpliedPixel(); _seedBgSkyOffset(); }
+}
+// The framing's offsets as the centre's place on the sky. They are fractions of a
+// half panel, which spans the field of view the framing was set at (as for the
+// implied pixel scale), so nothing moves at that field of view.
+function _seedBgSkyOffset() {
+  const A = state.bgAngSize > 0 ? state.bgAngSize : state.fov;
+  state.bgSkyOffX = +(state.bgOffX * A / 2).toFixed(4);
+  state.bgSkyOffY = +(state.bgOffY * A / 2).toFixed(4);
+}
+// The sliders' reach with a pixel scale: the centre can travel half the picture's
+// longer side (or as far as it already is) from the axis.
+function _bgSkyOffRange() {
+  const sky = bgSkySize();
+  if (!sky) return 1;
+  const r = Math.max(sky[0], sky[1]) / 2, far = Math.max(Math.abs(state.bgSkyOffX), Math.abs(state.bgSkyOffY));
+  return +Math.max(r, far).toPrecision(2) || 1;
 }
 
 // What the Field color picker should show: the stored value is the dark-mode one, so
@@ -5846,7 +5871,7 @@ function delensMaskNote() {
 function bgPixelReadoutHtml() {
   const sky = bgSkySize();
   if (!sky) return 'None: Fit, Zoom and Offset frame the picture. Give it one to place it on the sky.';
-  return `${state.bgNatW} × ${state.bgNatH} px, so ${sky[0].toFixed(2)}″ × ${sky[1].toFixed(2)}″ on the sky, centred on the axis. Fit, Zoom and Offset are off while it has one.`;
+  return `${state.bgNatW} × ${state.bgNatH} px, so ${sky[0].toFixed(2)}″ × ${sky[1].toFixed(2)}″ on the sky. Fit and Zoom are off while it has one, and Offset places its centre on the sky, in arcseconds.`;
 }
 
 // Refresh the readouts without rebuilding the panel, so they stay live under a scrub.
@@ -5946,7 +5971,7 @@ function backgroundSectionHtml() {
             The empty field around the picture (and the margins a <b>Contain</b> fit leaves over) is the <b>Field</b> color, set under <b>Colors</b>.<br><br>
             <b>Fit</b>: the image panel is square. <b>Cover</b> fills it and crops the long axis, <b>Contain</b> fits the whole image and leaves the rest empty, <b>Stretch</b> distorts it to the square, <b>Tile</b> fits it and mirror-repeats to fill.<br><br>
             <b>Zoom</b> and <b>Offset X / Y</b> then frame it by hand (offsets are in half-panel widths). <b>Brightness</b> fades the picture toward the empty field (0) or past its supplied brightness (above 1), and affects the backdrop only. <b>Zoom with FOV</b> pins the backdrop to the sky instead of the viewport, so zooming the field magnifies it too.<br><br>
-            A <b>Pixel scale</b> (arcseconds per pixel of the image as supplied) replaces all of that framing: the picture is then placed on the sky at that scale, centred on the axis, in every view. The <b>Delensed image</b> view (<b>U</b>) needs one, and when it opens it gives a picture without one the scale its framing implies.<br><br>
+            A <b>Pixel scale</b> (arcseconds per pixel of the image as supplied) replaces Fit, Zoom and Zoom with FOV: the picture is then placed on the sky at that scale in every view, and <b>Offset X / Y</b> become the position of its centre on the sky, in arcseconds. The <b>Delensed image</b> view (<b>U</b>) needs one, and when it opens it gives a picture without one the scale and centre its framing implies.<br><br>
             The eye button takes the picture off the plot without unloading it. Config files save the framing, and the file name only for the images shipped with the site (as the <b>Image recreation</b> preset does); a picture you upload yourself is not saved.`)}
         </div>
         ${_open(_bgExpanded) ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
@@ -5958,7 +5983,7 @@ function backgroundSectionHtml() {
           ${has ? `<div class="sl-bg-file" title="${_escHtml(state.bgName)}">${_escHtml(state.bgName)} · ${state.bgCanvas.width}×${state.bgCanvas.height}</div>` : ''}
           ${inertNote ? `<p class="sl-muted-note" style="margin:6px 0 0">${inertNote}</p>` : ''}
           ${has ? `<div class="sl-global-input" style="margin-top:8px">
-            <label title="Arcseconds per pixel of the background image as supplied. With one, the picture is placed on the sky at that scale, centred on the axis, in every view.">Pixel scale</label>
+            <label title="Arcseconds per pixel of the background image as supplied. With one, the picture is placed on the sky at that scale in every view, its centre at Offset X / Y (arcsec).">Pixel scale</label>
             <input type="number" class="sl-scrub" id="sl-bg-px" style="width:96px" min="${BG_PIXEL_MIN}" max="${BG_PIXEL_MAX}" step="${_numStep(state.bgPixel || 0.05)}" value="${state.bgPixel > 0 ? state.bgPixel : ''}" placeholder="none">
             <span class="sl-unit">″/px</span>
           </div>
@@ -5977,7 +6002,15 @@ function backgroundSectionHtml() {
             <input type="range" id="sl-bg-zoom" data-disp-dec="2" min="${BG_ZOOM_MIN}" max="${BG_ZOOM_MAX}" step="any" data-drag-step="0.05" value="${state.bgZoom}" ${fdis}>
             <span class="sl-tone-param-val">${state.bgZoom.toFixed(2)}</span>
           </div>
-          <div class="sl-global-input">
+          ${cal ? (() => {
+            // With a pixel scale the offsets place the picture's centre on the sky, in arcsec.
+            const R = _bgSkyOffRange();
+            return ['X', 'Y'].map(a => `<div class="sl-global-input" title="Where the picture's centre sits on the sky, in arcseconds (+ ${a === 'X' ? 'right' : 'up'})">
+            <label>Offset ${a}</label>
+            <input type="range" id="sl-bg-skyoff${a.toLowerCase()}" data-disp-dec="2" min="${-R}" max="${R}" step="any" data-drag-step="${+(R / 100).toPrecision(2)}" value="${state['bgSkyOff' + a]}">
+            <span class="sl-tone-param-val">${state['bgSkyOff' + a].toFixed(2)}″</span>
+          </div>`).join('');
+          })() : `<div class="sl-global-input">
             <label>Offset X</label>
             <input type="range" id="sl-bg-offx" data-disp-dec="2" min="${-BG_OFF_MAX}" max="${BG_OFF_MAX}" step="any" data-drag-step="0.02" value="${state.bgOffX}" ${fdis}>
             <span class="sl-tone-param-val">${state.bgOffX.toFixed(2)}</span>
@@ -5986,7 +6019,7 @@ function backgroundSectionHtml() {
             <label>Offset Y</label>
             <input type="range" id="sl-bg-offy" data-disp-dec="2" min="${-BG_OFF_MAX}" max="${BG_OFF_MAX}" step="any" data-drag-step="0.02" value="${state.bgOffY}" ${fdis}>
             <span class="sl-tone-param-val">${state.bgOffY.toFixed(2)}</span>
-          </div>
+          </div>`}
           <div class="sl-global-input">
             <label>Brightness</label>
             <input type="range" id="sl-bg-bright" data-disp-dec="2" min="0" max="${BG_BRIGHT_MAX}" step="any" data-drag-step="0.05" value="${state.bgBright}" ${dis}>
@@ -6450,7 +6483,8 @@ function renderViewPanel() {
   // ── Background image section ───────────────────────────────────────────────
   document.getElementById('sl-bg-pick')?.addEventListener('click', pickBackgroundImage);
   document.getElementById('sl-bg-clear')?.addEventListener('click', () => {
-    state.bgPixel = 0;   // the pixel scale was this picture's; the next one starts without
+    // The pixel scale and sky offsets were this picture's; the next one starts without.
+    state.bgPixel = 0; state.bgSkyOffX = 0; state.bgSkyOffY = 0;
     clearBackgroundImage();
   });
   // Pixel scale. The readouts update in place; the first scale also switches the
@@ -6464,6 +6498,7 @@ function renderViewPanel() {
       const was = state.bgPixel > 0;
       _bpxEl.value = v;
       state.bgPixel = v;
+      if (!was) _seedBgSkyOffset();   // the centre stays where the framing had it
       _refreshDelensReadout();
       redraw();
       return !was;
@@ -6494,19 +6529,21 @@ function renderViewPanel() {
   });
   // Framing sliders: update state and the readout in place, no panel rebuild, so
   // dragging stays smooth (redraw() coalesces to one frame).
-  const _bgSlider = (id, key, dec = 2) => {
+  const _bgSlider = (id, key, dec = 2, unit = '') => {
     const inp = document.getElementById(id);
     inp?.addEventListener('input', () => {
       state[key] = parseFloat(inp.value);
       const val = inp.parentElement.querySelector('.sl-tone-param-val');
-      if (val) val.textContent = state[key].toFixed(dec);
+      if (val) val.textContent = state[key].toFixed(dec) + unit;
       redraw();
     });
   };
-  _bgSlider('sl-bg-zoom',   'bgZoom');
-  _bgSlider('sl-bg-offx',   'bgOffX');
-  _bgSlider('sl-bg-offy',   'bgOffY');
-  _bgSlider('sl-bg-bright', 'bgBright');
+  _bgSlider('sl-bg-zoom',    'bgZoom');
+  _bgSlider('sl-bg-offx',    'bgOffX');
+  _bgSlider('sl-bg-offy',    'bgOffY');
+  _bgSlider('sl-bg-skyoffx', 'bgSkyOffX', 2, '″');
+  _bgSlider('sl-bg-skyoffy', 'bgSkyOffY', 2, '″');
+  _bgSlider('sl-bg-bright',  'bgBright');
   document.getElementById('sl-bg-color')?.addEventListener('input', e => {
     // Stored as the dark-mode value, like source colours: in light theme the canvas
     // is CSS-inverted, so the picker shows the complement and we invert back here.
@@ -6532,7 +6569,7 @@ function renderViewPanel() {
     renderSidebar(); redraw();
   });
   document.getElementById('sl-bg-reset')?.addEventListener('click', () => {
-    for (const k of ['bgFit', 'bgZoom', 'bgOffX', 'bgOffY', 'bgBright', 'bgSkyLock', 'bgHidden', 'bgPixel'])
+    for (const k of ['bgFit', 'bgZoom', 'bgOffX', 'bgOffY', 'bgBright', 'bgSkyLock', 'bgHidden', 'bgPixel', 'bgSkyOffX', 'bgSkyOffY'])
       state[k] = CONFIG_DEFAULTS[k];
     state.bgAngSize = state.fov;
     if (_delensShowing()) seedBgPixel();   // that view cannot do without one

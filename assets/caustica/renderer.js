@@ -68,6 +68,7 @@ uniform int   u_colormap;      // palette: 0=default 1=viridis 2=inferno 3=plasm
 uniform int   u_vizMode;      // 0=surface brightness, 1=κ, 2=γ, 3=|μ|, 4=signed μ, 5=|α|, 6=φ (Fermat), 7=parity, 8=image number, 9=delensed (β grid pass)
 uniform int   u_vizSrcIdx;    // target plane index for visualization Jacobian
 uniform vec2  u_traceSpan;    // delensed β pass: image-plane field covered by the target (arcsec, per axis)
+uniform vec2  u_traceOff;     // delensed β pass: the field's centre on the sky (the picture's, arcsec)
 uniform int   u_isDark;       // 1 = dark theme, 0 = light theme
 uniform float u_saddlePhi[8]; // φ values at Type-II saddle images (Fermat mode)
 uniform int   u_nSaddle;      // number of valid entries in u_saddlePhi
@@ -838,7 +839,7 @@ void main() {
   // because the grid follows the background image's aspect ratio (u_res is the
   // grid here). The Jacobian is by central differences with a step of a quarter node.
   if (u_vizMode == 9) {
-    vec2 th = (v_uv - 0.5) * u_traceSpan;
+    vec2 th = (v_uv - 0.5) * u_traceSpan + u_traceOff;
     vec2 h  = 0.25 * u_traceSpan / u_res;
     vec2 dx = (traceToPlane(th + vec2(h.x, 0.0), u_vizSrcIdx) - traceToPlane(th - vec2(h.x, 0.0), u_vizSrcIdx)) / (2.0 * h.x);
     vec2 dy = (traceToPlane(th + vec2(0.0, h.y), u_vizSrcIdx) - traceToPlane(th - vec2(0.0, h.y), u_vizSrcIdx)) / (2.0 * h.y);
@@ -982,8 +983,10 @@ precision highp sampler2D;
 uniform sampler2D u_beta;   // β (xy), |μ| (z), footprint minor axis (w) per node, RGBA32F
 uniform ivec2 u_nodes;      // grid nodes per axis
 uniform vec2  u_half;       // half-size of the image on the sky (arcsec)
+uniform vec2  u_off;        // the image's centre on the sky (arcsec)
 uniform float u_fov;        // visible source-plane field (arcsec)
 out vec2  v_theta;
+out vec2  v_img;            // position in the image, 0..1 per axis (y up)
 out float v_mu;
 out float v_minor;
 void main() {
@@ -996,7 +999,8 @@ void main() {
   else if (k == 2 || k == 3) c.y += 1;
   else if (k == 5) c += ivec2(1, 1);
   vec4 node = texelFetch(u_beta, c, 0);
-  v_theta = (vec2(c) / vec2(u_nodes - 1) - 0.5) * 2.0 * u_half;
+  v_img   = vec2(c) / vec2(u_nodes - 1);
+  v_theta = (v_img - 0.5) * 2.0 * u_half + u_off;
   v_mu    = node.z;
   v_minor = node.w;
   gl_Position = vec4(node.xy / (0.5 * u_fov), 0.0, 1.0);
@@ -1029,17 +1033,17 @@ const DELENS_MESH_FRAG =
 `#version 300 es
 precision highp float;
 in  vec2  v_theta;
+in  vec2  v_img;
 in  float v_mu;
 in  float v_minor;
 out vec4 fragColor;
 uniform sampler2D u_img;
-uniform vec2  u_half;
 uniform float u_pixRatio;   // render pixel (source plane) over image texel, both in arcsec
 uniform int   u_numMasks;
 uniform vec4  u_mask   [${MAX_MASKS}];   // centre (xy), semi-major axis r, axis ratio q
 uniform vec2  u_maskRot[${MAX_MASKS}];   // cos φ, sin φ of the major axis
 void main() {
-  vec2 uv = v_theta / (2.0 * u_half) + 0.5;
+  vec2 uv = v_img;
   uv.y = 1.0 - uv.y;        // first data row (image top) is at t=0
   // Mip level set explicitly. The implicit one comes from screen derivatives of
   // uv, which on sub-pixel triangles are as noisy as the vertex snapping, and as
@@ -1118,11 +1122,13 @@ export class Renderer {
     // framing controls. Kept as renderer properties rather than setScene()
     // arguments so every existing call site picks the backdrop up unchanged.
     this._bg     = null;
-    this.bgOpts  = null;   // { fit, zoom, offX, offY, bright, skyLock, angSize, sky }
+    this.bgOpts  = null;   // { fit, zoom, offX, offY, bright, skyLock, angSize, sky, skyOff }
     // Delensed view: the background image's size on the sky, [w, h] in arcsec,
-    // from its pixel scale. Set whether or not the backdrop is hidden, since in
-    // that view the picture is the data being delensed rather than decoration.
+    // from its pixel scale, and where its centre sits, [x, y] in arcsec. Set
+    // whether or not the backdrop is hidden, since in that view the picture is
+    // the data being delensed rather than decoration.
     this.delensSky = null;
+    this.delensOff = [0, 0];
     this.delensMasks  = [];  // [[cx, cy, r, q, phi], …] in arcsec / radians, at most MAX_MASKS
     this.delensBright = 1;   // the backdrop's Brightness, applied to the delensed picture
     this._delens   = null;   // programs + empty VAO, built on first use
@@ -1300,15 +1306,15 @@ export class Renderer {
   // positive offset moves the image right / up rather than the sample window.
   //
   // A picture with a pixel scale (o.sky, its [w, h] on the sky in arcsec) skips
-  // all of that: it sits on the sky centred on the optical axis, so the viewport
-  // spans fov / sky of the texture on each axis whatever the zoom.
+  // all of that: it sits on the sky with its centre at o.skyOff (arcsec), so the
+  // viewport spans fov / sky of the texture on each axis whatever the zoom.
   _bgUniforms(fovArcsec, spanRatio = 1) {
     const b = this._bg, o = this.bgOpts;
     if (!b || !o) return null;
     if (o.sky) {
       return {
         scale:  [fovArcsec / o.sky[0] * spanRatio, fovArcsec / o.sky[1] * spanRatio],
-        offset: [0, 0],
+        offset: [-(o.skyOff?.[0] ?? 0) / o.sky[0], -(o.skyOff?.[1] ?? 0) / o.sky[1]],
         bright: o.bright ?? 1,
         invert: !!o.invert,
         tile:   false,
@@ -1666,7 +1672,7 @@ export class Renderer {
       meshProg, resolveProg,
       vao: gl.createVertexArray(),   // no attributes: the mesh is built from gl_VertexID
       mesh: {
-        u_beta: m('u_beta'), u_nodes: m('u_nodes'), u_half: m('u_half'), u_fov: m('u_fov'),
+        u_beta: m('u_beta'), u_nodes: m('u_nodes'), u_half: m('u_half'), u_off: m('u_off'), u_fov: m('u_fov'),
         u_img:  m('u_img'),  u_pixRatio: m('u_pixRatio'),
         u_numMasks: m('u_numMasks'), u_mask: m('u_mask'), u_maskRot: m('u_maskRot'),
       },
@@ -1730,7 +1736,9 @@ export class Renderer {
     // matching v_theta in the mesh shader.
     gl.bindFramebuffer(gl.FRAMEBUFFER, beta.fb);
     gl.viewport(0, 0, nx, ny);
+    const off = this.delensOff ?? [0, 0];
     gl.uniform2f(this._locs.u_traceSpan, sky[0] * nx / (nx - 1), sky[1] * ny / (ny - 1));
+    gl.uniform2f(this._locs.u_traceOff, off[0], off[1]);
     gl.uniform2f(this._locs.u_res, nx, ny);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
 
@@ -1753,6 +1761,7 @@ export class Renderer {
     gl.uniform1i(d.mesh.u_img, 1);
     gl.uniform2i(d.mesh.u_nodes, nx, ny);
     gl.uniform2f(d.mesh.u_half, sky[0] / 2, sky[1] / 2);
+    gl.uniform2f(d.mesh.u_off, off[0], off[1]);
     gl.uniform1f(d.mesh.u_fov, fovArcsec);
     gl.uniform1f(d.mesh.u_pixRatio, (fovArcsec / W) / (sky[0] / this._bg.w));
     const masks = (this.delensMasks ?? []).slice(0, MAX_MASKS);
@@ -1841,6 +1850,7 @@ export class Renderer {
       u_vizMode:      u('u_vizMode'),
       u_vizSrcIdx:    u('u_vizSrcIdx'),
       u_traceSpan:    u('u_traceSpan'),
+      u_traceOff:     u('u_traceOff'),
       u_isDark:       u('u_isDark'),
       u_pastedFeather: u('u_pastedFeather'),
       u_pastedStretch: u('u_pastedStretch'),
