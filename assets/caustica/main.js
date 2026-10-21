@@ -1966,6 +1966,11 @@ function buildDOM() {
           </div>
           </div>
           <div class="sl-drop-zone" id="sl-drop-zone" hidden>Drop to open beside</div>
+          <button type="button" class="sl-link-btn" id="sl-link-btn" aria-label="Choose what the two views share" hidden>
+            <svg class="sl-link-on" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.6 9.4l2.8-2.8"/><path d="M7.4 4.6l1.2-1.2a2.6 2.6 0 013.7 3.7l-1.2 1.2"/><path d="M8.6 11.4l-1.2 1.2a2.6 2.6 0 01-3.7-3.7l1.2-1.2"/></svg>
+            <svg class="sl-link-off" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.4 4.6l1.2-1.2a2.6 2.6 0 013.7 3.7l-1.2 1.2"/><path d="M8.6 11.4l-1.2 1.2a2.6 2.6 0 01-3.7-3.7l1.2-1.2"/><path d="M2.5 2.5l2 2M13.5 13.5l-2-2"/></svg>
+          </button>
+          <div class="sl-tab-menu sl-link-menu" id="sl-link-menu" role="dialog" aria-label="What the two views share" hidden></div>
           <div class="sl-place-hint" id="sl-place-hint" aria-hidden="true" hidden></div>
         </div>
         <div class="sl-timeline" id="sl-timeline">
@@ -2534,7 +2539,7 @@ function attachHandlers() {
       const either = state.showCritCurves || state.showCaustics;
       state.showCritCurves = !either;
       state.showCaustics   = !either;
-      renderSidebar(); redraw();
+      renderSidebar(); _syncPaneChips(); redraw();
       return;
     }
     if ((e.key === 'd' || e.key === 'D') && !e.metaKey && !e.ctrlKey && !e.altKey) {
@@ -2662,14 +2667,14 @@ function setRailTab(tab) {
 }
 
 // ── Placement-tool icons ─────────────────────────────────────────────────────
-// Lens: a mass with a pair of lensed arcs around it. Source: a star. Hybrid (lens and
-// source at once): a galaxy, which does both. Mask: a hatched patch, the area cut away.
+// Each is the shape of that object's marker (drawShapeMarker): lens ▲, source ▼,
+// hybrid ◆, mask ●.
 const _toolIcon = (d, size = 16) => `<svg width="${size}" height="${size}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const TOOL_ICON_PATHS = {
-  lens:   '<circle cx="8" cy="8" r="1.9" fill="currentColor" stroke="none"/><path d="M2.6 6.6A5.6 5.6 0 0 1 6.6 2.6M13.4 9.4A5.6 5.6 0 0 1 9.4 13.4" stroke-width="1.6"/>',
-  source: '<path d="M8 1.8l1.8 3.8 4.2.5-3.1 2.9.8 4.1L8 11.1 4.3 13.1l.8-4.1L2 6.1l4.2-.5z"/>',
-  hybrid: '<ellipse cx="8" cy="8" rx="6.4" ry="2.7" transform="rotate(-28 8 8)"/><circle cx="8" cy="8" r="1.7" fill="currentColor" stroke="none"/>',
-  mask:   '<ellipse cx="8" cy="8" rx="5.8" ry="4.6"/><path d="M4.2 10.6l5.4-5.4M6.6 12.1l4.9-4.9M3 7.9l2.6-2.6"/>',
+  lens:   '<path d="M8 2.6l5.4 9.4H2.6z" fill="currentColor" stroke="none"/>',
+  source: '<path d="M8 13.4l5.4-9.4H2.6z" fill="currentColor" stroke="none"/>',
+  hybrid: '<path d="M8 2.2L13.8 8 8 13.8 2.2 8z" fill="currentColor" stroke="none"/>',
+  mask:   '<circle cx="8" cy="8" r="4.6" fill="currentColor" stroke="none"/>',
 };
 const toolIcon = (tool, size) => _toolIcon(TOOL_ICON_PATHS[tool], size);
 
@@ -3080,7 +3085,7 @@ function _movePlaceHint(e) {
 // always the FOCUSED pane's view, so every control that reads it (the View and
 // Colors panels, the shortcuts, the mask tool) follows whichever pane was last
 // clicked; _withView() switches it for the duration of one pane's pass.
-const _panes = [{ tabs: [0], active: 0 }];   // tabs: view modes; active: index into tabs
+const _panes = [{ tabs: [0], active: 0, own: {} }];   // tabs: view modes; active: index into tabs; own: see below
 let   _focusPane = 0;
 let   _pane1Fermat = null;     // pane 1's Fermat stationary points, for its overlay
 let   _overlayCtx2 = null;
@@ -3093,6 +3098,64 @@ function isSourcePlaneView(mode) { return SOURCE_PLANE_VIEWS.includes(mode); }
 const _VIEW_GROUPS = [['Image plane', [0, 1, 2, 3, 5, 6, 7]], ['Source plane', SOURCE_PLANE_VIEWS]];
 
 function _paneMode(i) { const p = _panes[i]; return p.tabs[p.active]; }
+
+// ── Per-view settings and the link between the views ──
+// Curves, caustics and markers always belong to each view (the toggles at the end
+// of its tab strip). The groups below are shared by both views while linked (the
+// default) and become per-view when unlinked from the link button between them.
+// state always holds the FOCUSED view's values; each pane's `own` holds its copy
+// of the per-view keys, refreshed when the focus leaves it (_setFocus) and
+// swapped into state while it is drawn (_withPane).
+const PANE_OWN_KEYS = ['showCritCurves', 'showCaustics', 'showMarkers'];
+const LINK_GROUPS = [
+  { key: 'zoom',       label: 'Zoom (field of view)',       keys: ['fov'] },
+  { key: 'zsref',      label: 'Reference source redshift',  keys: ['critZs'] },
+  { key: 'display',    label: 'Display toggles', hint: 'Legend, legend background, scale bar, colorbar, stretch and time delays',
+    keys: ['showLegend', 'legendBg', 'showScaleBar', 'showColorbar', 'showStretch', 'showTimeDelays'] },
+  { key: 'instrument', label: 'Instrument',                  keys: ['instrument', 'instrPixel', 'instrPsfFwhm', 'instrPsf', 'instrHidden'] },
+  { key: 'lineart',    label: 'Line art',                    keys: ['lineArt', 'lineArtFill', 'lineArtFillAlpha', 'lineArtSmooth'] },
+  { key: 'background', label: 'Background image framing',    keys: ['bgHidden', 'bgFit', 'bgZoom', 'bgOffX', 'bgOffY', 'bgBright', 'bgSkyLock', 'bgAngSize'] },
+];
+const _link = Object.fromEntries(LINK_GROUPS.map(g => [g.key, true]));
+function _paneKeys() {
+  return PANE_OWN_KEYS.concat(...LINK_GROUPS.filter(g => !_link[g.key]).map(g => g.keys));
+}
+function _ownSnapshot() { return Object.fromEntries(_paneKeys().map(k => [k, state[k]])); }
+// Move the focus to pane i, carrying the per-view settings across.
+function _setFocus(i) {
+  if (i === _focusPane || !_panes[i]) return;
+  const from = _panes[_focusPane];
+  if (from) for (const k of _paneKeys()) from.own[k] = state[k];
+  _focusPane = i;
+  const own = _panes[i].own;
+  for (const k of _paneKeys()) if (k in own) state[k] = own[k];
+}
+// Pane p's value of a per-view setting.
+function _paneVal(p, key) {
+  if (p === _focusPane) return state[key];
+  const own = _panes[p]?.own;
+  return own && key in own ? own[key] : state[key];
+}
+// Run fn as pane i: its view, and its own values of the per-view settings.
+function _withPane(i, fn) {
+  if (i === _focusPane || !_panes[i]) return _withView(_paneMode(i) ?? state.vizMode, fn);
+  const keys = _paneKeys(), keep = {}, own = _panes[i].own;
+  for (const k of keys) keep[k] = state[k];
+  for (const k of keys) if (k in own) state[k] = own[k];
+  try { return _withView(_paneMode(i), fn); }
+  finally { for (const k of keys) state[k] = keep[k]; }
+}
+// Link or unlink a group. Unlinking starts both views from the current values;
+// linking makes the focused view's values both views'.
+function setLink(group, on) {
+  const g = LINK_GROUPS.find(x => x.key === group);
+  if (!g || _link[group] === on) return;
+  _link[group] = on;
+  for (const p of _panes) for (const k of g.keys) {
+    if (on) delete p.own[k]; else p.own[k] = state[k];
+  }
+  renderTabs(); renderSidebar(); redraw();
+}
 function _splitAllowed() { return window.innerWidth > 640; }
 function _isSplit() { return _splitAllowed() && _panes.length > 1; }
 
@@ -3109,7 +3172,7 @@ function _withView(mode, fn) {
 // Returns whether anything changed.
 function _reconcilePanes() {
   let changed = false;
-  if (!_splitAllowed() && _focusPane !== 0) { _focusPane = 0; state.vizMode = _paneMode(0); changed = true; }
+  if (!_splitAllowed() && _focusPane !== 0) { _setFocus(0); state.vizMode = _paneMode(0); changed = true; }
   const p = _panes[_focusPane];
   if (p.tabs[p.active] === state.vizMode) return changed;
   const i = p.tabs.indexOf(state.vizMode);
@@ -3131,7 +3194,7 @@ function _afterViewChange() {
 function focusPane(i) {
   // A pane still waiting for its view (a new one, blank) can't take the focus.
   if (i === _focusPane || !_panes[i] || _paneMode(i) == null) return;
-  _focusPane = i;
+  _setFocus(i);
   state.vizMode = _paneMode(i);
   _afterViewChange();
 }
@@ -3139,7 +3202,7 @@ function focusPane(i) {
 function _activateTab(p, i) {
   _panes[p].active = i;
   if (_paneMode(p) == null) { renderTabs(); redraw(); return; }   // a blank tab
-  _focusPane = p;
+  _setFocus(p);
   state.vizMode = _paneMode(p);
   _afterViewChange();
 }
@@ -3170,10 +3233,15 @@ function _takeTab(p, i) {
   const [mode] = pane.tabs.splice(i, 1);
   if (pane.active > i || pane.active >= pane.tabs.length) pane.active = Math.max(0, pane.active - 1);
   if (!pane.tabs.length) {
+    const wasFocused = p === _focusPane;
     _panes.splice(p, 1);
-    if (_focusPane >= p && _focusPane > 0) _focusPane--;
+    if (wasFocused) {
+      // The focused view closed: the remaining one takes the focus, with its settings.
+      _focusPane = Math.min(p, _panes.length - 1);
+      const own = _panes[_focusPane].own;
+      for (const k of _paneKeys()) if (k in own) state[k] = own[k];
+    } else if (_focusPane > p) _focusPane--;
   }
-  if (_focusPane >= _panes.length) _focusPane = _panes.length - 1;
   return mode;
 }
 
@@ -3192,7 +3260,7 @@ function _moveTab(p, i, q, j) {
     const at = j === undefined ? pane.tabs.length : (j > i ? j - 1 : j);
     pane.tabs.splice(at, 0, mode);
     pane.active = at;
-    _focusPane = p;
+    _setFocus(p);
     state.vizMode = mode;
     _afterViewChange();
     return;
@@ -3212,9 +3280,9 @@ function _moveTab(p, i, q, j) {
 function _splitWith(mode = null, fromIdx) {
   if (_panes.length > 1) { if (mode != null) _addTab(1, mode); return; }
   if (fromIdx !== undefined && _panes[0].tabs.length > 1) _takeTab(0, fromIdx);
-  _panes.push({ tabs: [mode], active: 0 });
+  _panes.push({ tabs: [mode], active: 0, own: _ownSnapshot() });   // starts as a copy of this view
   if (mode == null) { renderTabs(); redraw(); return; }
-  _focusPane = 1;
+  _setFocus(1);
   state.vizMode = mode;
   _afterViewChange();
 }
@@ -3246,17 +3314,29 @@ function _tabbarHtml(p) {
   }).join('');
   const split = p === 0 && _panes.length === 1
     ? `<button type="button" class="sl-tab-split" data-act="split" title="Open a second view beside this one" aria-label="Open a second view beside this one"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><path d="M8 2.5v11"/></svg></button>` : '';
+  const blankPane = _paneMode(p) == null;
+  const chip = (flag, label, svg) => `<button type="button" class="sl-pchip" data-act="flag" data-flag="${flag}" aria-pressed="${!!_paneVal(p, flag)}" title="${label} in this view${flag === 'showMarkers' ? '' : ' (C)'}" aria-label="${label} in this view">${svg}</button>`;
+  const chips = blankPane ? '' : `<span class="sl-pane-chips">` +
+    chip('showCritCurves', 'Critical curves', '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/></svg>') +
+    chip('showCaustics', 'Caustics', '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.5C9 6.5 9.5 7 13.5 8 9.5 9 9 9.5 8 13.5 7 9.5 6.5 9 2.5 8 6.5 7 7 6.5 8 2.5z"/></svg>') +
+    chip('showMarkers', 'Object markers', '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M8 3.5L13 12.5H3z"/></svg>') +
+    `</span>`;
   return `<div class="sl-tabs" role="tablist" aria-label="Views">${tabs}</div>` +
     `<button type="button" class="sl-tab-add" data-act="add" title="Add a view as a tab" aria-label="Add a view as a tab"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button>` +
-    `<span class="sl-tabbar-gap"></span>${split}`;
+    `<span class="sl-tabbar-gap"></span>${split}${chips}`;
+}
+
+function _syncPaneChips() {
+  document.querySelectorAll('.sl-pchip').forEach(b => {
+    const p = +b.closest('.sl-tabbar').dataset.pane;
+    b.setAttribute('aria-pressed', _paneVal(p, b.dataset.flag) ? 'true' : 'false');
+  });
 }
 
 function renderTabs() {
   _reconcilePanes();
   const stage = document.getElementById('sl-stage');
   if (!stage) return;
-  // Held before the strips are rebuilt below, which would detach it.
-  const chips = document.getElementById('sl-overlay-chips');
   const split = _isSplit();
   stage.classList.toggle('sl-split', split);
   for (const p of [0, 1]) {
@@ -3273,12 +3353,30 @@ function renderTabs() {
     chooser.hidden = !blank;
     if (blank && !chooser.childElementCount) chooser.innerHTML = _chooserHtml();
   }
-  // The overlay toggles sit at the end of the last pane's tab strip on desktop,
-  // and on the image itself on phones.
-  const home  = _splitAllowed()
-    ? stage.querySelector(`.sl-tabbar[data-pane="${split ? 1 : 0}"]`)
-    : document.getElementById('sl-image-wrap');
-  if (chips && home) home.appendChild(chips);
+  _renderLink();
+}
+
+// ── The link button between the two views, and its menu ──
+function _renderLink() {
+  const btn = document.getElementById('sl-link-btn');
+  if (!btn) return;
+  btn.hidden = !_isSplit();
+  const n = LINK_GROUPS.filter(g => _link[g.key]).length;
+  btn.dataset.state = n === LINK_GROUPS.length ? 'all' : n ? 'some' : 'none';
+  btn.title = n === LINK_GROUPS.length ? 'The views share zoom, display, instrument, line art and background. Click to choose.'
+    : n ? `The views share ${LINK_GROUPS.filter(g => _link[g.key]).map(g => g.label.toLowerCase()).join(', ')}. Click to choose.`
+    : 'The views share nothing but the scene. Click to choose.';
+  const menu = document.getElementById('sl-link-menu');
+  if (menu && !menu.hidden) menu.querySelectorAll('[data-group]').forEach(i => { i.checked = _link[i.dataset.group]; });
+}
+function _toggleLinkMenu() {
+  const menu = document.getElementById('sl-link-menu');
+  if (!menu) return;
+  if (!menu.hidden) { menu.hidden = true; return; }
+  menu.innerHTML = `<div class="sl-tab-menu-hdr">Shared by both views</div>` +
+    LINK_GROUPS.map(g => `<label class="sl-link-row"${g.hint ? ` title="${g.hint}"` : ''}><input type="checkbox" data-group="${g.key}" ${_link[g.key] ? 'checked' : ''}><span>${g.label}</span></label>`).join('') +
+    `<div class="sl-link-note">Curves, caustics and markers are per view (the toggles above each).</div>`;
+  menu.hidden = false;
 }
 
 // ── The add-a-view menu ──
@@ -3319,7 +3417,11 @@ function attachPaneHandlers() {
   // Clicking anywhere in a pane focuses it, before its own handlers run (so a
   // drag that starts there hit-tests against that pane's view).
   stage.querySelectorAll('.sl-pane').forEach(el =>
-    el.addEventListener('pointerdown', () => focusPane(+el.dataset.pane), true));
+    el.addEventListener('pointerdown', e => {
+      // The tab strip's own controls focus on click instead: a refocus here would
+      // rebuild the strip under the pointer and swallow the click.
+      if (!e.target.closest('.sl-tabbar')) focusPane(+el.dataset.pane);
+    }, true));
 
   stage.addEventListener('click', e => {
     const bar = e.target.closest('.sl-tabbar');
@@ -3328,6 +3430,15 @@ function attachPaneHandlers() {
     const act = e.target.closest('[data-act]')?.dataset.act;
     const tab = e.target.closest('.sl-tab');
     if (act === 'close' && tab) { _closeTab(p, +tab.dataset.idx); return; }
+    if (act === 'flag') {
+      const flag = e.target.closest('[data-flag]').dataset.flag;
+      focusPane(p);
+      state[flag] = !state[flag];
+      updateOverlayChips(); _syncPaneChips();
+      if (activeTab === 'view') renderSidebar();
+      redraw();
+      return;
+    }
     if (act === 'add')   { _openTabMenu(e.target.closest('[data-act]'), p, 'add'); return; }
     if (act === 'split') { _closeTabMenu(); _splitWith(); return; }
     if (!tab) return;
@@ -3337,6 +3448,15 @@ function attachPaneHandlers() {
       if (document.getElementById('sl-tab-menu')) { _closeTabMenu(); return; }
       _openTabMenu(tab, p, 'change', i);
     } else _activateTab(p, i);
+  });
+  document.getElementById('sl-link-btn')?.addEventListener('click', e => { e.stopPropagation(); _toggleLinkMenu(); });
+  document.getElementById('sl-link-menu')?.addEventListener('change', e => {
+    const i = e.target.closest('[data-group]');
+    if (i) setLink(i.dataset.group, i.checked);
+  });
+  document.addEventListener('pointerdown', e => {
+    const m = document.getElementById('sl-link-menu');
+    if (m && !m.hidden && !e.target.closest('#sl-link-menu, #sl-link-btn')) m.hidden = true;
   });
   document.getElementById('sl-chooser')?.addEventListener('click', e => {
     const b = e.target.closest('[data-mode]');
@@ -3441,7 +3561,7 @@ function drawOverlay() {
   } else if (_isSplit()) {
     const keepCtx = overlayCtx, keepF = state.fermatPoints, keepP = state.saddlePhis;
     _overlayCtx2 ??= document.getElementById('sl-overlay2')?.getContext('2d');
-    if (_overlayCtx2) _withView(_paneMode(1), () => {
+    if (_overlayCtx2) _withPane(1, () => {
       overlayCtx = _overlayCtx2;
       if (_pane1Fermat) { state.fermatPoints = _pane1Fermat.points; state.saddlePhis = _pane1Fermat.phis; }
       try {
@@ -3451,7 +3571,7 @@ function drawOverlay() {
       } finally { overlayCtx = keepCtx; state.fermatPoints = keepF; state.saddlePhis = keepP; }
     });
   }
-  _withView(_paneMode(0), _drawOverlayPane);
+  _withPane(0, _drawOverlayPane);
 }
 
 // ── Quality tab ───────────────────────────────────────────────────────────────
@@ -3589,19 +3709,23 @@ function updateOverlayChips() {
 // Each pane's reference-redshift chip, for that pane's view. On a source-plane
 // view it says so, in the source colour, and the pane is framed in that colour.
 function updateZsChip() {
-  _withView(_paneMode(0), () => _updateZsChipFor('sl-zs-chip', 'sl-image-wrap'));
+  _withPane(0, () => _updateZsChipFor('sl-zs-chip', 'sl-image-wrap'));
   const two = _isSplit() && _paneMode(1) != null;
-  if (two) _withView(_paneMode(1), () => _updateZsChipFor('sl-zs-chip2', 'sl-image-wrap2'));
+  if (two) _withPane(1, () => _updateZsChipFor('sl-zs-chip2', 'sl-image-wrap2'));
   else {
     const c2 = document.getElementById('sl-zs-chip2'); if (c2) c2.style.display = 'none';
     document.getElementById('sl-image-wrap2')?.classList.remove('sl-src-view');
+    document.querySelector('.sl-pane[data-pane="1"]')?.classList.remove('sl-pane-src');
   }
 }
 function _updateZsChipFor(id, wrapId) {
-  document.getElementById(wrapId)?.classList.toggle('sl-src-view', isSourcePlaneView(state.vizMode));
+  const srcView = isSourcePlaneView(state.vizMode);
+  const wrap = document.getElementById(wrapId);
+  wrap?.classList.toggle('sl-src-view', srcView);
+  wrap?.closest('.sl-pane')?.classList.toggle('sl-pane-src', srcView);   // tab and frame in the source colour
   const chip = document.getElementById(id);
   if (!chip) return;
-  const src      = isSourcePlaneView(state.vizMode) && !state.lineArt;
+  const src      = srcView && !state.lineArt;
   const relevant = state.vizMode !== 0 || state.showCritCurves || state.showCaustics;
   const hasPlane = state.planes.length > 0;
   chip.classList.toggle('sl-zs-src', src);
@@ -5608,7 +5732,7 @@ function renderViewPanel() {
             <label class="${state.showLegend?'':'sl-label-disabled'}" title="Translucent panel behind the legend"><input type="checkbox" id="sl-legend-bg" ${state.legendBg?'checked':''} ${state.showLegend?'':'disabled'}> Legend BG</label>
           </div>
           <div class="sl-checkbox-row">
-            <label><input type="checkbox" id="sl-show-markers" ${state.showMarkers?'checked':''}> Positions</label>
+            <label class="sl-mobile-only"><input type="checkbox" id="sl-show-markers" ${state.showMarkers?'checked':''}> Positions</label>
             <label><input type="checkbox" id="sl-show-scalebar" ${state.showScaleBar?'checked':''}> Scale bar</label>
           </div>
           <div class="sl-checkbox-row">
@@ -5634,9 +5758,10 @@ function renderViewPanel() {
         </div>
         ${_open(_curvesExpanded) ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
           <div class="sl-checkbox-row">
-            <label><input type="checkbox" id="sl-show-crit" ${state.showCritCurves?'checked':''}> Critical curves</label>
-            <label><input type="checkbox" id="sl-show-caus" ${state.showCaustics   ?'checked':''}> Caustics</label>
+            <label class="sl-mobile-only"><input type="checkbox" id="sl-show-crit" ${state.showCritCurves?'checked':''}> Critical curves</label>
+            <label class="sl-mobile-only"><input type="checkbox" id="sl-show-caus" ${state.showCaustics   ?'checked':''}> Caustics</label>
           </div>
+          <p class="sl-muted-note sl-desk-only" style="margin:0 0 6px">Critical curves, caustics and markers are switched for each view by the toggles at the end of its tab strip.</p>
           <div class="sl-checkbox-row">
             <label title="Draw radial critical curves and caustics dotted, tangential ones solid, with a legend entry for each"><input type="checkbox" id="sl-curve-types" ${state.curveTypes?'checked':''}> Curve types</label>
           </div>
@@ -7815,7 +7940,7 @@ function _drawColorbarFixed(ctx, w, h, info) {
 }
 
 // Pane 0's DOM colorbar, for pane 0's view (pane 1's is drawn on its overlay).
-function _updateColorbar() { _withView(_paneMode(0), _updateColorbarNow); }
+function _updateColorbar() { _withPane(0, _updateColorbarNow); }
 function _updateColorbarNow() {
   const bar   = document.getElementById('sl-colorbar');
   const strip = document.getElementById('sl-colorbar-bar');
@@ -7992,13 +8117,13 @@ function _doRedraw() {
 
   // Pane 1 first: its frame is copied off the WebGL canvas, which then ends on
   // pane 0's view (see the panes section).
-  if (_isSplit() && _paneMode(1) != null) _withView(_paneMode(1), () => {
+  if (_isSplit() && _paneMode(1) != null) _withPane(1, () => {
     syncBackdrop(); syncDetector();
     _renderGL(sorted, isDark);
     _pane1Fermat = { points: state.fermatPoints, phis: state.saddlePhis };
     _copyGLToPane1();
   });
-  _withView(_paneMode(0), () => {
+  _withPane(0, () => {
     syncBackdrop(); syncDetector();
     _renderGL(sorted, isDark);
     glCanvas.classList.toggle('sl-viz-active', state.vizMode !== 0);
@@ -8010,12 +8135,13 @@ function _doRedraw() {
   drawOverlay();
   reportPerf(performance.now() - _t0);
   // Pane 0's chrome describes pane 0's view.
-  _withView(_paneMode(0), () => {
+  _withPane(0, () => {
     reportObjectCap();
     reportDetector();
     updateOverlayChips();
-    updateZsChip();
   });
+  updateZsChip();
+  _syncPaneChips();
 }
 
 // Draw the scene for state.vizMode onto the WebGL canvas.
@@ -8050,7 +8176,7 @@ function _renderGL(sorted, isDark) {
 // Composite the GL canvas + overlay (markers/curves/legend) into a flat 2D canvas,
 // reflecting whatever is currently on screen. UI chrome (the viz-mode chip, colorbar,
 // sidebar) lives in separate DOM elements and is intentionally NOT included.
-function buildCompositeCanvas() { return _withView(_paneMode(0), _buildCompositeCanvas); }
+function buildCompositeCanvas() { return _withPane(0, _buildCompositeCanvas); }
 function _buildCompositeCanvas() {
   const gl  = glCanvas;
   const ov  = document.getElementById('sl-overlay');
@@ -8092,7 +8218,7 @@ function downloadBlob(blob, filename) {
 }
 
 // PNG snapshot.
-function captureSnapshot() { _withView(_paneMode(0), _captureSnapshot); }
+function captureSnapshot() { _withPane(0, _captureSnapshot); }
 function _captureSnapshot() {
   // Ensure the frame is fully drawn first, from current settings: the backdrop,
   // masks and detector are otherwise pushed into the renderer only by the next
@@ -8308,7 +8434,8 @@ function startProgrammaticRecording() {
     //      affect playback speed: critical curves render correctly.
     // WebM: captureStream samples at real time; slow computation causes frame
     //       duplication, so critical curves/caustics are suppressed for WebM.
-    if (renderer && state.dist) {
+    // Recordings capture the left view, so the frame is drawn as that view.
+    if (renderer && state.dist) _withPane(0, () => {
       const isDark   = document.documentElement.getAttribute('data-theme') === 'dark' ? 1 : 0;
       const sorted   = [...state.planes].sort((a, b) => a.z - b.z);
       if (state.vizMode !== 0) {
@@ -8325,9 +8452,9 @@ function startProgrammaticRecording() {
       }
       const savedCrit = state.showCritCurves, savedCaus = state.showCaustics;
       if (!recState.useGif) { state.showCritCurves = false; state.showCaustics = false; }
-      drawOverlay();
+      _drawOverlayPane();
       state.showCritCurves = savedCrit; state.showCaustics = savedCaus;
-    }
+    });
     for (const plane of state.planes) redrawPlaneCanvas(plane);
     _compositeToLive();
 
@@ -8513,7 +8640,7 @@ function stopRecording() {
   }
 }
 
-function _compositeToLive() { _withView(_paneMode(0), _compositeToLiveNow); }
+function _compositeToLive() { _withPane(0, _compositeToLiveNow); }
 function _compositeToLiveNow() {
   if (!recState.liveCanvas) return;
   const lc  = recState.liveCanvas;

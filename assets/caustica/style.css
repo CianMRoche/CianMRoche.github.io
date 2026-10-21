@@ -2290,47 +2290,67 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
   .sl-timeline, .sl-rail-tabs, #sl-plane-card { display: none !important; }
 
   /* View panes: one, or two side by side, each a tab strip over a square image.
-     The overlay toggles join the last strip (renderTabs() moves them there). */
+     Folder tabs: the showing tab and its image share one outline, in the pane's
+     frame colour --fc (teal when focused beside another view, amber for a
+     source-plane view, a hairline otherwise). */
   .sl-stage { position: relative; padding: 8px 14px 10px; }
   .sl-panes { display: flex; justify-content: center; align-items: flex-start; gap: 14px; width: 100%; height: 100%; }
-  .sl-pane { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .sl-pane { --fc: var(--hairline); --fw: 1px; display: flex; flex-direction: column; min-width: 0; }
+  .sl-pane-src { --fc: color-mix(in srgb, var(--src-color) 70%, transparent); }
+  .sl-split .sl-pane-focus { --fc: var(--accent); --fw: 2px; }
+  .sl-split .sl-pane-focus.sl-pane-src { --fc: var(--src-color); }
   .sl-pane[data-pane="1"]:not([hidden]) { display: flex; }
   .sl-pane[hidden] { display: none; }
-  .sl-image-wrap { width: min(100cqw, 100cqh - 40px); }
-  .sl-split .sl-image-wrap { width: min((100cqw - 14px) / 2, 100cqh - 40px); }
-  .sl-split .sl-pane-focus .sl-image-wrap { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .sl-image-wrap { width: min(100cqw, 100cqh - 36px); }
+  .sl-split .sl-image-wrap { width: min((100cqw - 14px) / 2, 100cqh - 36px); }
+  .sl-pane .sl-image-wrap { border: var(--fw) solid var(--fc); }
+  /* Under a showing first tab the frame's corner is square, so the two join. */
+  .sl-pane:has(.sl-tab.active:first-child) .sl-image-wrap { border-top-left-radius: 0; }
   .sl-pane.drop-into .sl-image-wrap { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
-  .sl-viz-chip { display: none; }
+  .sl-viz-chip, #sl-overlay-chips { display: none; }
   .sl-zs-chip { top: 8px; }
   /* No black behind the canvas: it showed through the anti-aliased rounded
      corners as a dark fringe. */
   .sl-image-wrap { background: transparent; }
 
-  .sl-tabbar { display: flex; align-items: center; gap: 2px; height: 34px; width: 0; min-width: 100%; }
+  .sl-tabbar { display: flex; align-items: flex-end; gap: 2px; height: 36px; width: 0; min-width: 100%; }
   .sl-tabbar.drop-end .sl-tab-add { box-shadow: inset 2px 0 0 var(--accent); }
-  .sl-tabs { display: flex; align-items: center; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
-  .sl-tabs::-webkit-scrollbar { display: none; }
+  .sl-tabs { display: flex; align-items: flex-end; gap: 2px; min-width: 0; }
   .sl-tab {
-    flex-shrink: 0;
+    position: relative;
+    flex: 0 1 auto;
+    min-width: 0;
     display: flex;
     align-items: center;
     gap: 6px;
-    height: 30px;
-    padding: 0 6px 0 10px;
-    border-radius: 7px;
+    height: 32px;
+    padding: 0 6px 0 11px;
+    border: var(--fw) solid transparent;
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
     color: var(--muted);
     font: 500 12.5px system-ui, -apple-system, sans-serif;
     white-space: nowrap;
     user-select: none;
     cursor: pointer;
   }
-  .sl-tab.active { background: var(--bg-soft2); color: var(--fg); }
+  /* The showing tab hangs over the frame's top edge by its border width, hiding
+     the frame line beneath it so tab and image read as one shape. */
+  .sl-tab.active {
+    z-index: 1;
+    margin-bottom: calc(-1 * var(--fw));
+    height: calc(32px + var(--fw));
+    padding-bottom: var(--fw);
+    border-color: var(--fc);
+    background: var(--bg);
+    color: var(--fg);
+  }
   .sl-tab.dragging { opacity: 0.4; }
   .sl-tab.drop-before { box-shadow: inset 2px 0 0 var(--accent); }
-  .sl-tab-name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+  .sl-tab-name { min-width: 0; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
   .sl-tab-caret { flex-shrink: 0; margin-left: -2px; color: var(--muted); }
-  .sl-tab.focus { box-shadow: inset 0 -2px 0 var(--accent); }
   .sl-tab-blank .sl-tab-name { font-style: italic; color: var(--muted); }
+  .sl-tab-add, .sl-tab-split, .sl-pane-chips { align-self: center; }
   /* Source-plane views carry the source colour: on the tab, the frame and the z_s chip. */
   .sl-tab-tag {
     flex-shrink: 0;
@@ -2341,9 +2361,64 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
     font-size: 10.5px;
     font-weight: 600;
   }
-  .sl-tab-src.focus { box-shadow: inset 0 -2px 0 var(--src-color); }
-  .sl-image-wrap.sl-src-view { border-color: var(--src-color); }
-  .sl-split .sl-pane-focus .sl-image-wrap.sl-src-view { border-color: var(--src-color); box-shadow: 0 0 0 1px var(--src-color); }
+
+  /* Each view's own curve / caustic / marker toggles, at the end of its strip. */
+  .sl-pane-chips { display: flex; gap: 2px; flex-shrink: 0; }
+  .sl-pchip {
+    width: 24px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    border-radius: 7px;
+    background: none;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .sl-pchip[aria-pressed="true"] { color: var(--accent); }
+  .sl-body.sl-hide-ov .sl-pane-chips { display: none; }
+
+  /* The link between the two views: halfway down the gap between them. */
+  .sl-link-btn {
+    position: absolute;
+    z-index: 25;
+    left: 50%;
+    top: calc(8px + 36px + min((100cqw - 14px) / 2, 100cqh - 36px) / 2);
+    width: 26px;
+    height: 26px;
+    margin: -13px 0 0 -13px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: var(--bg-soft2);
+    color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .sl-link-btn[hidden] { display: none; }
+  .sl-link-btn .sl-link-off { display: none; }
+  .sl-link-btn[data-state="some"] { color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 0 0 3px var(--bg), 0 0 0 4px color-mix(in srgb, var(--accent) 45%, transparent); }
+  .sl-link-btn[data-state="none"] { color: var(--muted); box-shadow: 0 0 0 1px var(--hairline); }
+  .sl-link-btn[data-state="none"] .sl-link-on { display: none; }
+  .sl-link-btn[data-state="none"] .sl-link-off { display: block; }
+  .sl-link-menu {
+    left: 50%;
+    top: calc(8px + 36px + min((100cqw - 14px) / 2, 100cqh - 36px) / 2 + 20px);
+    width: 232px;
+    margin-left: -116px;
+    z-index: 26;
+  }
+  .sl-link-menu[hidden] { display: none; }
+  .sl-link-row { display: flex; align-items: center; gap: 8px; padding: 4px 8px; font-size: 12.5px; color: var(--fg-soft); cursor: pointer; }
+  .sl-link-note { padding: 6px 8px 2px; font-size: 11.5px; line-height: 1.4; color: var(--muted); }
+  .sl-rail .sl-mobile-only { display: none; }
+  .sl-rail .sl-checkbox-row:not(:has(> label:not(.sl-mobile-only))) { display: none; }
+  .sl-tab { padding-left: 10px; }
   .sl-zs-chip.sl-zs-src { color: var(--src-color); border-color: color-mix(in srgb, var(--src-color) 60%, transparent); font-weight: 600; }
 
   /* A blank pane offers the views, grouped by the plane they show. */
@@ -2407,9 +2482,6 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
     cursor: pointer;
   }
   .sl-tabbar-gap { flex: 1; min-width: 8px; }
-  .sl-tabbar .sl-overlay-chips { position: static; flex-shrink: 0; gap: 2px; opacity: 1; }
-  .sl-tabbar .sl-overlay-chips button { width: 28px; height: 28px; border: none; border-radius: 7px; background: none; }
-  .sl-tabbar .sl-overlay-chips button.active { border: none; }
 
   .sl-drop-zone {
     position: absolute;
@@ -2761,6 +2833,8 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
   .sl-drawer-btn:hover { background: var(--hairline); }
   .sl-tab:hover:not(.active) { color: var(--fg-soft); background: color-mix(in srgb, var(--bg-soft2) 60%, transparent); }
   .sl-tab-x:hover, .sl-tab-add:hover, .sl-tab-split:hover,
-  .sl-tabbar .sl-overlay-chips button:hover { color: var(--fg); background: var(--bg-soft2); }
+  .sl-pchip:hover { color: var(--fg); background: var(--bg-soft2); }
+  .sl-pchip[aria-pressed="true"]:hover { color: var(--accent); }
+  .sl-link-row:hover { background: var(--bg-soft2); color: var(--fg); border-radius: 5px; }
   .sl-tab-menu button:hover, .sl-chooser button:hover { background: var(--bg-soft2); color: var(--fg); }
 }
