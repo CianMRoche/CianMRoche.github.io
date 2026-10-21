@@ -2951,9 +2951,8 @@ let   _drawerOpen  = true;
 try { _drawerOpen = localStorage.getItem('caustica-drawer') !== 'closed'; } catch (_) {}
 let   _sightHot    = null;        // plane under the pointer, on the strip or its card
 // The observation's card shows only once the strip's eye is clicked, and hides
-// again on the next click; the choice is remembered, like the drawer's.
+// again on the next click. It starts hidden every time the app opens.
 let   _obsCardOpen = false;
-try { _obsCardOpen = localStorage.getItem('caustica-obs-card') === 'open'; } catch (_) {}
 let   _sightDrag   = null;        // { id, top, x0, moved } while a strip mark is dragged
 let   _sightAdd    = null;        // { x0, z } while a press on a blank stretch of the strip is held
 let   _sightGhost  = null;        // z under the pointer on a blank stretch (a click adds a plane there)
@@ -3209,7 +3208,6 @@ function _openObservationPanel() {
 // Show or hide the observation's card (the strip's eye).
 function setObsCardOpen(open) {
   _obsCardOpen = open;
-  try { localStorage.setItem('caustica-obs-card', open ? 'open' : 'closed'); } catch (_) {}
   renderDrawer();
 }
 
