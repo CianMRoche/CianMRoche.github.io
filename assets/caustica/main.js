@@ -420,6 +420,7 @@ const CONFIG_DEFAULTS = {
   bgOffX:             0.0,    // pan, in half-viewport widths (+ moves the image right)
   bgOffY:             0.0,    // pan, in half-viewport heights (+ moves the image up)
   bgBright:           1.0,    // brightness multiplier
+  bgEdgeBlend:        0,      // 0-1: fades the picture into the field along its edges (0 = hard)
   bgColor:            '#000000', // empty-field colour behind everything, stored as
                               // the dark-mode display value (black = the old field)
   bgSkyLock:          false,  // false = fixed to the viewport; true = zooms with the FOV
@@ -976,6 +977,7 @@ function configToYaml() {
   y += `bgOffX: ${+state.bgOffX.toFixed(4)}\n`;
   y += `bgOffY: ${+state.bgOffY.toFixed(4)}\n`;
   y += `bgBright: ${+state.bgBright.toFixed(4)}\n`;
+  y += `bgEdgeBlend: ${+state.bgEdgeBlend.toFixed(4)}\n`;
   y += `bgColor: ${state.bgColor}\n`;
   y += `bgSkyLock: ${state.bgSkyLock}\n`;
   y += `bgHidden: ${state.bgHidden}\n`;
@@ -1294,6 +1296,7 @@ function loadConfigFromYaml(yaml) {
     state.bgOffX    = _clampNum(cfg.bgOffX,  -BG_OFF_MAX, BG_OFF_MAX, CONFIG_DEFAULTS.bgOffX);
     state.bgOffY    = _clampNum(cfg.bgOffY,  -BG_OFF_MAX, BG_OFF_MAX, CONFIG_DEFAULTS.bgOffY);
     state.bgBright  = _clampNum(cfg.bgBright,  0, BG_BRIGHT_MAX, CONFIG_DEFAULTS.bgBright);
+    state.bgEdgeBlend = _clampNum(cfg.bgEdgeBlend, 0, 1, CONFIG_DEFAULTS.bgEdgeBlend);
     state.bgColor   = COLOR_RE.test(cfg.bgColor) ? cfg.bgColor : CONFIG_DEFAULTS.bgColor;
     state.bgSkyLock = _bool(cfg.bgSkyLock, CONFIG_DEFAULTS.bgSkyLock);
     state.bgHidden  = _bool(cfg.bgHidden,  CONFIG_DEFAULTS.bgHidden);
@@ -3287,7 +3290,7 @@ const LINK_GROUPS = [
     keys: ['showLegend', 'legendBg', 'showScaleBar', 'showColorbar', 'showStretch', 'showTimeDelays', 'showShapes'] },
   { key: 'instrument', label: 'Instrument',                  keys: ['instrument', 'instrPixel', 'instrPsfFwhm', 'instrPsf', 'instrHidden'] },
   { key: 'lineart',    label: 'Line art',                    keys: ['lineArt', 'lineArtFill', 'lineArtFillAlpha', 'lineArtSmooth'] },
-  { key: 'background', label: 'Background image framing',    keys: ['bgHidden', 'bgFit', 'bgZoom', 'bgOffX', 'bgOffY', 'bgBright', 'bgSkyLock', 'bgAngSize'] },
+  { key: 'background', label: 'Background image framing',    keys: ['bgHidden', 'bgFit', 'bgZoom', 'bgOffX', 'bgOffY', 'bgBright', 'bgEdgeBlend', 'bgSkyLock', 'bgAngSize'] },
 ];
 const _link = Object.fromEntries(LINK_GROUPS.map(g => [g.key, true]));
 function _paneKeys() {
@@ -4954,6 +4957,47 @@ function _installBackground(img, name, src) {
   renderSidebar(); redraw();
 }
 
+// Background → Use lensed image: the lensed image as it is now becomes the picture
+// to delens. It is drawn under the settings of a pane showing the lensed image (the
+// focused one if it does; else the focused pane's, in the lensed-image view), with
+// no backdrop and a black field, and only the WebGL frame is copied, so no overlay
+// comes with it. Its pixel scale is the field over the frame's width, centred, so
+// it lies on the sky exactly where the light was. It starts hidden, as in the
+// lensed view it would double the light; the delensed view reads it regardless.
+function useLensedAsBackground() {
+  if (!renderer || !state.dist || !glCanvas) return;
+  const i = !_isSplit() || _paneMode(_focusPane) === 0 ? _focusPane
+          : ([0, 1].find(k => _paneMode(k) === 0) ?? _focusPane);
+  const sorted = [...state.planes].sort((a, b) => a.z - b.z);
+  let frame = null, fov = state.fov;
+  _withPane(i, () => _withView(0, () => {
+    syncDetector();
+    const keepField = renderer.fieldColor;
+    renderer.bgOpts = null;
+    renderer.fieldColor = [0, 0, 0];
+    try {
+      renderer.setScene(sorted, state.dist, state.fov, activeVizSettings(0), 0, 0, 1, [], [0, 0]);
+      frame = document.createElement('canvas');
+      frame.width = glCanvas.width; frame.height = glCanvas.height;
+      frame.getContext('2d').drawImage(glCanvas, 0, 0);
+      fov = state.fov;
+    } finally { renderer.fieldColor = keepField; }
+  }));
+  if (!frame?.width) return;
+  state.bgPixel   = _clampNum(+(fov / frame.width).toPrecision(6), BG_PIXEL_MIN, BG_PIXEL_MAX, 0);
+  state.bgSkyOffX = 0; state.bgSkyOffY = 0;
+  // Shown as captured, and hidden in the lensed view (in each view, if unlinked).
+  state.bgHidden = true; state.bgBright = 1;
+  for (const p of _panes) {
+    if ('bgHidden' in p.own) p.own.bgHidden = true;
+    if ('bgBright' in p.own) p.own.bgBright = 1;
+  }
+  _bgLoadSeq++;   // supersedes any picture still loading
+  _installBackground(frame, 'Lensed image', '');
+  showToast(_delensShowing() ? 'The lensed image is now the background picture, delensed here.'
+                             : 'The lensed image is now the background picture. Open the Delensed image view (U) to trace it back.');
+}
+
 function _applyBackgroundFile(file) {
   const url = URL.createObjectURL(file);
   const seq = ++_bgLoadSeq;
@@ -5030,6 +5074,7 @@ function syncBackdrop() {
     offX:    state.bgOffX,
     offY:    state.bgOffY,
     bright:  state.bgBright,
+    edge:    state.bgEdgeBlend,
     skyLock: state.bgSkyLock,
     angSize: state.bgAngSize,
     sky:     bgSkySize(),
@@ -5041,6 +5086,7 @@ function syncBackdrop() {
   renderer.delensSky    = bgSkySize();
   renderer.delensOff    = [state.bgSkyOffX, state.bgSkyOffY];
   renderer.delensBright = state.bgBright;
+  renderer.delensEdge   = state.bgEdgeBlend;
   renderer.delensMasks  = activeMasks().map(o =>
     [o.cx, o.cy, o.params.r ?? 0.3, o.params.q ?? 1, o.params.phi ?? 0]);
   // The field colour applies whether or not a picture is loaded, so it lives outside
@@ -5972,6 +6018,8 @@ function backgroundSectionHtml() {
             <b>Fit</b>: the image panel is square. <b>Cover</b> fills it and crops the long axis, <b>Contain</b> fits the whole image and leaves the rest empty, <b>Stretch</b> distorts it to the square, <b>Tile</b> fits it and mirror-repeats to fill.<br><br>
             <b>Zoom</b> and <b>Offset X / Y</b> then frame it by hand (offsets are in half-panel widths). <b>Brightness</b> fades the picture toward the empty field (0) or past its supplied brightness (above 1), and affects the backdrop only. <b>Zoom with FOV</b> pins the backdrop to the sky instead of the viewport, so zooming the field magnifies it too.<br><br>
             A <b>Pixel scale</b> (arcseconds per pixel of the image as supplied) replaces Fit, Zoom and Zoom with FOV: the picture is then placed on the sky at that scale in every view, and <b>Offset X / Y</b> become the position of its centre on the sky, in arcseconds. The <b>Delensed image</b> view (<b>U</b>) needs one, and when it opens it gives a picture without one the scale and centre its framing implies.<br><br>
+            <b>Edge blend</b> fades the picture into the field over a band along its edges, up to 0.4 of its shorter side, in the lensed and delensed views alike.<br><br>
+            <b>Use lensed image</b> takes the lensed image as it is now, its light only, with no backdrop and no overlays, as the picture, at its true scale on the sky. It starts hidden here, where it would double the light, and the <b>Delensed image</b> view traces it back: with the same lens model it rebuilds the sources, a check on the delensing and a way to see what a model's own image looks like through it.<br><br>
             The eye button takes the picture off the plot without unloading it. Config files save the framing, and the file name only for the images shipped with the site (as the <b>Image recreation</b> preset does); a picture you upload yourself is not saved.`)}
         </div>
         ${_open(_bgExpanded) ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
@@ -5981,6 +6029,9 @@ function backgroundSectionHtml() {
             <button class="sl-rec-mini-btn sl-rec-mini-clear" id="sl-bg-clear" title="Remove the background image">Remove</button>` : ''}
           </div>
           ${has ? `<div class="sl-bg-file" title="${_escHtml(state.bgName)}">${_escHtml(state.bgName)} · ${state.bgCanvas.width}×${state.bgCanvas.height}</div>` : ''}
+          <div class="sl-capture-row">
+            <button class="sl-capture-btn" id="sl-bg-lensed" title="Take the lensed image as it is now, its light only (no backdrop or overlays), as the background picture, at its true scale on the sky. It starts hidden in the lensed view, where it would double the light; the Delensed image view (U) traces it back, and with the same lens model rebuilds the sources.">Use lensed image</button>
+          </div>
           ${inertNote ? `<p class="sl-muted-note" style="margin:6px 0 0">${inertNote}</p>` : ''}
           ${has ? `<div class="sl-global-input" style="margin-top:8px">
             <label title="Arcseconds per pixel of the background image as supplied. With one, the picture is placed on the sky at that scale in every view, its centre at Offset X / Y (arcsec).">Pixel scale</label>
@@ -6024,6 +6075,11 @@ function backgroundSectionHtml() {
             <label>Brightness</label>
             <input type="range" id="sl-bg-bright" data-disp-dec="2" min="0" max="${BG_BRIGHT_MAX}" step="any" data-drag-step="0.05" value="${state.bgBright}" ${dis}>
             <span class="sl-tone-param-val">${state.bgBright.toFixed(2)}</span>
+          </div>
+          <div class="sl-global-input" title="Fades the picture into the field over a band along its edges, up to 0.4 of its shorter side (0 = a hard edge). Applies in the lensed and delensed views.">
+            <label>Edge blend</label>
+            <input type="range" id="sl-bg-edge" data-disp-dec="2" min="0" max="1" step="any" data-drag-step="0.05" value="${state.bgEdgeBlend}" ${dis}>
+            <span class="sl-tone-param-val">${state.bgEdgeBlend.toFixed(2)}</span>
           </div>
           <div class="sl-checkbox-row">
             <label class="${fdis?'sl-label-disabled':''}" title="Anchor the backdrop to the sky instead of the viewport: it is framed as you see it now at ${(state.bgAngSize||state.fov).toFixed(2)}″, and zooming the field of view magnifies it along with the lensed image"><input type="checkbox" id="sl-bg-skylock" ${state.bgSkyLock?'checked':''} ${fdis}> Zoom with FOV</label>
@@ -6482,6 +6538,7 @@ function renderViewPanel() {
 
   // ── Background image section ───────────────────────────────────────────────
   document.getElementById('sl-bg-pick')?.addEventListener('click', pickBackgroundImage);
+  document.getElementById('sl-bg-lensed')?.addEventListener('click', useLensedAsBackground);
   document.getElementById('sl-bg-clear')?.addEventListener('click', () => {
     // The pixel scale and sky offsets were this picture's; the next one starts without.
     state.bgPixel = 0; state.bgSkyOffX = 0; state.bgSkyOffY = 0;
@@ -6544,6 +6601,7 @@ function renderViewPanel() {
   _bgSlider('sl-bg-skyoffx', 'bgSkyOffX', 2, '″');
   _bgSlider('sl-bg-skyoffy', 'bgSkyOffY', 2, '″');
   _bgSlider('sl-bg-bright',  'bgBright');
+  _bgSlider('sl-bg-edge',    'bgEdgeBlend');
   document.getElementById('sl-bg-color')?.addEventListener('input', e => {
     // Stored as the dark-mode value, like source colours: in light theme the canvas
     // is CSS-inverted, so the picker shows the complement and we invert back here.
@@ -6569,7 +6627,7 @@ function renderViewPanel() {
     renderSidebar(); redraw();
   });
   document.getElementById('sl-bg-reset')?.addEventListener('click', () => {
-    for (const k of ['bgFit', 'bgZoom', 'bgOffX', 'bgOffY', 'bgBright', 'bgSkyLock', 'bgHidden', 'bgPixel', 'bgSkyOffX', 'bgSkyOffY'])
+    for (const k of ['bgFit', 'bgZoom', 'bgOffX', 'bgOffY', 'bgBright', 'bgEdgeBlend', 'bgSkyLock', 'bgHidden', 'bgPixel', 'bgSkyOffX', 'bgSkyOffY'])
       state[k] = CONFIG_DEFAULTS[k];
     state.bgAngSize = state.fov;
     if (_delensShowing()) seedBgPixel();   // that view cannot do without one

@@ -132,6 +132,7 @@ uniform vec2  u_bgOffset;  // pan, in texture units
 uniform float u_bgBright;  // brightness multiplier
 uniform int   u_bgTile;    // 1 = wrap the texture instead of letterboxing
 uniform int   u_bgInvert;  // 1 = pre-invert, cancelling the canvas's CSS invert
+uniform vec2  u_bgFeather; // edge blend: width of the fade into the field, in texture units per axis
 // The empty field behind everything. Black by this shader's convention (the
 // light-theme CSS invert turns it white); the Background section can set a colour
 // instead, pre-inverted on the CPU so it appears as picked in either theme.
@@ -536,7 +537,11 @@ vec3 sampleBackdrop() {
   // Mask (rather than branch) outside the image, so the mipmapped fetch above
   // stays in uniform control flow and its derivatives remain well defined. The
   // letterbox margins a Contain fit leaves over fall back to the field colour.
-  vec2 inside = step(vec2(0.0), uv) * step(uv, vec2(1.0));
+  // Edge blend fades the picture into the field over a band inside its border;
+  // smoothstep from 0 is already 0 outside, so it doubles as the mask.
+  vec2 inside = u_bgFeather.x > 0.0
+    ? smoothstep(vec2(0.0), u_bgFeather, min(uv, 1.0 - uv))
+    : step(vec2(0.0), uv) * step(uv, vec2(1.0));
   return mix(u_fieldColor, col, inside.x * inside.y);
 }
 
@@ -1038,7 +1043,10 @@ in  float v_mu;
 in  float v_minor;
 out vec4 fragColor;
 uniform sampler2D u_img;
-uniform float u_pixRatio;   // render pixel (source plane) over image texel, both in arcsec
+uniform float u_pixRatio;
+uniform float u_bright;     // the backdrop's Brightness
+uniform vec3  u_empty;      // the empty field, which Edge blend fades the picture into
+uniform vec2  u_feather;    // Edge blend width, in image units per axis (0 = a hard edge)   // render pixel (source plane) over image texel, both in arcsec
 uniform int   u_numMasks;
 uniform vec4  u_mask   [${MAX_MASKS}];   // centre (xy), semi-major axis r, axis ratio q
 uniform vec2  u_maskRot[${MAX_MASKS}];   // cos φ, sin φ of the major axis
@@ -1063,22 +1071,25 @@ void main() {
     float yr = (cs.x * d.y - cs.y * d.x) / u_mask[i].w;
     if (xr * xr + yr * yr <= u_mask[i].z * u_mask[i].z) discard;
   }
+  // Brightness, then Edge blend toward the empty field. Both act on the colour
+  // before it is averaged, so the weight (|μ|) and the coverage are unchanged.
+  vec2 f = u_feather.x > 0.0 ? smoothstep(vec2(0.0), u_feather, min(v_img, 1.0 - v_img)) : vec2(1.0);
+  col = mix(u_empty, col * u_bright, f.x * f.y);
   float w = min(v_mu, ${DELENS_MU_MAX.toFixed(1)});
   fragColor = vec4(col * w, w);
 }`;
 
-// Divide the accumulated colour by its weight and apply the backdrop's Brightness;
-// untouched pixels (no unmasked image of the field lands there) get the empty field.
+// Divide the accumulated colour by its weight; untouched pixels (no unmasked
+// image of the field lands there) get the empty field.
 const DELENS_RESOLVE_FRAG =
 `#version 300 es
 precision highp float;
 out vec4 fragColor;
 uniform sampler2D u_acc;
 uniform vec3  u_empty;
-uniform float u_bright;
 void main() {
   vec4 a = texelFetch(u_acc, ivec2(gl_FragCoord.xy), 0);
-  fragColor = vec4(a.a > 0.0 ? clamp(a.rgb / a.a * u_bright, 0.0, 1.0) : u_empty, 1.0);
+  fragColor = vec4(a.a > 0.0 ? clamp(a.rgb / a.a, 0.0, 1.0) : u_empty, 1.0);
 }`;
 
 // ── Renderer class ────────────────────────────────────────────────────────────
@@ -1131,6 +1142,7 @@ export class Renderer {
     this.delensOff = [0, 0];
     this.delensMasks  = [];  // [[cx, cy, r, q, phi], …] in arcsec / radians, at most MAX_MASKS
     this.delensBright = 1;   // the backdrop's Brightness, applied to the delensed picture
+    this.delensEdge   = 0;   // the backdrop's Edge blend (0-1), likewise
     this._delens   = null;   // programs + empty VAO, built on first use
     this._delensOk = null;   // float render targets available (null = not yet checked)
     // Empty-field colour, [r,g,b] in 0-1, pre-inverted by the caller when the
@@ -1316,6 +1328,7 @@ export class Renderer {
         scale:  [fovArcsec / o.sky[0] * spanRatio, fovArcsec / o.sky[1] * spanRatio],
         offset: [-(o.skyOff?.[0] ?? 0) / o.sky[0], -(o.skyOff?.[1] ?? 0) / o.sky[1]],
         bright: o.bright ?? 1,
+        edge:   o.edge ?? 0,
         invert: !!o.invert,
         tile:   false,
       };
@@ -1340,9 +1353,20 @@ export class Renderer {
       scale:  [sx * spanRatio, sy * spanRatio],
       offset,
       bright: o.bright ?? 1,
+      edge:   o.edge ?? 0,
       invert: !!o.invert,
       tile,
     };
+  }
+
+  // Edge blend (0-1) as the feather width in texture units per axis: up to 0.4 of
+  // the picture's shorter side, the same reach as a pasted image's Edge blend, and
+  // the same angle on both axes whatever the aspect ratio.
+  _bgFeather(edge) {
+    const b = this._bg, e = Math.min(1, Math.max(0, edge ?? 0));
+    if (!b || !(e > 0)) return [0, 0];
+    const s = 0.4 * e * Math.min(b.w, b.h);
+    return [s / b.w, s / b.h];
   }
 
   // Upload (or update) the pasted image for a specific source object.
@@ -1620,6 +1644,7 @@ export class Renderer {
     gl.uniform1f (_locs.u_bgBright, bg ? bg.bright : 1);
     gl.uniform1i (_locs.u_bgTile,   bg && bg.tile   ? 1 : 0);
     gl.uniform1i (_locs.u_bgInvert, bg && bg.invert ? 1 : 0);
+    gl.uniform2fv(_locs.u_bgFeather, bg && !bg.tile ? this._bgFeather(bg.edge) : [0, 0]);
     // Set whether or not a picture is loaded: it is the field behind everything.
     gl.uniform3fv(_locs.u_fieldColor, this.fieldColor ?? [0, 0, 0]);
 
@@ -1674,13 +1699,13 @@ export class Renderer {
       mesh: {
         u_beta: m('u_beta'), u_nodes: m('u_nodes'), u_half: m('u_half'), u_off: m('u_off'), u_fov: m('u_fov'),
         u_img:  m('u_img'),  u_pixRatio: m('u_pixRatio'),
+        u_bright: m('u_bright'), u_empty: m('u_empty'), u_feather: m('u_feather'),
         u_numMasks: m('u_numMasks'), u_mask: m('u_mask'), u_maskRot: m('u_maskRot'),
       },
       resolve: {
         a_pos:   gl.getAttribLocation(resolveProg, 'a_pos'),
         u_acc:   gl.getUniformLocation(resolveProg, 'u_acc'),
         u_empty: gl.getUniformLocation(resolveProg, 'u_empty'),
-        u_bright: gl.getUniformLocation(resolveProg, 'u_bright'),
       },
     };
     return this._delens;
@@ -1762,6 +1787,9 @@ export class Renderer {
     gl.uniform2i(d.mesh.u_nodes, nx, ny);
     gl.uniform2f(d.mesh.u_half, sky[0] / 2, sky[1] / 2);
     gl.uniform2f(d.mesh.u_off, off[0], off[1]);
+    gl.uniform1f(d.mesh.u_bright, this.delensBright ?? 1);
+    gl.uniform3fv(d.mesh.u_empty, empty);
+    gl.uniform2fv(d.mesh.u_feather, this._bgFeather(this.delensEdge));
     gl.uniform1f(d.mesh.u_fov, fovArcsec);
     gl.uniform1f(d.mesh.u_pixRatio, (fovArcsec / W) / (sky[0] / this._bg.w));
     const masks = (this.delensMasks ?? []).slice(0, MAX_MASKS);
@@ -1786,7 +1814,6 @@ export class Renderer {
     gl.bindTexture(gl.TEXTURE_2D, acc.tex);
     gl.uniform1i(d.resolve.u_acc, 0);
     gl.uniform3fv(d.resolve.u_empty, empty);
-    gl.uniform1f (d.resolve.u_bright, this.delensBright ?? 1);
     this._drawQuad(d.resolve.a_pos);
   }
 
@@ -1852,6 +1879,7 @@ export class Renderer {
       u_traceSpan:    u('u_traceSpan'),
       u_traceOff:     u('u_traceOff'),
       u_isDark:       u('u_isDark'),
+      u_bgFeather:    u('u_bgFeather'),
       u_pastedFeather: u('u_pastedFeather'),
       u_pastedStretch: u('u_pastedStretch'),
       u_pastedTone:    u('u_pastedTone'),
