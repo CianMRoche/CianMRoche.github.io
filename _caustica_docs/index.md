@@ -5,6 +5,11 @@ order: 0
 permalink: /caustica-documentation/
 ---
 
+
+<div class="doc-cyan" markdown="1">
+Warning: These docs are mostly auto-generated so dont trust them yet. I'm working on going through them all and making them sensible, but it takes a lot of time! :)
+</div>
+
 [Caustica](/assets/caustica/) is a tool for easily visualizing strong gravitational lensing, named after the term used by 17th century mathematicians for the curves onto which refracted light rays converge, which were capable of burning objects.
 
 <figure class="doc-fig-wide">
