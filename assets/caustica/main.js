@@ -2169,7 +2169,7 @@ function buildDOM() {
             </button>
           </div>
           <div class="sl-drawer-body">
-            <section class="sl-dcard sl-dobs" id="sl-dobs" aria-label="Observation" title="The observation: its picture where it sits on the sky, and its masks. Click to open the Observation panel.">
+            <section class="sl-dcard sl-dobs" id="sl-dobs" aria-label="Observation" title="The observation: its picture where it sits on the sky, and its masks. Click to open the Observation panel; the eye at the left of the strip hides this card.">
               <div class="sl-dcard-view">
                 <canvas class="sl-dcard-canvas" id="sl-dobs-canvas"></canvas>
                 <span class="sl-dcard-zlabel" aria-hidden="true">Observation</span>
@@ -2884,9 +2884,9 @@ const toolIcon = (tool, size) => _toolIcon(TOOL_ICON_PATHS[tool], size);
 // categories share the View tab and filter its sections by their data-cat
 // wrappers (.sl-cat), so renderViewPanel() stays a single template. The first
 // category of each tab is the one a bare setRailTab(tab) falls back to.
-// The observer's eye: a "<" closed by an arc on the right (looking right, along
-// the line of sight). Drawn in a 16-unit box.
-const OBS_EYE_PATHS = '<path d="M10.5 3.5L2.5 8l8 4.5"/><path d="M10.5 3.5a5.2 5.2 0 0 1 0 9"/>';
+// The observer's eye, as in a ray diagram: a "<" (the lids) with a small arc (the
+// eyeball) set inside it, looking right along the line of sight. 16-unit box.
+const OBS_EYE_PATHS = '<path d="M12.5 3.2L3 8l9.5 4.8"/><path d="M9 4.97A3.5 3.5 0 0 1 9 11.03"/>';
 const _catIcon = d => `<svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const INSPECTOR_CATS = [
   { key: 'object',     tab: 'scene',   label: 'Object',
@@ -2950,6 +2950,10 @@ const _drawerCards = new Map();   // plane id → { el, canvas }
 let   _drawerOpen  = true;
 try { _drawerOpen = localStorage.getItem('caustica-drawer') !== 'closed'; } catch (_) {}
 let   _sightHot    = null;        // plane under the pointer, on the strip or its card
+// The observation's card shows only once the strip's eye is clicked, and hides
+// again on the next click; the choice is remembered, like the drawer's.
+let   _obsCardOpen = false;
+try { _obsCardOpen = localStorage.getItem('caustica-obs-card') === 'open'; } catch (_) {}
 let   _sightDrag   = null;        // { id, top, x0, moved } while a strip mark is dragged
 let   _sightAdd    = null;        // { x0, z } while a press on a blank stretch of the strip is held
 let   _sightGhost  = null;        // z under the pointer on a blank stretch (a click adds a plane there)
@@ -3041,12 +3045,14 @@ function renderDrawer() {
     c.el.querySelector('.sl-dcard-zlabel').textContent = `z ${pl.z.toFixed(2)}`;
     if (shown) drawPlaneCanvas(c.canvas, pl);
   });
-  // The observation's card, fixed at the left: outlined while its panel is open.
+  // The observation's card, fixed at the left while shown: outlined while its
+  // panel is open.
   const oc = document.getElementById('sl-dobs');
   if (oc) {
+    oc.hidden = !_obsCardOpen;
     oc.classList.toggle('sl-dcard-sel', activeCat === 'observation');
     oc.classList.toggle('sl-dcard-hot', _sightHot === OBS_ID);
-    if (shown) drawPlaneCanvas(document.getElementById('sl-dobs-canvas'), state.obs);
+    if (shown && _obsCardOpen) drawPlaneCanvas(document.getElementById('sl-dobs-canvas'), state.obs);
   }
   // The selected plane's controls sit in one fixed panel at the right, so the
   // cards are all one size and selecting a plane never reflows them.
@@ -3124,7 +3130,7 @@ function renderSightLine() {
   const tick = top <= 2 ? 0.5 : top <= 5 ? 1 : 2;
   const x1   = W - _SIGHT_PAD_R;
   const p = [`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true">`,
-    `<g class="sl-sight-obs${_sightHot === OBS_ID ? ' sl-sight-obs-hot' : ''}" transform="translate(0 ${y - 8})"><title>Observation (z = 0): click to open its panel</title>${OBS_EYE_PATHS}</g>`,
+    `<g class="sl-sight-obs${_sightHot === OBS_ID ? ' sl-sight-obs-hot' : ''}${_obsCardOpen ? ' sl-sight-obs-on' : ''}" transform="translate(0 ${y - 8})"><title>Observation (z = 0): click to ${_obsCardOpen ? 'hide' : 'show'} its card in the drawer</title>${OBS_EYE_PATHS}</g>`,
     `<path class="sl-sight-axis" d="M${_SIGHT_X0 - 6} ${y}H${x1}"/>`];
   for (let z = tick; z < top - 1e-9; z += tick) {
     const x = _sightX(z, W, top).toFixed(1);
@@ -3169,7 +3175,7 @@ function _setSightHot(id) {
   if (_sightHot === id) return;
   _sightHot = id;
   for (const [pid, c] of _drawerCards) c.el.classList.toggle('sl-dcard-hot', pid === id);
-  document.getElementById('sl-dobs')?.classList.toggle('sl-dcard-hot', id === OBS_ID);
+  document.getElementById('sl-dobs')?.classList.toggle('sl-dcard-hot', id === OBS_ID && _obsCardOpen);
   renderSightLine();
 }
 
@@ -3195,9 +3201,15 @@ function _sightOnObserver(e) {
   const r  = el.getBoundingClientRect();
   return (e.clientX - r.left) * el.clientWidth / r.width < _SIGHT_X0 - 4;
 }
-// Open the Observation panel (from its card or the strip's eye).
+// Open the Observation panel (from its card).
 function _openObservationPanel() {
   setInspectorCat('observation');
+  renderDrawer();
+}
+// Show or hide the observation's card (the strip's eye).
+function setObsCardOpen(open) {
+  _obsCardOpen = open;
+  try { localStorage.setItem('caustica-obs-card', open ? 'open' : 'closed'); } catch (_) {}
   renderDrawer();
 }
 
@@ -3272,7 +3284,7 @@ function attachSightHandlers() {
   el.addEventListener('pointerdown', e => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     const hit = _sightHit(e);
-    if (!hit && _sightOnObserver(e)) { _openObservationPanel(); return; }
+    if (!hit && _sightOnObserver(e)) { setObsCardOpen(!_obsCardOpen); return; }
     if (!hit) {
       const z = _sightBlankZ(e);
       if (z == null) return;
@@ -5545,7 +5557,7 @@ function redrawPlaneCanvas(plane) {
   if (!plane) return;
   if (isObsLayer(plane)) {
     const oc = document.getElementById('sl-dobs-canvas');
-    if (oc && _drawerShown()) drawPlaneCanvas(oc, plane);
+    if (oc && _drawerShown() && _obsCardOpen) drawPlaneCanvas(oc, plane);
     return;
   }
   // The desktop drawer has a viewer for every plane...
@@ -9556,7 +9568,7 @@ const TOUR_STEPS = [
     onEnter: () => { _tourOpenPlaneSetup(); if (!_drawerOpen) setDrawerOpen(true); },
     arrow: 'above',
     label: 'Scene drawer',
-    text: 'The drawer holds your line of sight. The strip in its header runs from the observer (the eye at its left, which opens the Observation panel, as does the observation\'s card at the left of the drawer) out in redshift, with a mark for each plane at its z: drag a mark to move that plane, point at one to find its card, and click a blank stretch to add a plane at that redshift. Below are the planes themselves, in order of redshift, each with a viewer showing the true positions of its objects. Click a card to select its plane, add a plane behind the farthest with <b>+ Plane</b>, and use the chevron to tuck the drawer away when you only want to look.',
+    text: 'The drawer holds your line of sight. The strip in its header runs from the observer (the eye at its left, which shows or hides the observation\'s card at the left of the drawer) out in redshift, with a mark for each plane at its z: drag a mark to move that plane, point at one to find its card, and click a blank stretch to add a plane at that redshift. Below are the planes themselves, in order of redshift, each with a viewer showing the true positions of its objects. Click a card to select its plane, add a plane behind the farthest with <b>+ Plane</b>, and use the chevron to tuck the drawer away when you only want to look.',
   },
   {
     target: '#sl-toolcol',
