@@ -2077,7 +2077,17 @@ function buildDOM() {
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
             </button>
           </div>
-          <div class="sl-drawer-cards" id="sl-drawer-cards"></div>
+          <div class="sl-drawer-body">
+            <div class="sl-drawer-cards" id="sl-drawer-cards"></div>
+            <div class="sl-dplane" id="sl-dplane" role="group" aria-label="Selected plane" hidden>
+              <span class="sl-dplane-type" id="sl-dplane-type"></span>
+              <span class="sl-dcard-cap">Redshift</span>
+              <input type="number" class="sl-dcard-z-input" id="sl-dplane-z" min="0.01" max="10" step="0.01" aria-label="Redshift of the selected plane" title="Redshift of the selected plane. Drag sideways to scrub.">
+              <span class="sl-dcard-gap"></span>
+              <button type="button" class="sl-dcard-act" data-act="clear" title="Clear all objects on this plane (O)"><span class="sl-pglyph">○</span> Clear</button>
+              <button type="button" class="sl-dcard-act" data-act="delete" title="Delete plane (X)"><span class="sl-pglyph sl-pglyph-x">×</span> Delete</button>
+            </div>
+          </div>
         </section>
         <div class="sl-rail" id="sl-rail">
           <div class="sl-insp-title" id="sl-insp-title">Object</div>
@@ -2827,20 +2837,19 @@ function _syncSwitcher() {
 
 // ── Scene drawer (desktop) ───────────────────────────────────────────────────
 // One card per plane in z order, under a line-of-sight strip in the drawer's
-// header that marks every plane at its true redshift. The selected plane's card
-// shows the plane's redshift box and actions beside its viewer; every other card
-// shrinks to its viewer and z. The placement tools are the column at the left
+// header that marks every plane at its true redshift. Every card is its viewer
+// and z; the selected plane's redshift box and actions sit in one fixed panel at
+// the drawer's right (#sl-dplane). The placement tools are the column at the left
 // of the window (#sl-toolcol), shared by every viewer and the main image. Cards are keyed by
 // plane id and updated in place, never rebuilt: each owns a plane-viewer canvas
 // whose pointer handlers may be mid-drag when a render comes through.
-const _drawerCards = new Map();   // plane id → { el, canvas, zIn }
+const _drawerCards = new Map();   // plane id → { el, canvas }
 let   _drawerOpen  = true;
 try { _drawerOpen = localStorage.getItem('caustica-drawer') !== 'closed'; } catch (_) {}
 let   _sightHot    = null;        // plane under the pointer, on the strip or its card
 let   _sightDrag   = null;        // { id, top, x0, moved } while a strip mark is dragged
 let   _sightAdd    = null;        // { x0, z } while a press on a blank stretch of the strip is held
 let   _sightGhost  = null;        // z under the pointer on a blank stretch (a click adds a plane there)
-let   _drawerHold  = false;       // a press in a card's viewer: the card layout waits for its release
 
 const _PLANE_TITLES = { lens: 'Lens plane', source: 'Source plane', hybrid: 'Lens + source', empty: 'Empty plane' };
 
@@ -2860,25 +2869,13 @@ function _makeDrawerCard(pl) {
     <div class="sl-dcard-view">
       <canvas class="sl-dcard-canvas"></canvas>
       <span class="sl-dcard-zlabel" aria-hidden="true"></span>
-    </div>
-    <div class="sl-dcard-side">
-      <span class="sl-dcard-cap">Redshift</span>
-      <input type="number" class="sl-dcard-z-input" min="0.01" max="10" step="0.01" aria-label="Plane redshift" title="Redshift of this plane. Drag sideways to scrub.">
-      <span class="sl-dcard-type"></span>
-      <span class="sl-dcard-gap"></span>
-      <button type="button" class="sl-dcard-act" data-act="clear" title="Clear all objects on this plane (O)"><span class="sl-pglyph">○</span> Clear</button>
-      <button type="button" class="sl-dcard-act" data-act="delete" title="Delete plane (X)"><span class="sl-pglyph sl-pglyph-x">×</span> Delete</button>
     </div>`;
   const canvas = el.querySelector('canvas');
-  const zIn    = el.querySelector('.sl-dcard-z-input');
-  const applyZ = v => _drawerApplyZ(pl.id, v);
-  zIn.addEventListener('change', e => { record(); applyZ(parseFloat(e.target.value)); });
-  _attachScrub(zIn, { lo: 0.01, hi: 10, onChange: applyZ });
-  attachPlaneCardHandlers(canvas, { getPlane: () => _drawerPlaneById(pl.id), swipe: false, drawer: true });
+  attachPlaneCardHandlers(canvas, { getPlane: () => _drawerPlaneById(pl.id), swipe: false });
   // Hovering a card lights its mark on the line-of-sight strip.
   el.addEventListener('pointerenter', () => _setSightHot(pl.id));
   el.addEventListener('pointerleave', () => _setSightHot(null));
-  return { el, canvas, zIn };
+  return { el, canvas };
 }
 
 // The far end of the redshift axis (the drawer strip and the phone timeline).
@@ -2934,19 +2931,26 @@ function renderDrawer() {
     const sel  = pl.id === state.selectedPlaneId;
     const type = planeEffectiveType(pl);
     c.el.classList.toggle('sl-dcard-sel', sel);
-    // The selected card opens to show the plane's controls. During a press in a
-    // viewer the open card stays put, so a press that selects another plane does
-    // not slide its viewer out from under the pointer; it opens on release.
-    if (!_drawerHold) c.el.classList.toggle('sl-dcard-open', sel);
     c.el.classList.toggle('sl-dcard-hot', pl.id === _sightHot);
     c.el.dataset.effectiveType = type;
     c.el.setAttribute('aria-label', `${_PLANE_TITLES[type]} at z ${pl.z.toFixed(2)}${sel ? ', selected' : ''}`);
     c.canvas.setAttribute('aria-label', `Plane viewer: true positions on the ${_PLANE_TITLES[type].toLowerCase()} at z ${pl.z.toFixed(2)}`);
     c.el.querySelector('.sl-dcard-zlabel').textContent = `z ${pl.z.toFixed(2)}`;
-    c.el.querySelector('.sl-dcard-type').textContent = _PLANE_TITLES[type];
-    if (document.activeElement !== c.zIn) c.zIn.value = pl.z.toFixed(2);
     if (shown) drawPlaneCanvas(c.canvas, pl);
   });
+  // The selected plane's controls sit in one fixed panel at the right, so the
+  // cards are all one size and selecting a plane never reflows them.
+  const sp = selectedPlane(), panel = document.getElementById('sl-dplane');
+  if (panel) {
+    panel.hidden = !sp;
+    if (sp) {
+      const type = planeEffectiveType(sp);
+      panel.dataset.effectiveType = type;
+      document.getElementById('sl-dplane-type').textContent = _PLANE_TITLES[type];
+      const zIn = document.getElementById('sl-dplane-z');
+      if (document.activeElement !== zIn) zIn.value = sp.z.toFixed(2);
+    }
+  }
   let empty = document.getElementById('sl-drawer-empty');
   if (!state.planes.length) {
     if (!empty) {
@@ -3179,29 +3183,29 @@ function attachDrawerHandlers() {
   document.getElementById('sl-drawer-cards').addEventListener('click', e => {
     const cardEl = e.target.closest('.sl-dcard[data-plane-id]');
     const pl = cardEl && _drawerPlaneById(+cardEl.dataset.planeId);
-    if (!pl) return;
-
+    // A click on a card's frame selects its plane (the viewer selects on pointerdown itself).
+    if (!pl || e.target.closest('canvas')) return;
+    _drawerSelectPlane(pl);
+    updateCanvasTools();
+    renderPlaneCard(); renderSidebar(); redraw();
+  });
+  const _dzIn = document.getElementById('sl-dplane-z');
+  const _dzApply = v => { if (state.selectedPlaneId != null) _drawerApplyZ(state.selectedPlaneId, v); };
+  _dzIn.addEventListener('change', e => { record(); _dzApply(parseFloat(e.target.value)); });
+  _attachScrub(_dzIn, { lo: 0.01, hi: 10, onChange: _dzApply });
+  document.getElementById('sl-dplane').addEventListener('click', e => {
     const act = e.target.closest('.sl-dcard-act')?.dataset.act;
-    if (act) {
-      if (act === 'clear') {
-        record();
-        pl.objects.filter(o => o.model === 'pastedimage').forEach(o => renderer?.clearPastedTexture(o.id));
-        pl.objects = [];
-        if (pl.id === state.selectedPlaneId) state.selectedObjId = null;
-      } else if (act === 'delete') {
-        record();
-        removePlane(pl.id);
-      }
-      renderPlaneCard(); renderSidebar(); drawAxisCanvas(); redraw();
-      return;
+    const pl  = selectedPlane();
+    if (!act || !pl) return;
+    record();
+    if (act === 'clear') {
+      pl.objects.filter(o => o.model === 'pastedimage').forEach(o => renderer?.clearPastedTexture(o.id));
+      pl.objects = [];
+      state.selectedObjId = null;
+    } else if (act === 'delete') {
+      removePlane(pl.id);
     }
-    // Anywhere else on a card that is not a control selects its plane (the
-    // viewer selects on pointerdown itself).
-    if (!e.target.closest('input, canvas, button')) {
-      _drawerSelectPlane(pl);
-      updateCanvasTools();
-      renderPlaneCard(); renderSidebar(); redraw();
-    }
+    renderPlaneCard(); renderSidebar(); drawAxisCanvas(); redraw();
   });
 
   document.getElementById('sl-switcher')?.addEventListener('click', e => {
@@ -4699,12 +4703,11 @@ function renderPlaneCard() {
 const HIT_R = 10; // px desktop
 function hitRadius() { return window.innerWidth <= 640 ? 18 : HIT_R; }
 
-function attachPlaneCardHandlers(canvas, { getPlane = selectedPlane, swipe = true, drawer = false } = {}) {
+function attachPlaneCardHandlers(canvas, { getPlane = selectedPlane, swipe = true } = {}) {
   // 'idle' | 'hit-pending' | 'dragging' | 'add-pending' | 'add-dragging' | 'swiping'
   // The phone card always shows the selected plane; resolve it at pointerdown so
   // one persistent set of listeners serves every plane. A drawer card passes its
-  // own plane, and touching it selects that plane; drawer cards don't swipe, and
-  // hold the drawer's card layout from press to release (_drawerHold).
+  // own plane, and touching it selects that plane; drawer cards don't swipe.
   let istate  = 'idle';
   let hitObj  = null;
   let plane   = null;
@@ -4714,18 +4717,12 @@ function attachPlaneCardHandlers(canvas, { getPlane = selectedPlane, swipe = tru
   const DRAG_THRESH = 3;  // px — object-drag / create-drag threshold (mouse)
   const SWIPE_SLOP  = 10; // px — touch: moving beyond this becomes a plane swipe
   const SWIPE_MIN   = 36; // px — horizontal travel needed to switch planes
-  const hold = on => {
-    if (!drawer || _drawerHold === on) return;
-    _drawerHold = on;
-    if (!on) renderDrawer();   // open the card of a plane selected by the press
-  };
   // End the gesture without its click actions (placing, deselecting), keeping
   // whatever a drag has already moved.
   const finish = () => {
     if (istate === 'dragging' || istate === 'add-dragging') { invalidateDistances(); redraw(); }
     istate = 'idle'; hitObj = null; plane = null;
     canvas.style.cursor = addCursor();
-    hold(false);
   };
 
   canvas.addEventListener('pointermove', e => {
@@ -4801,7 +4798,6 @@ function attachPlaneCardHandlers(canvas, { getPlane = selectedPlane, swipe = tru
     if (!plane) return;
     e.preventDefault();
     canvas.setPointerCapture(e.pointerId);
-    hold(true);
     const touch = e.pointerType === 'touch' || e.pointerType === 'pen';
     const pos   = canvasToArcsec(canvas, e);
     hitObj      = hitTestPlane(plane, canvas, e);
@@ -4814,7 +4810,6 @@ function attachPlaneCardHandlers(canvas, { getPlane = selectedPlane, swipe = tru
       if (!toggleSelected(plane, hitObj)) {
         istate = 'idle'; hitObj = null;
         renderPlaneCard(); renderSidebar(); redraw();
-        hold(false);
         return;
       }
       group = _groupStart();
@@ -4872,7 +4867,6 @@ function attachPlaneCardHandlers(canvas, { getPlane = selectedPlane, swipe = tru
       renderPlaneCard(); renderSidebar(); redraw();
     }
     istate = 'idle'; hitObj = null; plane = null;
-    hold(false);
     const selPl = getPlane();
     canvas.style.cursor = selPl && hitTestPlane(selPl, canvas, e) ? 'grab' : addCursor();
   });
@@ -9189,7 +9183,7 @@ const TOUR_STEPS = [
     },
     arrow: 'right',
     label: 'Placing objects',
-    text: 'Pick <b>L</b>, <b>S</b> or <b>H</b> here (keys <kbd>1</kbd>, <kbd>2</kbd>, <kbd>3</kbd>), then click a plane\'s viewer in the drawer to place a <b>Lens</b> that bends light, a <b>Source</b> that emits it, or a <b>Hybrid</b> that does both on that plane, or click the image to place it on the selected plane. Click the lit letter again, or press <kbd>Esc</kbd>, to stop placing. Drag objects to move them and click one to edit it; the trash deletes the selected object. Beside the selected plane\'s viewer are its <b>Redshift</b> box (type a value, or drag sideways on it), <b>Clear</b> (key <kbd>O</kbd>) and <b>Delete</b> (key <kbd>X</kbd>). <kbd>[</kbd> and <kbd>]</kbd> step through the planes.',
+    text: 'Pick <b>L</b>, <b>S</b> or <b>H</b> here (keys <kbd>1</kbd>, <kbd>2</kbd>, <kbd>3</kbd>), then click a plane\'s viewer in the drawer to place a <b>Lens</b> that bends light, a <b>Source</b> that emits it, or a <b>Hybrid</b> that does both on that plane, or click the image to place it on the selected plane. Click the lit letter again, or press <kbd>Esc</kbd>, to stop placing. Drag objects to move them and click one to edit it; the trash deletes the selected object. The selected plane\'s <b>Redshift</b> box (type a value, or drag sideways on it), <b>Clear</b> (key <kbd>O</kbd>) and <b>Delete</b> (key <kbd>X</kbd>) are at the right end of the drawer. <kbd>[</kbd> and <kbd>]</kbd> step through the planes.',
   },
   {
     target: '.sl-axis-wrap',

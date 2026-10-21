@@ -2654,7 +2654,7 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
     cursor: pointer;
   }
   .sl-drawer-closed .sl-drawer-toggle svg { transform: rotate(180deg); }
-  .sl-drawer-closed .sl-drawer-cards { display: none; }
+  .sl-drawer-closed .sl-drawer-body { display: none; }
   .sl-drawer-closed { padding-bottom: 6px; }
 
   /* Line-of-sight strip in the header: the observer, then a mark per plane. */
@@ -2689,15 +2689,19 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
     stroke-width: 3px;
   }
 
+  .sl-drawer-body { display: flex; gap: 10px; min-width: 0; }
   .sl-drawer-cards {
+    flex: 1 1 auto;
+    min-width: 0;
     display: flex;
     gap: 8px;
     overflow-x: auto;
+    scrollbar-width: thin;
     padding-bottom: 2px;
   }
   .sl-drawer-empty { padding: 14px 2px; font-size: 12.5px; color: var(--muted); }
 
-  /* A plane card: the viewer, with the plane tools around it when selected. */
+  /* A plane card: its viewer and z. Every card is the same size. */
   .sl-dcard {
     flex: 0 0 auto;
     display: flex;
@@ -2719,9 +2723,6 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
     box-shadow: 0 0 0 1px color-mix(in srgb, var(--pc) 35%, transparent);
     cursor: default;
   }
-  .sl-dcard-side { display: none; }
-  .sl-dcard-open .sl-dcard-side  { display: flex; flex-direction: column; width: 84px; min-width: 0; }
-  .sl-dcard-open .sl-dcard-zlabel { display: none; }
 
   .sl-dcard-view { position: relative; flex: 0 0 auto; }
   .sl-dcard-canvas {
@@ -2746,6 +2747,36 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
     pointer-events: none;
   }
 
+  /* The selected plane's controls: one fixed panel at the drawer's right, headed
+     by the plane's type in its colour. */
+  .sl-dplane {
+    flex: 0 0 auto;
+    align-self: flex-start;
+    display: flex;
+    flex-direction: column;
+    width: 96px;
+    height: 138px;   /* a card's: 120px viewer, 8px padding, 1px border */
+    box-sizing: border-box;
+    padding: 8px;
+    border: 1px solid var(--hairline);
+    border-radius: 10px;
+    background: var(--bg-soft);
+    --pc: var(--muted);
+  }
+  .sl-dplane[hidden] { display: none; }
+  .sl-dplane[data-effective-type="lens"]   { --pc: var(--lens-color); }
+  .sl-dplane[data-effective-type="source"] { --pc: var(--src-color); }
+  .sl-dplane[data-effective-type="hybrid"] { --pc: var(--hybrid-color); }
+  .sl-dplane-type {
+    margin-bottom: 7px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--pc);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .sl-dplane[data-effective-type="empty"] .sl-dplane-type { color: var(--fg-soft); }
   .sl-dcard-cap { margin-bottom: 3px; font-size: 10.5px; color: var(--muted); }
   .sl-dcard-z-input {
     width: 100%;
@@ -2758,7 +2789,6 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
     font: 12.5px system-ui, -apple-system, sans-serif;
     font-variant-numeric: tabular-nums;
   }
-  .sl-dcard-type { margin-top: 6px; font-size: 11.5px; color: var(--fg-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sl-dcard-gap { flex: 1; }
   .sl-dcard-act {
     display: flex;
