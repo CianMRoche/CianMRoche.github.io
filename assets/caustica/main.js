@@ -1960,6 +1960,7 @@ function buildDOM() {
 <a class="sl-demo-btn sl-topbar-overflow" href="/caustica-documentation/" target="_blank" rel="noopener">Docs</a>
         <button class="sl-demo-btn sl-topbar-overflow" id="sl-demo" title="Walk through a tour of the controls">Tour</button>
         <button class="sl-demo-btn sl-topbar-overflow" id="sl-kbd-btn" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts"><span class="sl-kbd-long">Shortcuts</span><span class="sl-kbd-short">?</span></button>
+        <button class="sl-theme-btn" id="sl-present-btn" title="Full screen: only the image (F)" aria-label="Full screen"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
         <button class="sl-theme-btn" id="sl-theme" title="Toggle dark mode (D)" aria-label="Toggle dark mode">
           <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
@@ -1979,8 +1980,10 @@ function buildDOM() {
           <a class="sl-menu-item" role="menuitem" href="/caustica-documentation/" target="_blank" rel="noopener">Docs</a>
           <button class="sl-menu-item" role="menuitem" data-fwd="sl-demo">Tour</button>
           <button class="sl-menu-item" role="menuitem" data-fwd="sl-kbd-btn">Keyboard shortcuts</button>
+          <button class="sl-menu-item" role="menuitem" data-fwd="sl-present-btn">Full screen</button>
         </div>
       </div>
+      <button class="sl-present-exit" id="sl-present-exit" type="button" title="Leave full screen (F or Esc)" aria-label="Leave full screen"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h3a2 2 0 0 0 2-2V3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M21 16h-3a2 2 0 0 0-2 2v3"/></svg></button>
       <div class="sl-body" data-tab="scene">
         <!-- Placement tools (desktop): arm one, then click a plane's viewer to place
              on that plane, or the image to place on the selected plane. -->
@@ -2269,6 +2272,10 @@ function attachHandlers() {
   document.getElementById('sl-demo').addEventListener('click', startTour);
   document.getElementById('sl-theme').addEventListener('click', toggleTheme);
   document.getElementById('sl-kbd-btn').addEventListener('click', toggleKbdOverlay);
+  document.getElementById('sl-present-btn').addEventListener('click', () => setPresenting(!_presenting));
+  document.getElementById('sl-present-exit').addEventListener('click', () => setPresenting(false));
+  // Leaving the browser's full screen (its own Esc) leaves ours too.
+  document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && _presenting) setPresenting(false); });
   applyThemeIcons(document.documentElement.getAttribute('data-theme') || 'dark');
 
   // Rail tab bar (Scene / View / Export / Quality) — one tab system for desktop and mobile.
@@ -2752,6 +2759,11 @@ function attachHandlers() {
       toggleTheme();
       return;
     }
+    if ((e.key === 'f' || e.key === 'F') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      setPresenting(!_presenting);
+      return;
+    }
+    if (e.key === 'Escape' && _presenting) { setPresenting(false); return; }
     if (e.key === '?' && !e.metaKey && !e.ctrlKey && !e.altKey) {
       toggleKbdOverlay();
       return;
@@ -4284,6 +4296,32 @@ let _pinch = null;                 // { d0, fov0 } while a two-finger pinch is a
 const _pinchPtrs = new Map();      // pointerId → last client position on the image wrap
 
 // ── Keyboard-shortcut overlay (the "?" button) ────────────────────────────────
+// ── Full screen (F) ──
+// Only the image panes, at the largest square the window allows: the top bar,
+// tool column, drawer, panels and tab strips go, while the on-image overlays
+// (legend, scale bar, chips) stay and objects can still be dragged. It also asks
+// for the browser's own full screen where that is allowed; leaving either leaves
+// both. A placement tool or the ruler is switched off on the way in, so a click
+// cannot place anything unseen.
+let _presenting = false;
+function setPresenting(on) {
+  if (_presenting === on) return;
+  _presenting = on;
+  if (on) {
+    if (state.addMode !== 'select') { state.addMode = 'select'; updateCanvasTools(); }
+    if (state.rulerActive) toggleRulerTool();
+  }
+  document.querySelector('.app-inner')?.classList.toggle('sl-present', on);
+  const btn = document.getElementById('sl-present-btn');
+  if (btn) btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  try {
+    if (on && !document.fullscreenElement) document.documentElement.requestFullscreen?.()?.catch?.(() => {});
+    if (!on && document.fullscreenElement) document.exitFullscreen?.()?.catch?.(() => {});
+  } catch (_) {}
+  // The canvases follow their boxes through their resize observers; this frame too.
+  requestAnimationFrame(() => { renderer?.resize(); redraw(); });
+}
+
 const SHORTCUTS = [
   ['1 / 2 / 3', 'Toggle the Lens / Source / Hybrid tool (click a plane viewer or the image to place)'],
   ['C', 'Toggle critical curves and caustics'],
@@ -4292,8 +4330,8 @@ const SHORTCUTS = [
   ['T', 'Fermat potential φ contour map'],
   ['P', 'Parity map (image types I / II / III)'],
   ['N', 'Image number map (source plane)'],
-  ['U', 'Delensed background image (source plane)'],
-  ['4', 'Toggle the Mask tool (while a Delensed image view is open)'],
+  ['U', 'Delensed image: the observation traced back to the source plane'],
+  ['4', 'Toggle the Mask tool (while there is an observation)'],
   ['H', 'Hide / show the selected object'],
   ['O', 'Clear all objects from the selected plane'],
   ['X', 'Delete the selected plane'],
@@ -4302,6 +4340,7 @@ const SHORTCUTS = [
   ['R', 'Start / stop live recording'],
   ['L', 'Toggle ruler mode'],
   ['D', 'Toggle dark / light theme'],
+  ['F', 'Full screen: only the image (F or Esc to leave)'],
   ['?', 'Show this shortcut reference'],
   ['⌘/Ctrl + click', 'Add or remove an object from the selection (drag a box on the image to select several)'],
   ['⌘/Ctrl + C / V', 'Copy the selected object / paste a duplicate'],

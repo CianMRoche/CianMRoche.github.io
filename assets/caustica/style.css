@@ -2971,3 +2971,56 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
 }
 .sl-mask-del:hover { color: var(--fg); background: var(--bg-soft2); }
 .sl-mini-on { color: var(--accent); border-color: var(--accent); }
+
+/* ── Full screen (F): only the image panes ─────────────────────────────────── */
+/* The top bar, tool column, drawer, panels and tab strips go, and the panes take
+   the largest square the window allows; the on-image overlays stay. A faint
+   button in the corner is the way out (as are F and Esc). */
+.sl-present-exit { display: none; }
+.sl-present { position: relative; }
+.sl-present .sl-present-exit {
+  display: flex;
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 60;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  color: var(--fg-soft);
+  opacity: 0.35;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.sl-present .sl-present-exit:hover { opacity: 1; }
+.sl-present .sl-topbar,
+.sl-present .sl-toolcol,
+.sl-present .sl-drawer,
+.sl-present .sl-rail,
+.sl-present .sl-switcher,
+.sl-present .sl-timeline,
+.sl-present .sl-tabbar,
+.sl-present .sl-chooser,
+.sl-present .sl-viz-chip,
+.sl-present .sl-overlay-chips,
+.sl-present .sl-ruler-tools,
+.sl-present #sl-link-btn,
+.sl-present #sl-link-menu,
+.sl-present #sl-place-hint { display: none !important; }
+.sl-present .sl-body {
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-template-rows: minmax(0, 1fr) !important;
+  grid-template-areas: "stage" !important;
+}
+.sl-present .sl-stage { padding: 12px !important; align-items: center !important; }
+@media (min-width: 641px) {
+  .sl-present .sl-panes { align-items: center; }
+  .sl-present .sl-image-wrap { width: min(100cqw, 100cqh); }
+  .sl-present .sl-split .sl-image-wrap { width: min((100cqw - 14px) / 2, 100cqh); }
+  /* No tab to join, so the frame's first corner is rounded like the rest. */
+  .sl-present .sl-pane .sl-image-wrap { border-top-left-radius: 6px; }
+}

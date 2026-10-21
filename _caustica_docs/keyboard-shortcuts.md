@@ -26,6 +26,7 @@ order: 1
 | `R` | Start / stop live recording |
 | `L` | Toggle ruler mode (arm / disarm the ruler) |
 | `D` | Toggle dark / light theme |
+| `F` | Full screen: only the image panes, without the controls (`F` or `Escape` to leave; also the button beside the theme toggle) |
 | `?` | Show the in-app keyboard-shortcut overlay (also the **Shortcuts** button) |
 | `Cmd/Ctrl` + click | Add an object to the selection or take it out (drag a box on the image to select several; computer) |
 | `Cmd/Ctrl` + `C` / `V` | Copy the selected object / paste a duplicate in place |
