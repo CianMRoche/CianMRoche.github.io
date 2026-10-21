@@ -27,14 +27,20 @@ lineArtPalette: ink
 lineArtColors: #0a0a0a #ebebeb #ffffff #ffffff #9aa0a6 #ffffff #7bbfcc #fbbf24 #b09ac8
 lineArtFill: true
 lineArtSmooth: true
-bgImage: quad_quasar_image.jpg
 bgFit: cover
 bgZoom: 1
 bgOffX: 0
 bgOffY: 0
-bgBright: 0.6
+bgBright: 1
 bgSkyLock: false
 bgHidden: false
+obsImage: quad_quasar_image.jpg
+obsPixel: 0.003125
+obsOffX: 0
+obsOffY: 0
+obsBright: 0.6
+obsEdge: 0
+obsShown: true
 fermatUseSourcePos: false
 fermatBetaX: 0.024036
 fermatBetaY: 0.123642

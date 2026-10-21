@@ -14,7 +14,9 @@
 //   r.setPastedTexture(objId, canvas)   — call after pasting an image
 //   r.clearPastedTexture(objId)         — call when object is deleted
 //   r.setBackdrop(canvas | null)        — background image behind the lensed view
-//   r.bgOpts = { fit, zoom, offX, offY, bright, skyLock, angSize } | null
+//   r.bgOpts = { fit, zoom, offX, offY, bright, edge, skyLock, angSize, invert } | null
+//   r.setObservation(canvas | null)     — the observed picture: on the sky, delensed
+//   r.obsOpts = { sky, off, bright, edge, invert } | null   — drawn over the background
 //   r.fieldColor = [r,g,b] (0-1, already theme-corrected) | null for black
 //   r.detectorOpts = { pixel, psfFwhm, psfOn } | null   — instrument pixel model
 //   r.detectorInfo                      — { applied, nPix, ss, samples, pixel } after a draw
@@ -133,6 +135,14 @@ uniform float u_bgBright;  // brightness multiplier
 uniform int   u_bgTile;    // 1 = wrap the texture instead of letterboxing
 uniform int   u_bgInvert;  // 1 = pre-invert, cancelling the canvas's CSS invert
 uniform vec2  u_bgFeather; // edge blend: width of the fade into the field, in texture units per axis
+// The observation: the observed picture, placed on the sky by its pixel scale and
+// drawn over the background (when shown). Its sample window comes from the CPU too.
+uniform sampler2D u_obsTex;
+uniform int   u_obsOn;
+uniform vec2  u_obsScale;
+uniform vec2  u_obsOffset;
+uniform float u_obsBright;
+uniform vec2  u_obsFeather;
 // The empty field behind everything. Black by this shader's convention (the
 // light-theme CSS invert turns it white); the Background section can set a colour
 // instead, pre-inverted on the CPU so it appears as picked in either theme.
@@ -526,23 +536,39 @@ vec4 samplePasted(int idx, vec2 beta) {
 // from the empty field toward the picture (0 = plain field, 1 = the picture as
 // supplied) rather than a fade to black in one theme and to white in the other.
 
-vec3 sampleBackdrop() {
-  if (u_bgOn == 0) return u_fieldColor;
-  vec2 uv = (v_uv - 0.5) * u_bgScale + 0.5 + u_bgOffset;
-  uv.y = 1.0 - uv.y;  // WebGL textures: first data row (image top) is at t=0
-  vec3 col = texture(u_bgTex, uv).rgb;
-  if (u_bgInvert == 1) col = vec3(1.0) - col;
-  col *= u_bgBright;
-  if (u_bgTile == 1) return col;
-  // Mask (rather than branch) outside the image, so the mipmapped fetch above
-  // stays in uniform control flow and its derivatives remain well defined. The
-  // letterbox margins a Contain fit leaves over fall back to the field colour.
-  // Edge blend fades the picture into the field over a band inside its border;
-  // smoothstep from 0 is already 0 outside, so it doubles as the mask.
-  vec2 inside = u_bgFeather.x > 0.0
-    ? smoothstep(vec2(0.0), u_bgFeather, min(uv, 1.0 - uv))
+// How much of a picture covers this point: 1 inside, 0 outside, and with an edge
+// blend a smoothstep over a band inside its border (smoothstep from 0 is already
+// 0 outside, so it doubles as the mask).
+float pictureCover(vec2 uv, vec2 feather) {
+  vec2 inside = feather.x > 0.0
+    ? smoothstep(vec2(0.0), feather, min(uv, 1.0 - uv))
     : step(vec2(0.0), uv) * step(uv, vec2(1.0));
-  return mix(u_fieldColor, col, inside.x * inside.y);
+  return inside.x * inside.y;
+}
+
+// The field colour, then the background, then the observation over it.
+vec3 sampleBackdrop() {
+  vec3 base = u_fieldColor;
+  // Mask (rather than branch) outside each image, so the mipmapped fetches stay
+  // in uniform control flow (the branches below are on uniforms) and their
+  // derivatives remain well defined. The letterbox margins a Contain fit leaves
+  // over fall back to the field colour.
+  if (u_bgOn == 1) {
+    vec2 uv = (v_uv - 0.5) * u_bgScale + 0.5 + u_bgOffset;
+    uv.y = 1.0 - uv.y;  // WebGL textures: first data row (image top) is at t=0
+    vec3 col = texture(u_bgTex, uv).rgb;
+    if (u_bgInvert == 1) col = vec3(1.0) - col;
+    col *= u_bgBright;
+    base = u_bgTile == 1 ? col : mix(base, col, pictureCover(uv, u_bgFeather));
+  }
+  if (u_obsOn == 1) {
+    vec2 uv = (v_uv - 0.5) * u_obsScale + 0.5 + u_obsOffset;
+    uv.y = 1.0 - uv.y;
+    vec3 col = texture(u_obsTex, uv).rgb;
+    if (u_bgInvert == 1) col = vec3(1.0) - col;
+    base = mix(base, col * u_obsBright, pictureCover(uv, u_obsFeather));
+  }
+  return base;
 }
 
 // ── Analytical source brightness (white) ──────────────────────────────────────
@@ -841,7 +867,7 @@ void main() {
   // maps onto (w, the smaller singular value of the inverse Jacobian, 1/σ_max(A)).
   // The mesh pass (DELENS_MESH_VERT) places each vertex at its β, weights it by
   // |μ|, and picks the texture's mip level from w. The field is set per axis
-  // because the grid follows the background image's aspect ratio (u_res is the
+  // because the grid follows the observation's aspect ratio (u_res is the
   // grid here). The Jacobian is by central differences with a step of a quarter node.
   if (u_vizMode == 9) {
     vec2 th = (v_uv - 0.5) * u_traceSpan + u_traceOff;
@@ -971,7 +997,7 @@ void main() {
 }`;
 
 // ── Delensed view shaders ─────────────────────────────────────────────────────
-// The background image is an observation: it lives in the image plane. Delensing
+// The observation lives in the image plane. Delensing
 // paints it into the source plane by drawing the image-plane grid as a triangle
 // mesh whose vertices sit at their traced β (read from the float target the main
 // shader filled in mode 9) and whose texture coordinates are their θ. Rasterising
@@ -1133,13 +1159,14 @@ export class Renderer {
     // framing controls. Kept as renderer properties rather than setScene()
     // arguments so every existing call site picks the backdrop up unchanged.
     this._bg     = null;
-    this.bgOpts  = null;   // { fit, zoom, offX, offY, bright, skyLock, angSize, sky, skyOff }
-    // Delensed view: the background image's size on the sky, [w, h] in arcsec,
-    // from its pixel scale, and where its centre sits, [x, y] in arcsec. Set
-    // whether or not the backdrop is hidden, since in that view the picture is
-    // the data being delensed rather than decoration.
+    this.bgOpts  = null;   // { fit, zoom, offX, offY, bright, edge, skyLock, angSize, invert }
+    // Delensed view: the observation's size on the sky, [w, h] in arcsec, from its
+    // pixel scale, and where its centre sits, [x, y] in arcsec. Set whether or not
+    // it is shown behind the lensed image, since here it is the data being delensed.
     this.delensSky = null;
     this.delensOff = [0, 0];
+    this._obs    = null;   // the observation's texture { tex, w, h }
+    this.obsOpts = null;
     this.delensMasks  = [];  // [[cx, cy, r, q, phi], …] in arcsec / radians, at most MAX_MASKS
     this.delensBright = 1;   // the backdrop's Brightness, applied to the delensed picture
     this.delensEdge   = 0;   // the backdrop's Edge blend (0-1), likewise
@@ -1305,6 +1332,24 @@ export class Renderer {
 
   get hasBackdrop() { return !!this._bg; }
 
+  // The observation: the observed picture, on the sky at its pixel scale, drawn
+  // over the background while shown and always the input of the delensed view.
+  setObservation(imageCanvas) {
+    const { gl } = this;
+    if (this._obs) { gl.deleteTexture(this._obs.tex); this._obs = null; }
+    if (!imageCanvas) return;
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, imageCanvas);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    this._obs = { tex, w: imageCanvas.width, h: imageCanvas.height };
+  }
+  get hasObservation() { return !!this._obs; }
+
   // Turn the View-tab background controls into the shader's sample window.
   //
   // Fit sets how much of the texture the (always square) viewport spans for an
@@ -1316,23 +1361,9 @@ export class Renderer {
   // scales it by fov/angSize so the backdrop magnifies with the field of view,
   // and the offsets pan by a fraction of the viewport — negated so that a
   // positive offset moves the image right / up rather than the sample window.
-  //
-  // A picture with a pixel scale (o.sky, its [w, h] on the sky in arcsec) skips
-  // all of that: it sits on the sky with its centre at o.skyOff (arcsec), so the
-  // viewport spans fov / sky of the texture on each axis whatever the zoom.
   _bgUniforms(fovArcsec, spanRatio = 1) {
     const b = this._bg, o = this.bgOpts;
     if (!b || !o) return null;
-    if (o.sky) {
-      return {
-        scale:  [fovArcsec / o.sky[0] * spanRatio, fovArcsec / o.sky[1] * spanRatio],
-        offset: [-(o.skyOff?.[0] ?? 0) / o.sky[0], -(o.skyOff?.[1] ?? 0) / o.sky[1]],
-        bright: o.bright ?? 1,
-        edge:   o.edge ?? 0,
-        invert: !!o.invert,
-        tile:   false,
-      };
-    }
     const ar   = b.w / b.h;
     const tile = o.fit === 'tile';
     let sx, sy;
@@ -1359,14 +1390,28 @@ export class Renderer {
     };
   }
 
+  // The observation sits on the sky (o.sky, its [w, h] in arcsec) with its centre
+  // at o.off (arcsec), so the viewport spans fov / sky of the texture on each axis.
+  _obsUniforms(fovArcsec, spanRatio = 1) {
+    const o = this.obsOpts;
+    if (!this._obs || !o || !o.sky) return null;
+    return {
+      scale:  [fovArcsec / o.sky[0] * spanRatio, fovArcsec / o.sky[1] * spanRatio],
+      offset: [-(o.off?.[0] ?? 0) / o.sky[0], -(o.off?.[1] ?? 0) / o.sky[1]],
+      bright: o.bright ?? 1,
+      edge:   o.edge ?? 0,
+      invert: !!o.invert,
+    };
+  }
+
   // Edge blend (0-1) as the feather width in texture units per axis: up to 0.4 of
   // the picture's shorter side, the same reach as a pasted image's Edge blend, and
   // the same angle on both axes whatever the aspect ratio.
-  _bgFeather(edge) {
-    const b = this._bg, e = Math.min(1, Math.max(0, edge ?? 0));
-    if (!b || !(e > 0)) return [0, 0];
-    const s = 0.4 * e * Math.min(b.w, b.h);
-    return [s / b.w, s / b.h];
+  _feather(pic, edge) {
+    const e = Math.min(1, Math.max(0, edge ?? 0));
+    if (!pic || !(e > 0)) return [0, 0];
+    const s = 0.4 * e * Math.min(pic.w, pic.h);
+    return [s / pic.w, s / pic.h];
   }
 
   // Upload (or update) the pasted image for a specific source object.
@@ -1421,6 +1466,7 @@ export class Renderer {
     gl.deleteBuffer(this._quad);
     for (const { tex } of this._pastedTexCache.values()) gl.deleteTexture(tex);
     if (this._bg) gl.deleteTexture(this._bg.tex);
+    if (this._obs) gl.deleteTexture(this._obs.tex);
     for (const t of Object.values(this._fbo)) { gl.deleteFramebuffer(t.fb); gl.deleteTexture(t.tex); }
     if (this._post) { gl.deleteProgram(this._post.blurProg); gl.deleteProgram(this._post.detProg); }
     if (this._delens) {
@@ -1643,8 +1689,19 @@ export class Renderer {
     gl.uniform2fv(_locs.u_bgOffset, bg ? bg.offset : [0, 0]);
     gl.uniform1f (_locs.u_bgBright, bg ? bg.bright : 1);
     gl.uniform1i (_locs.u_bgTile,   bg && bg.tile   ? 1 : 0);
-    gl.uniform1i (_locs.u_bgInvert, bg && bg.invert ? 1 : 0);
-    gl.uniform2fv(_locs.u_bgFeather, bg && !bg.tile ? this._bgFeather(bg.edge) : [0, 0]);
+    gl.uniform2fv(_locs.u_bgFeather, bg && !bg.tile ? this._feather(this._bg, bg.edge) : [0, 0]);
+    // The observation on the slot after it.
+    const ob = this._obsUniforms(fovArcsec, renderFov / fovArcsec);
+    gl.activeTexture(gl.TEXTURE0 + MAX_PASTED + 1);
+    gl.bindTexture(gl.TEXTURE_2D, ob ? this._obs.tex : this._dummyTex);
+    gl.uniform1i (_locs.u_obsTex,     MAX_PASTED + 1);
+    gl.uniform1i (_locs.u_obsOn,      ob ? 1 : 0);
+    gl.uniform2fv(_locs.u_obsScale,   ob ? ob.scale  : [1, 1]);
+    gl.uniform2fv(_locs.u_obsOffset,  ob ? ob.offset : [0, 0]);
+    gl.uniform1f (_locs.u_obsBright,  ob ? ob.bright : 1);
+    gl.uniform2fv(_locs.u_obsFeather, ob ? this._feather(this._obs, ob.edge) : [0, 0]);
+    // Both pictures pre-invert in light theme, so either one sets the flag.
+    gl.uniform1i (_locs.u_bgInvert, (bg && bg.invert) || (ob && ob.invert) ? 1 : 0);
     // Set whether or not a picture is loaded: it is the field behind everything.
     gl.uniform3fv(_locs.u_fieldColor, this.fieldColor ?? [0, 0, 0]);
 
@@ -1718,7 +1775,7 @@ export class Renderer {
   // nodes on the image edges.
   _delensTargets() {
     const sky = this.delensSky;
-    if (!this._bg || !sky || !(sky[0] > 0 && sky[1] > 0) || !this.delensSupported) return null;
+    if (!this._obs || !sky || !(sky[0] > 0 && sky[1] > 0) || !this.delensSupported) return null;
     const long = Math.max(sky[0], sky[1]);
     const nx = Math.max(2, Math.round((DELENS_GRID - 1) * sky[0] / long) + 1);
     const ny = Math.max(2, Math.round((DELENS_GRID - 1) * sky[1] / long) + 1);
@@ -1779,19 +1836,16 @@ export class Renderer {
     gl.bindTexture(gl.TEXTURE_2D, beta.tex);
     gl.uniform1i(d.mesh.u_beta, 0);
     gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D, this._bg.tex);
-    // The image view may have left it wrapping (Tile); outside the image is no data.
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.bindTexture(gl.TEXTURE_2D, this._obs.tex);   // clamped: outside the picture is no data
     gl.uniform1i(d.mesh.u_img, 1);
     gl.uniform2i(d.mesh.u_nodes, nx, ny);
     gl.uniform2f(d.mesh.u_half, sky[0] / 2, sky[1] / 2);
     gl.uniform2f(d.mesh.u_off, off[0], off[1]);
     gl.uniform1f(d.mesh.u_bright, this.delensBright ?? 1);
     gl.uniform3fv(d.mesh.u_empty, empty);
-    gl.uniform2fv(d.mesh.u_feather, this._bgFeather(this.delensEdge));
+    gl.uniform2fv(d.mesh.u_feather, this._feather(this._obs, this.delensEdge));
     gl.uniform1f(d.mesh.u_fov, fovArcsec);
-    gl.uniform1f(d.mesh.u_pixRatio, (fovArcsec / W) / (sky[0] / this._bg.w));
+    gl.uniform1f(d.mesh.u_pixRatio, (fovArcsec / W) / (sky[0] / this._obs.w));
     const masks = (this.delensMasks ?? []).slice(0, MAX_MASKS);
     const mBuf = new Float32Array(4 * MAX_MASKS), rBuf = new Float32Array(2 * MAX_MASKS);
     masks.forEach(([cx, cy, r, q, phi], i) => {
@@ -1915,6 +1969,12 @@ export class Renderer {
       u_bgBright:     u('u_bgBright'),
       u_bgTile:       u('u_bgTile'),
       u_bgInvert:     u('u_bgInvert'),
+      u_obsTex:       u('u_obsTex'),
+      u_obsOn:        u('u_obsOn'),
+      u_obsScale:     u('u_obsScale'),
+      u_obsOffset:    u('u_obsOffset'),
+      u_obsBright:    u('u_obsBright'),
+      u_obsFeather:   u('u_obsFeather'),
       u_fieldColor:   u('u_fieldColor'),
       u_saddlePhi:    u('u_saddlePhi'),
       u_nSaddle:      u('u_nSaddle'),

@@ -7,7 +7,7 @@ order: 1
 | Key | Action |
 |---|---|
 | `1` / `2` / `3` | Toggle the Lens / Source / Hybrid placement tool (click a plane viewer, or on a computer the image, to place) |
-| `4` | Toggle the Mask tool (while a Delensed image view is open, <a href="/caustica-documentation/background-image/">§7</a>) |
+| `4` | Toggle the Mask tool (while there is an observation, <a href="/caustica-documentation/background-image/">§7</a>) |
 | `C` | Toggle critical curves and caustics |
 | `I` | Show lensed image (exit any quantity map) |
 | `K` | Convergence κ map |
@@ -17,7 +17,7 @@ order: 1
 | `T` | Fermat potential φ contour map |
 | `P` | Parity map |
 | `N` | Image number map |
-| `U` | Delensed background image (<a href="/caustica-documentation/background-image/">§7</a>) |
+| `U` | Delensed image: the observation traced back to the source plane (<a href="/caustica-documentation/background-image/">§7</a>) |
 | `H` | Hide / show the selected object |
 | `O` | Clear all objects from the selected plane |
 | `X` | Delete the selected plane |
