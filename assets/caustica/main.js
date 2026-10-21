@@ -1425,6 +1425,23 @@ function defaultParams(model) {
   return {};
 }
 
+// Switch an object to another model, carrying over the parameters both models have
+// with the same meaning: the axis ratio q and position angle φ, the deflection
+// scale b (point mass, SIE, NIE and EPL all use it for the Einstein-radius scale),
+// and a source's colour. A model without one of them (a point mass has no q or φ)
+// leaves the last value in obj.carried, so switching back restores it. The rest
+// start at the new model's defaults, and the position is the object's own.
+const CARRY_PARAMS = ['q', 'phi', 'b', 'color'];
+function switchModel(obj, model) {
+  const fresh = defaultParams(model);
+  const known = { ...obj.carried, ...obj.params };
+  for (const k of CARRY_PARAMS)
+    if (k in fresh && typeof known[k] === typeof fresh[k]) fresh[k] = known[k];
+  obj.carried = Object.fromEntries(CARRY_PARAMS.filter(k => k in known).map(k => [k, known[k]]));
+  obj.model  = model;
+  obj.params = fresh;
+}
+
 function makeObject(type, model, cx = 0, cy = 0) {
   return { id: uid(), type, model, cx, cy, params: defaultParams(model), showShape: false, hidden: false };
 }
@@ -6128,11 +6145,11 @@ function renderScenePanel() {
       });
       // Lens section model + params
       document.getElementById('sl-model-select-lens')?.addEventListener('change', e => {
-        lensObj.model = e.target.value; lensObj.params = defaultParams(lensObj.model);
+        switchModel(lensObj, e.target.value);
         renderPlaneCard(); renderSidebar(); redraw();
       });
       document.getElementById('sl-model-select-src')?.addEventListener('change', e => {
-        srcObj.model = e.target.value; srcObj.params = defaultParams(srcObj.model);
+        switchModel(srcObj, e.target.value);
         renderPlaneCard(); renderSidebar(); redraw();
       });
       document.getElementById('sl-obj-panel').querySelectorAll('[data-hybrid-section="lens"] input[type="range"][data-param]').forEach(inp => {
@@ -6179,7 +6196,7 @@ function renderScenePanel() {
       });
       document.getElementById('sl-attach-partner')?.addEventListener('click', () => attachPartner(obj, pl));
       document.getElementById('sl-model-select')?.addEventListener('change', e => {
-        obj.model = e.target.value; obj.params = defaultParams(obj.model);
+        switchModel(obj, e.target.value);
         renderPlaneCard(); renderSidebar(); redraw();
       });
       document.getElementById('sl-obj-panel').querySelectorAll('input[type="color"][data-param-color]').forEach(inp => {
