@@ -383,6 +383,7 @@ const CONFIG_DEFAULTS = {
   curveTypes:         true,   // draw radial curves/caustics dotted and label both types in the legend
   curveTypeShow:      'both', // with curveTypes on: 'both' | 'tangential' | 'radial'
   showStretch:        false,  // stretch whiskers: direction and strength of image distortion
+  showShapes:         true,   // draw the outlines of objects whose own Show shape is on (per view)
   showMarkers:        true,
   showLegend:         true,
   legendBg:           false,  // translucent panel behind the legend so overlays under it stay legible
@@ -395,7 +396,7 @@ const CONFIG_DEFAULTS = {
   renderScale:        'auto', // GL canvas DPR mode: 'auto' (cap 2×) | '1x' | 'native'
   showScaleBar:       true,   // dynamic angular scale bar at the bottom of the image
   critZs:             null,   // null = auto (highest-z source plane)
-  fermatUseSourcePos: false,  // when true, use lastFermatSource for Fermat β_s and source plane
+  fermatUseSourcePos: true,   // when true, use lastFermatSource for Fermat β_s and source plane
   contourSpacing:     1.0,    // Fermat contour spacing multiplier (interval = 0.002·fov²·this)
   contourScale:       0,      // Fermat contour scale: 0=linear, 1=asinh (compress steep skirt)
   imageNumberSpacing: 39,     // image-number grid spacing (screen px); a point sits on the centre
@@ -456,6 +457,7 @@ const state = {
   planes:          [],
   selectedPlaneId: null,
   selectedObjId:   null,
+  multiSel:        new Set(),   // ids of a multi-selection (see selectionIds)
   addMode:         'select', // plane-viewer tool: 'select' | 'lens' | 'source' | 'hybrid' | 'mask' (delensed view only)
   rulerActive:     false,    // ruler is the active pointer tool on the image panel (transient)
   rulers:          [],       // committed measurements, each { id, x0, y0, x1, y1 } in arcsec (session-only)
@@ -943,7 +945,7 @@ function configToYaml() {
     y += `vizScale${m}: ${v.scale} ${v.param} ${v.min} ${v.max} ${v.palette ?? 0}\n`;
   }
   y += `showCritCurves: ${state.showCritCurves}\nshowCaustics: ${state.showCaustics}\n`;
-  y += `curveTypes: ${state.curveTypes}\ncurveTypeShow: ${state.curveTypeShow}\nshowStretch: ${state.showStretch}\n`;
+  y += `curveTypes: ${state.curveTypes}\ncurveTypeShow: ${state.curveTypeShow}\nshowStretch: ${state.showStretch}\nshowShapes: ${state.showShapes}\n`;
   y += `showMarkers: ${state.showMarkers}\nshowLegend: ${state.showLegend}\nlegendBg: ${state.legendBg}\nshowColorbar: ${state.showColorbar}\n`;
   y += `showScaleBar: ${state.showScaleBar}\n`;
   y += `showRuler: ${state.showRuler}\n`;
@@ -1225,6 +1227,7 @@ function loadConfigFromYaml(yaml) {
     state.curveTypes     = _bool(cfg.curveTypes,     CONFIG_DEFAULTS.curveTypes);
     state.curveTypeShow  = CURVE_TYPE_SHOWS.includes(cfg.curveTypeShow) ? cfg.curveTypeShow : CONFIG_DEFAULTS.curveTypeShow;
     state.showStretch    = _bool(cfg.showStretch,    CONFIG_DEFAULTS.showStretch);
+    state.showShapes     = _bool(cfg.showShapes,     CONFIG_DEFAULTS.showShapes);
     state.showMarkers    = _bool(cfg.showMarkers,    CONFIG_DEFAULTS.showMarkers);
     state.showLegend     = _bool(cfg.showLegend,     CONFIG_DEFAULTS.showLegend);
     state.legendBg       = _bool(cfg.legendBg,       CONFIG_DEFAULTS.legendBg);
@@ -1634,6 +1637,72 @@ function pasteCopiedObject() {
   clearRulerSelectionForObject();  // one selection at a time
   renderPlaneCard(); renderSidebar(); redraw();
   return true;
+}
+
+// ── Multi-selection ──
+// Cmd/Ctrl+click adds or removes an object, and a drag across empty image space
+// selects every object inside it; dragging any selected object then moves them
+// all by the same offset. Only moving is shared: the Object panel, Delete and
+// every other edit act on the primary selection (state.selectedObjId), the one
+// last clicked. state.multiSel holds the selected ids (a hybrid by its lens
+// half); it counts only while it contains the primary, so code that selects
+// something else on its own quietly returns to a single selection.
+function selectionIds() {
+  const p = state.selectedObjId;
+  if (p == null) return new Set();
+  return state.multiSel?.has(p) ? state.multiSel : new Set([p]);
+}
+function isObjSelected(plane, obj) {
+  const ids = selectionIds();
+  if (ids.has(obj.id)) return true;
+  return !!obj.hybridId && plane.objects.some(o => o.hybridId === obj.hybridId && ids.has(o.id));
+}
+// The selected objects with their planes (each hybrid once, by its lens half).
+function selectionEntries() {
+  const ids = selectionIds(), out = [];
+  for (const plane of state.planes) for (const obj of plane.objects)
+    if (ids.has(obj.id)) out.push({ obj: hybridLensHalf(plane, obj), plane });
+  return out.filter((e, i) => out.findIndex(f => f.obj === e.obj) === i);
+}
+function selectSingle(plane, obj) {
+  state.selectedPlaneId = plane?.id ?? null;
+  state.selectedObjId   = obj?.id ?? null;
+  state.multiSel        = new Set(obj ? [obj.id] : []);
+}
+// Cmd/Ctrl+click: add the object to the selection (making it the primary), or
+// take it out. Returns whether it is selected afterwards.
+function toggleSelected(plane, obj) {
+  obj = hybridLensHalf(plane, obj);
+  const ids = new Set(selectionIds());
+  const had = isObjSelected(plane, obj);
+  if (had) {
+    ids.delete(obj.id);
+    if (obj.hybridId) for (const o of plane.objects) if (o.hybridId === obj.hybridId) ids.delete(o.id);
+    if (state.selectedObjId === obj.id || !ids.has(state.selectedObjId)) {
+      const next = [...ids].pop();
+      const pl   = next != null ? state.planes.find(p => p.objects.some(o => o.id === next)) : null;
+      state.selectedObjId   = next ?? null;
+      state.selectedPlaneId = pl?.id ?? state.selectedPlaneId;
+    }
+  } else {
+    ids.add(obj.id);
+    state.selectedObjId   = obj.id;
+    state.selectedPlaneId = plane.id;
+  }
+  state.multiSel = ids;
+  return !had;
+}
+// Start positions for a group move of the whole selection.
+function _groupStart() {
+  return selectionEntries().map(({ obj, plane }) => ({ obj, plane, sx: obj.cx, sy: obj.cy }));
+}
+function _moveGroup(group, dx, dy) {
+  for (const g of group) {
+    g.obj.cx = g.sx + dx; g.obj.cy = g.sy + dy;
+    const partner = hybridPartner(g.plane, g.obj);
+    if (partner) { partner.cx = g.obj.cx; partner.cy = g.obj.cy; }
+  }
+  for (const pl of new Set(group.map(g => g.plane))) redrawPlaneCanvas(pl);
 }
 
 function selectedPlane() { return state.planes.find(p => p.id === state.selectedPlaneId) ?? null; }
@@ -3108,8 +3177,8 @@ const PANE_OWN_KEYS = ['showCritCurves', 'showCaustics', 'showMarkers'];
 const LINK_GROUPS = [
   { key: 'zoom',       label: 'Zoom (field of view)',       keys: ['fov'] },
   { key: 'zsref',      label: 'Reference source redshift',  keys: ['critZs'] },
-  { key: 'display',    label: 'Display toggles', hint: 'Legend, legend background, scale bar, colorbar, stretch and time delays',
-    keys: ['showLegend', 'legendBg', 'showScaleBar', 'showColorbar', 'showStretch', 'showTimeDelays'] },
+  { key: 'display',    label: 'Display toggles', hint: 'Legend, legend background, scale bar, object shapes, colorbar, stretch and time delays',
+    keys: ['showLegend', 'legendBg', 'showScaleBar', 'showColorbar', 'showStretch', 'showTimeDelays', 'showShapes'] },
   { key: 'instrument', label: 'Instrument',                  keys: ['instrument', 'instrPixel', 'instrPsfFwhm', 'instrPsf', 'instrHidden'] },
   { key: 'lineart',    label: 'Line art',                    keys: ['lineArt', 'lineArtFill', 'lineArtFillAlpha', 'lineArtSmooth'] },
   { key: 'background', label: 'Background image framing',    keys: ['bgHidden', 'bgFit', 'bgZoom', 'bgOffX', 'bgOffY', 'bgBright', 'bgSkyLock', 'bgAngSize'] },
@@ -3463,7 +3532,15 @@ function attachPaneHandlers() {
   document.addEventListener('pointerdown', e => {
     if (!e.target.closest('#sl-tab-menu, .sl-tab-add, .sl-tab-split, .sl-tab.active')) _closeTabMenu();
   });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') _closeTabMenu(); });
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    _closeTabMenu();
+    if (selectionIds().size > 1) {
+      const pl = selectedPlane();
+      selectSingle(pl, pl?.objects.find(o => o.id === state.selectedObjId) ?? null);
+      renderPlaneCard(); renderSidebar(); redraw();
+    }
+  });
 
   // Drag a tab: along a strip to reorder it, onto the other pane's strip or image
   // to move it there, or onto the right half of a single pane to split.
@@ -3566,10 +3643,11 @@ function drawOverlay() {
         _drawOverlayPane();
         if (!state.hideOverlays && !state.lineArt)
           _drawColorbarOnto(overlayCtx, overlayCtx.canvas.width, overlayCtx.canvas.height, true);
+        _drawMarquee();
       } finally { overlayCtx = keepCtx; state.fermatPoints = keepF; state.saddlePhis = keepP; }
     });
   }
-  _withPane(0, _drawOverlayPane);
+  _withPane(0, () => { _drawOverlayPane(); _drawMarquee(); });
 }
 
 // ── Quality tab ───────────────────────────────────────────────────────────────
@@ -3933,6 +4011,44 @@ function imageWrapToArcsec(wrap, e) {
 // Hit-test all objects in all planes against an image-space pointer event.
 // The SELECTED plane is tested first, so where objects from different planes
 // overlap on the image, a click always picks the selected plane's object.
+// Whether an object can be grabbed in the current view (as drawn by drawOverlay).
+function _grabbable(plane, obj) {
+  if (obj.hidden) return false;
+  if (state.vizMode === 8 && !state.lineArt && obj.type === 'source' && !obj.hybridId) return false;
+  if (obj.type === 'mask' && !masksShown()) return false;
+  return true;
+}
+
+// The box select: every grabbable object whose marker lies in the rectangle.
+function _objectsInRect(x0, y0, x1, y1) {
+  const lx = Math.min(x0, x1), hx = Math.max(x0, x1), ly = Math.min(y0, y1), hy = Math.max(y0, y1);
+  const out = [];
+  for (const plane of state.planes) for (const obj of plane.objects) {
+    if (!_grabbable(plane, obj) || (obj.hybridId && hybridLensHalf(plane, obj) !== obj)) continue;
+    if (obj.cx >= lx && obj.cx <= hx && obj.cy >= ly && obj.cy <= hy) out.push({ obj, plane });
+  }
+  return out;
+}
+
+// The box being dragged out, on the pane it is dragged in.
+function _drawMarquee() {
+  const mq = state._marquee;
+  if (!mq || mq.canvas !== overlayCtx.canvas) return;
+  const W = overlayCtx.canvas.width, H = overlayCtx.canvas.height;
+  const X = x => (x / state.fov + 0.5) * W, Y = y => (-y / state.fov + 0.5) * H;
+  const x = Math.min(X(mq.x0), X(mq.x1)), y = Math.min(Y(mq.y0), Y(mq.y1));
+  const w = Math.abs(X(mq.x1) - X(mq.x0)), h = Math.abs(Y(mq.y1) - Y(mq.y0));
+  const dpr = window.devicePixelRatio || 1;
+  overlayCtx.save();
+  overlayCtx.fillStyle   = hexRgba(annotInk(), 0.08);
+  overlayCtx.strokeStyle = hexRgba(annotInk(), 0.7);
+  overlayCtx.lineWidth   = dpr;
+  overlayCtx.setLineDash([4 * dpr, 3 * dpr]);
+  overlayCtx.fillRect(x, y, w, h);
+  overlayCtx.strokeRect(x + 0.5, y + 0.5, w, h);
+  overlayCtx.restore();
+}
+
 function hitTestImage(wrap, e) {
   const pos = imageWrapToArcsec(wrap, e);
   const r   = wrap.getBoundingClientRect();
@@ -4059,6 +4175,7 @@ function attachImageHandlers(wrap) {
   let imgDrag   = null; // { obj, plane, startCx, startCy, startMx, startMy }
   let rulerDrag = null; // { x0, y0, x1, y1 } while dragging a NEW ruler measurement
   let rulerEdit = null; // { ruler, mode, end, sx0.. , px, py } while editing an existing one
+  let marq      = null; // { x0, y0, x1, y1, base, additive, moved, cx, cy } while box-selecting
   // Touch swipe on empty image space cycles the visualization mode (mirrors the
   // plane viewer's swipe-to-switch-planes). { id, x0, y0, dir } from pointerdown;
   // dir is set to 'x' once horizontal movement dominates, and the whole gesture
@@ -4153,7 +4270,18 @@ function attachImageHandlers(wrap) {
       renderPlaneCard(); renderSidebar(); redraw();
       return;
     }
+    const additive = (e.metaKey || e.ctrlKey) && _splitAllowed();
     if (!hit) {
+      // Empty space with the mouse (desktop): drag out a box to select what is in
+      // it (Cmd/Ctrl adds to the selection); a plain click clears the selection.
+      if (e.pointerType === 'mouse' && _splitAllowed()) {
+        e.preventDefault();
+        wrap.setPointerCapture(e.pointerId);
+        const p = imageWrapToArcsec(wrap, e);
+        marq = { x0: p.x, y0: p.y, x1: p.x, y1: p.y, additive, moved: false, cx: e.clientX, cy: e.clientY,
+                 base: additive ? new Set(selectionIds()) : new Set() };
+        return;
+      }
       // Empty space: on touch this may become a horizontal swipe that cycles the
       // visualization mode (committed on release). No preventDefault, so a
       // vertical drag still scrolls the page.
@@ -4164,13 +4292,29 @@ function attachImageHandlers(wrap) {
     e.preventDefault();
     wrap.setPointerCapture(e.pointerId);
     const pos = imageWrapToArcsec(wrap, e);
+    // Cmd/Ctrl+click adds or removes the object; a press on a member of a
+    // multi-selection moves them all (and a click without a drag keeps just it).
+    let group = null, collapse = false;
+    if (additive) {
+      if (!toggleSelected(hit.plane, hit.obj)) {
+        clearRulerSelectionForObject();
+        renderPlaneCard(); renderSidebar(); redraw();
+        return;
+      }
+      group = _groupStart();
+    } else if (selectionIds().size > 1 && isObjSelected(hit.plane, hit.obj)) {
+      state.selectedObjId   = hit.obj.id;
+      state.selectedPlaneId = hit.plane.id;
+      group = _groupStart(); collapse = true;
+    } else {
+      selectSingle(hit.plane, hit.obj);
+    }
     imgDrag = { obj: hit.obj, plane: hit.plane,
                 startCx: hit.obj.cx, startCy: hit.obj.cy,
-                startMx: pos.x,      startMy: pos.y };
-    state.selectedPlaneId = hit.plane.id;
-    state.selectedObjId   = hit.obj.id;
+                startMx: pos.x,      startMy: pos.y, group, collapse, moved: false };
+    clearRulerSelectionForObject();
     wrap.style.cursor = 'grabbing';
-    renderSidebar(); redraw();
+    renderPlaneCard(); renderSidebar(); redraw();
   });
 
   wrap.addEventListener('pointermove', e => {
@@ -4201,6 +4345,27 @@ function attachImageHandlers(wrap) {
       drawOverlay();  // overlay only — the GL scene is unchanged by a ruler drag
       return;
     }
+    if (marq) {
+      e.preventDefault();
+      const p = imageWrapToArcsec(wrap, e);
+      marq.x1 = p.x; marq.y1 = p.y;
+      if (!marq.moved && Math.hypot(e.clientX - marq.cx, e.clientY - marq.cy) < 4) return;
+      marq.moved = true;
+      state._marquee = { canvas: wrap.querySelector('.sl-overlay'), x0: marq.x0, y0: marq.y0, x1: marq.x1, y1: marq.y1 };
+      const inside = _objectsInRect(marq.x0, marq.y0, marq.x1, marq.y1);
+      const ids = new Set(marq.base);
+      for (const { obj } of inside) ids.add(obj.id);
+      if (!ids.has(state.selectedObjId)) {
+        const last = inside[inside.length - 1] ?? null;
+        state.selectedObjId   = last?.obj.id ?? (ids.size ? [...ids].pop() : null);
+        const pl = state.planes.find(q => q.objects.some(o => o.id === state.selectedObjId));
+        if (pl) state.selectedPlaneId = pl.id;
+      }
+      state.multiSel = ids;
+      for (const pl of state.planes) redrawPlaneCanvas(pl);
+      drawOverlay();
+      return;
+    }
     if (!imgDrag) {
       // Hovering an existing ruler shows a move/grab cursor (it's editable).
       if (state.showRuler) {
@@ -4221,13 +4386,17 @@ function attachImageHandlers(wrap) {
       record();
       imgDrag.historyRecorded = true;
     }
-    imgDrag.obj.cx = imgDrag.startCx + (pos.x - imgDrag.startMx);
-    imgDrag.obj.cy = imgDrag.startCy + (pos.y - imgDrag.startMy);
-    const partner = hybridPartner(imgDrag.plane, imgDrag.obj);
-    if (partner) { partner.cx = imgDrag.obj.cx; partner.cy = imgDrag.obj.cy; }
+    imgDrag.moved = true;
+    if (imgDrag.group) _moveGroup(imgDrag.group, pos.x - imgDrag.startMx, pos.y - imgDrag.startMy);
+    else {
+      imgDrag.obj.cx = imgDrag.startCx + (pos.x - imgDrag.startMx);
+      imgDrag.obj.cy = imgDrag.startCy + (pos.y - imgDrag.startMy);
+      const partner = hybridPartner(imgDrag.plane, imgDrag.obj);
+      if (partner) { partner.cx = imgDrag.obj.cx; partner.cy = imgDrag.obj.cy; }
+      redrawPlaneCanvas(imgDrag.plane);
+    }
     const posEl = document.getElementById('sl-obj-pos');
     if (posEl) posEl.textContent = `Pos: (${imgDrag.obj.cx.toFixed(2)}, ${imgDrag.obj.cy.toFixed(2)})`;
-    redrawPlaneCanvas(imgDrag.plane);
     redraw();
   });
 
@@ -4258,7 +4427,15 @@ function attachImageHandlers(wrap) {
       else       { updateRulerUI(); drawOverlay(); }
       return;
     }
+    if (marq) {
+      const { moved, additive } = marq;
+      marq = null; state._marquee = null;
+      if (!moved && !additive) selectSingle(null, null);   // a plain click on empty space
+      renderPlaneCard(); renderSidebar(); redraw();
+      return;
+    }
     if (!imgDrag) return;
+    if (!imgDrag.moved && imgDrag.collapse) { selectSingle(imgDrag.plane, imgDrag.obj); renderPlaneCard(); renderSidebar(); }
     invalidateDistances();
     redraw();
     wrap.style.cursor = '';
@@ -4269,6 +4446,7 @@ function attachImageHandlers(wrap) {
 
   wrap.addEventListener('pointercancel', () => {
     vizSwipe = null;  // browser claimed the gesture (e.g. a vertical page scroll)
+    if (marq) { marq = null; state._marquee = null; drawOverlay(); }
     if (rulerEdit) { rulerEdit = null; drawOverlay(); }
     if (rulerDrag) { rulerDrag = state.rulerDraft = null; updateRulerUI(); drawOverlay(); }
   });
@@ -4474,12 +4652,16 @@ function attachPlaneCardHandlers(canvas, { getPlane = selectedPlane, swipe = tru
         record();
         pStart.historyRecorded = true;
       }
-      hitObj.cx = pStart.cx + dx;
-      hitObj.cy = pStart.cy + dy;
-      // Move hybrid partner in sync.
-      const _partner = hybridPartner(plane, hitObj);
-      if (_partner) { _partner.cx = hitObj.cx; _partner.cy = hitObj.cy; }
-      redrawPlaneCanvas(plane); redraw();
+      if (pStart.group) _moveGroup(pStart.group, dx, dy);
+      else {
+        hitObj.cx = pStart.cx + dx;
+        hitObj.cy = pStart.cy + dy;
+        // Move hybrid partner in sync.
+        const _partner = hybridPartner(plane, hitObj);
+        if (_partner) { _partner.cx = hitObj.cx; _partner.cy = hitObj.cy; }
+        redrawPlaneCanvas(plane);
+      }
+      redraw();
       // Keep the "Initial pos (current)" display in sync without a full sidebar rebuild.
       if (hitObj.id === state.selectedObjId) {
         const posEl = document.getElementById('sl-obj-pos');
@@ -4497,25 +4679,40 @@ function attachPlaneCardHandlers(canvas, { getPlane = selectedPlane, swipe = tru
     if (!e.isPrimary) { istate = 'idle'; hitObj = null; plane = null; return; }
     plane = getPlane();
     if (!plane) return;
-    if (plane.id !== state.selectedPlaneId) {
+    e.preventDefault();
+    canvas.setPointerCapture(e.pointerId);
+    const touch = e.pointerType === 'touch' || e.pointerType === 'pen';
+    const pos   = canvasToArcsec(canvas, e);
+    hitObj      = hitTestPlane(plane, canvas, e);
+    // Cmd/Ctrl+click adds or removes an object; a press on a member of a
+    // multi-selection moves them all (a click without a drag keeps just it).
+    const additive = (e.metaKey || e.ctrlKey) && state.addMode === 'select';
+    let group = null, collapse = false;
+    if (hitObj && additive) {
+      clearRulerSelectionForObject();
+      if (!toggleSelected(plane, hitObj)) {
+        istate = 'idle'; hitObj = null;
+        renderPlaneCard(); renderSidebar(); redraw();
+        return;
+      }
+      group = _groupStart();
+    } else if (hitObj && selectionIds().size > 1 && isObjSelected(plane, hitObj)) {
+      state.selectedObjId = hitObj.id; state.selectedPlaneId = plane.id;
+      group = _groupStart(); collapse = true;
+    } else if (plane.id !== state.selectedPlaneId) {
       state.selectedPlaneId = plane.id;
       state.selectedObjId   = null;
       clearRulerSelectionForObject();
       updateCanvasTools();
       renderPlaneCard(); renderSidebar();
     }
-    e.preventDefault();
-    canvas.setPointerCapture(e.pointerId);
-    const touch = e.pointerType === 'touch' || e.pointerType === 'pen';
-    const pos   = canvasToArcsec(canvas, e);
-    hitObj      = hitTestPlane(plane, canvas, e);
     if (hitObj) {
-      // Started on an existing object → drag it.
+      // Started on an existing object → drag it (with the rest of a multi-selection).
       istate = 'hit-pending'; canvas.style.cursor = 'grab';
-      pStart = { cx: hitObj.cx, cy: hitObj.cy, mx: pos.x, my: pos.y, touch, historyRecorded: false };
-      state.selectedObjId   = hitObj.id;
+      pStart = { cx: hitObj.cx, cy: hitObj.cy, mx: pos.x, my: pos.y, touch, historyRecorded: false, group, collapse };
+      if (!group) selectSingle(plane, hitObj);
       clearRulerSelectionForObject();  // one selection at a time
-      renderSidebar(); redraw();
+      renderPlaneCard(); renderSidebar(); redraw();
     } else {
       // Started on empty space → with an L/S/H tool, a tap (down + up in ~same
       // spot) creates an object; with the select tool a tap only deselects. A
@@ -4547,6 +4744,9 @@ function attachPlaneCardHandlers(canvas, { getPlane = selectedPlane, swipe = tru
       }
     } else if (istate === 'dragging' || istate === 'add-dragging') {
       invalidateDistances(); redraw();
+    } else if (istate === 'hit-pending' && pStart?.collapse && plane && hitObj) {
+      selectSingle(plane, hitObj);   // a click on a member of a multi-selection keeps just it
+      renderPlaneCard(); renderSidebar(); redraw();
     }
     istate = 'idle'; hitObj = null; plane = null;
     const selPl = getPlane();
@@ -4991,10 +5191,8 @@ function drawPlaneCanvas(canvas, plane) {
     }
     const px  = (obj.cx / state.fov + 0.5) * W;
     const py  = (-obj.cy / state.fov + 0.5) * H;
-    // Selection: true if this obj or its hybrid partner is the selected object.
-    const sel = plane.id === state.selectedPlaneId &&
-      (obj.id === state.selectedObjId ||
-       (obj.hybridId && plane.objects.some(o => o.hybridId === obj.hybridId && o.id === state.selectedObjId)));
+    // Selection: this obj (or its hybrid partner) is in the selection.
+    const sel = isObjSelected(plane, obj);
     const isHidden = obj.hidden && (!obj.hybridId || plane.objects.every(o => o.hybridId !== obj.hybridId || o.id === obj.id || o.hidden));
     const dotType  = obj.hybridId ? 'hybrid' : obj.type;
     const rad = window.innerWidth <= 640 ? 10 : 6;
@@ -5248,6 +5446,9 @@ function renderScenePanel() {
   }
 
   document.getElementById('sl-obj-panel').innerHTML = paramsPanel;
+  const nSel = selectionIds().size;
+  if (nSel > 1) document.getElementById('sl-obj-panel').insertAdjacentHTML('afterbegin',
+    `<p class="sl-muted-note sl-multi-note">${nSel} objects selected: dragging any of them moves them together. These controls edit the one clicked last.</p>`);
 
   if (obj && pl) {
     const partner = hybridPartner(pl, obj);
@@ -5738,6 +5939,7 @@ function renderViewPanel() {
           <div class="sl-checkbox-row">
             <label class="sl-mobile-only"><input type="checkbox" id="sl-show-markers" ${state.showMarkers?'checked':''}> Positions</label>
             <label><input type="checkbox" id="sl-show-scalebar" ${state.showScaleBar?'checked':''}> Scale bar</label>
+            <label title="Draw the outline of each object whose own Show shape is on (set per object)"><input type="checkbox" id="sl-show-shapes" ${state.showShapes?'checked':''}> Shapes</label>
           </div>
           <div class="sl-checkbox-row">
             <label title="${!_VIZ_COLORBAR[state.vizMode]?'This view has no colorbar; pick a quantity map to use one':''}"><input type="checkbox" id="sl-show-colorbar" ${state.showColorbar?'checked':''} ${!_VIZ_COLORBAR[state.vizMode]?'disabled':''}> Colorbar</label>
@@ -5950,6 +6152,7 @@ function renderViewPanel() {
   document.getElementById('sl-curve-types')?.addEventListener('change', e => { state.curveTypes = e.target.checked; renderSidebar(); redraw(); });
   document.getElementById('sl-curve-type-show')?.addEventListener('change', e => { state.curveTypeShow = e.target.value; redraw(); });
   document.getElementById('sl-show-stretch')?.addEventListener('change', e => { state.showStretch = e.target.checked; redraw(); });
+  document.getElementById('sl-show-shapes')?.addEventListener('change', e => { state.showShapes = e.target.checked; redraw(); });
   document.getElementById('sl-show-td')?.addEventListener('change', e => { state.showTimeDelays = e.target.checked; redraw(); });
   document.getElementById('sl-lineart')?.addEventListener('change', e => {
     state.lineArt = e.target.checked;
@@ -7173,7 +7376,7 @@ function _drawOverlayPane() {
   const hideOv = state.hideOverlays;
   const showMk = state.showMarkers && !hideOv;
   const needCurve   = (state.showCritCurves || state.showCaustics) && state.dist && hasLens;
-  const needEllipse      = !hideOv && state.planes.some(pl => pl.objects.some(o => o.showShape));
+  const needEllipse      = !hideOv && state.showShapes && state.planes.some(pl => pl.objects.some(o => o.showShape));
   // Mask outlines are drawn in the lensed-image view, over the picture they cover.
   const needMaskOutline  = !hideOv && state.vizMode === 0 && !state.lineArt &&
                            state.planes.some(pl => pl.objects.some(o => o.type === 'mask' && !o.hidden));
@@ -7443,9 +7646,7 @@ function _drawOverlayPane() {
         const markerType = obj.hybridId ? 'hybrid' : obj.type;
         const col = _pal ? _pal[markerType] : typeColorHex(markerType);
         const [px, py] = toPixel(obj.cx, obj.cy);
-        const sel = plane.id === state.selectedPlaneId &&
-          (obj.id === state.selectedObjId ||
-           (obj.hybridId && plane.objects.some(o => o.hybridId === obj.hybridId && o.id === state.selectedObjId)));
+        const sel = isObjSelected(plane, obj);
         overlayCtx.fillStyle   = col;
         overlayCtx.globalAlpha = sel ? 1 : 0.7;
         drawShapeMarker(overlayCtx, markerType, px, py, RAD);
@@ -7592,7 +7793,7 @@ function _drawOverlayPane() {
   // convergence / deflection) draw solid arrows, not a dotted shape.
   const _ELLIPSE_LENS = new Set(['sie', 'nie', 'epl', 'pointmass']);
   const _ELLIPSE_SRC  = new Set(['gaussian', 'exponential', 'point']);
-  const _anyShape = (type, models) => state.planes.some(p => p.objects.some(o =>
+  const _anyShape = (type, models) => state.showShapes && state.planes.some(p => p.objects.some(o =>
     o.showShape && !o.hidden && o.type === type && models.has(o.model)));
   if (_anyShape('lens',   _ELLIPSE_LENS)) legendItems.push({ color: typeColorHex('lens'),   label: 'Lens shape',   isDash: true });
   if (!_imgNumView && _anyShape('source', _ELLIPSE_SRC)) legendItems.push({ color: typeColorHex('source'), label: 'Source shape', isDash: true });
