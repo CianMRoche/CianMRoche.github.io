@@ -2296,13 +2296,14 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
 
   /* View panes: one, or two side by side, each a tab strip over a square image.
      Folder tabs: the showing tab and its image share one outline, in the pane's
-     frame colour --fc (teal when focused beside another view, a hairline
-     otherwise). */
+     frame colour --fc (a hairline; teal only while a tab is dragged onto it).
+     Beside another view, the focused one is marked by a teal line along the
+     top of its showing tab, so the frames stay quiet. */
   .sl-stage { position: relative; padding: 8px 14px 10px; }
   .sl-panes { display: flex; justify-content: center; align-items: flex-start; gap: 14px; width: 100%; height: 100%; }
   .sl-pane { --fc: var(--hairline); --fw: 1px; display: flex; flex-direction: column; min-width: 0; }
-  .sl-split .sl-pane-focus { --fc: var(--accent); --fw: 2px; }
   .sl-pane.drop-into { --fc: var(--accent); --fw: 2px; }
+  .sl-split .sl-pane-focus .sl-tab.active { box-shadow: inset 0 2px 0 var(--accent); }
   .sl-pane[data-pane="1"]:not([hidden]) { display: flex; }
   .sl-pane[hidden] { display: none; }
   .sl-image-wrap { width: min(100cqw, 100cqh - 36px); }
