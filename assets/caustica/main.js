@@ -7900,10 +7900,10 @@ function _drawOverlayPane() {
         const b_px = Math.max(a_px * Math.max(p.q ?? 1, 0.01), 1);
         overlayCtx.beginPath();
         overlayCtx.ellipse(px, py, a_px, b_px, -(p.phi ?? 0), 0, Math.PI * 2);
-        overlayCtx.globalAlpha = 0.22;
+        overlayCtx.globalAlpha = 0.38;
         overlayCtx.fillStyle   = mcol;
         overlayCtx.fill();
-        overlayCtx.globalAlpha = 0.9;
+        overlayCtx.globalAlpha = 1;
         overlayCtx.strokeStyle = mcol;
         overlayCtx.lineWidth   = 1.5;
         overlayCtx.stroke();
