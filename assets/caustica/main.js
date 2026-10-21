@@ -5389,19 +5389,26 @@ function drawPlaneCanvas(canvas, plane) {
     const isHidden = obj.hidden && (!obj.hybridId || plane.objects.every(o => o.hybridId !== obj.hybridId || o.id === obj.id || o.hidden));
     const dotType  = obj.hybridId ? 'hybrid' : obj.type;
     const rad = window.innerWidth <= 640 ? 10 : 6;
-    const objCol = isHidden ? (dark ? '#555' : '#bbb') : typeColorHex(dotType);
+    const objCol = isHidden ? _hiddenMarkerCol() : typeColorHex(dotType);
     ctx.fillStyle = objCol;
-    ctx.globalAlpha = isHidden ? 0.4 : (sel ? 1 : 0.7);
+    ctx.globalAlpha = isHidden ? HIDDEN_MARKER.alpha : (sel ? 1 : 0.7);
     drawShapeMarker(ctx, dotType, px, py, rad);
     ctx.fill();
     ctx.globalAlpha = 1;
     if (sel) {
-      ctx.strokeStyle = isHidden ? (dark ? '#666' : '#aaa') : objCol;
+      ctx.strokeStyle = objCol;
       ctx.lineWidth = 1.5;
       drawShapeMarker(ctx, dotType, px, py, rad + 3.5);
       ctx.stroke();
     }
   }
+}
+
+// A hidden object's marker: a plain grey, half opaque, in the plane viewers and on
+// the image alike, faint enough to read as off but easy to find and click.
+const HIDDEN_MARKER = { dark: '#9aa1ab', light: '#8b929c', alpha: 0.7 };
+function _hiddenMarkerCol() {
+  return document.documentElement.getAttribute('data-theme') === 'dark' ? HIDDEN_MARKER.dark : HIDDEN_MARKER.light;
 }
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
@@ -7883,12 +7890,11 @@ function _drawOverlayPane() {
         // A hidden object (a hybrid only with both halves hidden) is greyed, as in
         // the plane viewers, but still drawn so it can be selected and shown again.
         const isHidden = obj.hidden && (!obj.hybridId || plane.objects.every(o => o.hybridId !== obj.hybridId || o.hidden));
-        const col = isHidden ? (document.documentElement.getAttribute('data-theme') === 'dark' ? '#555' : '#bbb')
-                  : _pal ? _pal[markerType] : typeColorHex(markerType);
+        const col = isHidden ? _hiddenMarkerCol() : _pal ? _pal[markerType] : typeColorHex(markerType);
         const [px, py] = toPixel(obj.cx, obj.cy);
         const sel = isObjSelected(plane, obj);
         overlayCtx.fillStyle   = col;
-        overlayCtx.globalAlpha = isHidden ? 0.4 : sel ? 1 : 0.7;
+        overlayCtx.globalAlpha = isHidden ? HIDDEN_MARKER.alpha : sel ? 1 : 0.7;
         drawShapeMarker(overlayCtx, markerType, px, py, RAD);
         overlayCtx.fill();
         overlayCtx.globalAlpha = 1;
