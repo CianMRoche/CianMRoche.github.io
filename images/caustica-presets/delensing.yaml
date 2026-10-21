@@ -1,0 +1,39 @@
+fov: 4.1
+zMax: 3
+vizMode: 0
+showCritCurves: false
+showCaustics: false
+showMarkers: true
+showLegend: true
+showScaleBar: true
+showColorbar: true
+showShapes: true
+critZs: 1.65
+obsImage: dog_lensed.png
+obsPixel: 0.003663
+obsOffX: 0
+obsOffY: 0
+obsBright: 1
+obsEdge: 0
+obsShown: true
+pane0Tabs: 0
+pane0Active: 0
+pane1Tabs: 9
+pane1Active: 0
+focusPane: 0
+unlinked: zoom
+pane1Own: showCritCurves=false showCaustics=false showMarkers=false fov=1.43
+obsCard: true
+planes:
+  - z: 0.380
+    objects:
+      - type: lens
+        model: sie
+        cx: -0.1
+        cy: 0.2
+        hidden: false
+        showShape: true
+        params:
+          b: 1.69
+          q: 0.8
+          phi: 1.15

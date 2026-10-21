@@ -1018,6 +1018,7 @@ function configToYaml() {
       y += `fermatSrcPlaneZ: ${fsp.z.toFixed(4)}\n`;
     }
   }
+  y += _paneLayoutYaml();
   y += `planes:\n`;
   for (const plane of state.planes) {
     y += `  - z: ${plane.z.toFixed(3)}\n    objects:\n`;
@@ -1135,6 +1136,7 @@ const PRESETS = [
   { file: 'butterfly_caustic.yaml', name: 'Butterfly Caustic' },
   { file: 'group.yaml',         name: 'Galaxy group' },
   { file: 'image_recreation.yaml', name: 'Image recreation' },
+  { file: 'delensing.yaml',     name: 'Delensing' },
   { file: 'realistic.yaml',     name: 'Realistic' },
   { file: 'line_art.yaml',      name: 'Line art' },
 ];
@@ -1384,13 +1386,15 @@ function loadConfigFromYaml(yaml) {
     } else {
       state.lastFermatSource = null;
     }
+    _applyPaneLayout(cfg);   // last: each pane starts from the settings above
+    if (typeof cfg.obsCard === 'boolean') _obsCardOpen = cfg.obsCard;
     const _vizSel = document.getElementById('sl-viz-mode');
     if (_vizSel) _vizSel.value = state.vizMode;
     glCanvas?.classList.toggle('sl-viz-active', state.vizMode !== 0);
     invalidateDistances();
     state.rulerActive = false; state.rulers = []; state.rulerDraft = null;  // measurements are not part of a config
     resetHistory();  // a freshly loaded scene is a new document; don't undo into the previous one
-    renderPlaneCard(); renderSidebar(); _updateColorbar(); updateRulerUI(); updateCanvasTools();
+    renderTabs(); renderPlaneCard(); renderSidebar(); _updateColorbar(); updateRulerUI(); updateCanvasTools();
     setFov(state.fov);                      // sync the zoom readout + View input
     applyRenderScale(state.renderScale);    // push DPR mode into the renderer
     updatePresetSelect();
@@ -3572,6 +3576,69 @@ function setLink(group, on) {
 }
 function _splitAllowed() { return window.innerWidth > 640; }
 function _isSplit() { return _splitAllowed() && _panes.length > 1; }
+
+// ── The view layout in a config ──
+// Each pane's tabs (view codes, '-' for a blank tab) and its active tab, the
+// focused pane, the unlinked groups, and the other pane's own values of the
+// per-view settings as `key=value` pairs (the top-level keys hold the focused
+// pane's). An older config without these keys leaves the layout as it is.
+function _paneLayoutYaml() {
+  let y = '';
+  _panes.forEach((p, i) => {
+    y += `pane${i}Tabs: ${p.tabs.map(t => t == null ? '-' : t).join(' ')}\n`;
+    y += `pane${i}Active: ${p.active}\n`;
+  });
+  y += `focusPane: ${_focusPane}\n`;
+  const unl = LINK_GROUPS.filter(g => !_link[g.key]).map(g => g.key);
+  if (unl.length) y += `unlinked: ${unl.join(' ')}\n`;
+  const fmt = v => typeof v === 'number' ? +v.toFixed(6) : v === null ? 'null' : String(v);
+  _panes.forEach((p, i) => {
+    if (i === _focusPane) return;
+    y += `pane${i}Own: ${_paneKeys().map(k => `${k}=${fmt(_paneVal(i, k))}`).join(' ')}\n`;
+  });
+  y += `obsCard: ${_obsCardOpen}\n`;
+  return y;
+}
+function _applyPaneLayout(cfg) {
+  if (cfg.pane0Tabs === undefined || cfg.pane0Tabs === null) return;
+  const valid = new Set(VIZ_CYCLE);
+  const panes = [];
+  for (const i of [0, 1]) {
+    const raw = cfg[`pane${i}Tabs`];
+    if (raw === undefined || raw === null) continue;
+    const tabs = String(raw).trim().split(/\s+/).map(t => t === '-' ? null : +t)
+      .filter((t, j, all) => (t === null || valid.has(t)) && (t === null || all.indexOf(t) === j));
+    if (!tabs.length) continue;
+    const active = Math.min(tabs.length - 1, Math.max(0, Math.round(+cfg[`pane${i}Active`] || 0)));
+    panes.push({ tabs, active, own: {} });
+  }
+  let focus = cfg.focusPane === 1 && panes.length > 1 ? 1 : 0;
+  if (panes[focus] && panes[focus].tabs[panes[focus].active] == null) focus = 1 - focus;   // a blank tab cannot take the focus
+  if (!panes[focus] || panes[focus].tabs[panes[focus].active] == null) return;
+  for (const g of LINK_GROUPS) _link[g.key] = true;
+  for (const k of String(cfg.unlinked ?? '').split(/\s+/)) if (k in _link) _link[k] = false;
+  _panes.length = 0;
+  _panes.push(...panes);
+  _focusPane = focus;
+  state.vizMode = _paneMode(focus);
+  const keys = _paneKeys();
+  const parse = v => v === 'true' ? true : v === 'false' ? false : v === 'null' ? null : (v !== '' && isFinite(+v)) ? +v : v;
+  const ok = (k, v) => k === 'critZs' ? v === null || (typeof v === 'number' && v >= 0.1 && v <= 15)
+                     : k === 'fov' ? typeof v === 'number' && v >= 0.5 && v <= 300
+                     : k === 'instrument' ? !!INSTRUMENTS[v]
+                     : k === 'bgFit' ? BG_FITS.includes(v)
+                     : CONFIG_DEFAULTS[k] !== undefined && typeof v === typeof CONFIG_DEFAULTS[k];
+  panes.forEach((p, i) => {
+    p.own = Object.fromEntries(keys.map(k => [k, state[k]]));
+    if (i === focus) return;
+    for (const pair of String(cfg[`pane${i}Own`] ?? '').split(/\s+/)) {
+      const eq = pair.indexOf('=');
+      if (eq < 1) continue;
+      const k = pair.slice(0, eq), v = parse(pair.slice(eq + 1));
+      if (keys.includes(k) && ok(k, v)) p.own[k] = v;
+    }
+  });
+}
 
 // Run fn with state.vizMode set to one pane's view, and return its result.
 function _withView(mode, fn) {
