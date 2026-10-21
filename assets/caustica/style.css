@@ -2658,11 +2658,22 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
   .sl-drawer-closed { padding-bottom: 6px; }
 
   /* Line-of-sight strip in the header: the observer, then a mark per plane. */
-  .sl-sight { flex: 1; min-width: 60px; max-width: 560px; height: 28px; margin: 0 auto 0 6px; color: var(--muted); touch-action: none; }
+  .sl-sight { flex: 1; min-width: 60px; max-width: 560px; height: 28px; margin: 0 0 0 6px; color: var(--muted); touch-action: none; }
+  /* z_max: the strip's far end, typed or scrubbed in the box at its right. */
+  .sl-sight-zmax { display: flex; align-items: center; gap: 4px; flex-shrink: 0; margin-right: auto; font-size: 11.5px; color: var(--muted); }
+  .sl-sight-zmax input {
+    width: 46px;
+    padding: 2px 5px;
+    border: 1px solid var(--hairline);
+    border-radius: 5px;
+    background: var(--bg);
+    color: var(--fg);
+    font: 12px system-ui, -apple-system, sans-serif;
+    font-variant-numeric: tabular-nums;
+  }
   .sl-sight svg { display: block; overflow: visible; }
   .sl-sight-axis { stroke: var(--hairline); stroke-width: 1.5; fill: none; }
   .sl-sight-tick { stroke: var(--muted); stroke-opacity: 0.55; stroke-width: 1; }
-  .sl-sight-end  { fill: var(--muted); font: 10.5px system-ui, -apple-system, sans-serif; }
   .sl-sight-ring { fill: none; stroke-width: 1.4; }
 
   .sl-drawer-cards {

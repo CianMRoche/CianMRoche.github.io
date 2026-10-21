@@ -2064,6 +2064,7 @@ function buildDOM() {
           <div class="sl-drawer-hdr">
             <span class="sl-drawer-title">Scene</span>
             <div class="sl-sight" id="sl-sight" role="img" aria-label="Line of sight: the observer, then each plane at its redshift. Drag a mark to move its plane."></div>
+            <label class="sl-sight-zmax" title="Far end of the redshift strip. Type a value, or drag sideways on the box to scrub.">z<sub>max</sub><input type="number" id="sl-drawer-zmax" min="0.1" max="10" step="0.1" aria-label="Maximum redshift of the strip"></label>
             <button class="sl-drawer-btn" id="sl-drawer-add" type="button" title="Add a plane behind the farthest one">+ Plane</button>
             <button class="sl-drawer-toggle" id="sl-drawer-toggle" type="button" title="Show or tuck away the scene drawer" aria-label="Show or tuck away the scene drawer" aria-expanded="true">
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
@@ -2292,8 +2293,14 @@ function attachHandlers() {
   // Timeline z_max control (static DOM, wired once).
   const _zmaxEl = document.getElementById('sl-zmax');
   _zmaxEl.value = state.zMax;
-  _zmaxEl.addEventListener('change', e => { const v = parseFloat(e.target.value); if (v > 0) { state.zMax = v; drawAxisCanvas(); } });
-  _attachScrub(_zmaxEl, { lo: 0.1, hi: 10, onChange: v => { state.zMax = v; drawAxisCanvas(); } });
+  _zmaxEl.addEventListener('change', e => setZMax(parseFloat(e.target.value)));
+  _attachScrub(_zmaxEl, { lo: 0.1, hi: 10, onChange: setZMax });
+  const _dzmaxEl = document.getElementById('sl-drawer-zmax');
+  if (_dzmaxEl) {
+    _dzmaxEl.value = state.zMax;
+    _dzmaxEl.addEventListener('change', e => setZMax(parseFloat(e.target.value)));
+    _attachScrub(_dzmaxEl, { lo: 0.1, hi: 10, onChange: setZMax });
+  }
 
   // Overlay chips: quick canvas-side toggles for the same state as the View tab.
   document.getElementById('sl-overlay-chips').addEventListener('click', e => {
@@ -2864,16 +2871,26 @@ function _makeDrawerCard(pl) {
   return { el, canvas, zIn };
 }
 
+// The far end of the redshift axis (the drawer strip and the phone timeline).
+// It never cuts off a plane: it stays at or above the farthest one.
+function setZMax(v) {
+  if (!isFinite(v) || v <= 0) return;
+  const far = state.planes.reduce((m, p) => Math.max(m, p.z), 0);
+  state.zMax = Math.min(10, Math.max(v, Math.ceil(far * 10) / 10, 0.1));
+  for (const id of ['sl-zmax', 'sl-drawer-zmax']) {
+    const el = document.getElementById(id);
+    if (el && document.activeElement !== el) el.value = +state.zMax.toFixed(2);
+  }
+  drawAxisCanvas(); renderSightLine();
+}
+
 function _drawerApplyZ(id, v) {
   const pl = _drawerPlaneById(id);
   if (!pl || !isFinite(v)) return;
   const z = Math.max(0.01, Math.min(10, Math.round(v * 100) / 100));
   // The timeline that sets z_max is a phone control; here the box itself is the
   // only way to move a plane, so let it carry z_max along instead of clamping.
-  if (z > state.zMax) {
-    state.zMax = Math.min(10, Math.ceil(z));
-    const zm = document.getElementById('sl-zmax'); if (zm) zm.value = state.zMax;
-  }
+  if (z > state.zMax) setZMax(Math.ceil(z));
   pl.z = z;
   state.planes.sort((a, b) => a.z - b.z);
   invalidateDistances();
@@ -2924,21 +2941,20 @@ function renderDrawer() {
     }
     host.appendChild(empty);
   } else empty?.remove();
+  const dz = document.getElementById('sl-drawer-zmax');
+  if (dz && document.activeElement !== dz) dz.value = +state.zMax.toFixed(2);
   renderSightLine();
   _updatePlaceHint();
 }
 
 // ── Line-of-sight strip (drawer header) ──
 // The observer at the left, then a mark per plane at its true redshift, so the
-// spacing of the cards below can be read in z. The axis ends at a round redshift
-// a little past the farthest plane; it is frozen while a mark is dragged so the
-// scale does not move under the pointer.
-const _SIGHT_X0 = 22, _SIGHT_PAD_R = 32;
+// spacing of the cards below can be read in z. The axis runs to z_max, set in
+// the box at its right end (setZMax); it is frozen while a mark is dragged so
+// the scale does not move under the pointer.
+const _SIGHT_X0 = 22, _SIGHT_PAD_R = 8;
 function _sightTop() {
-  if (_sightDrag) return _sightDrag.top;
-  const far  = state.planes.reduce((m, p) => Math.max(m, p.z), 0) + 0.2;
-  const step = far > 2 ? 1 : 0.5;
-  return Math.max(1, Math.ceil(far / step) * step);
+  return _sightDrag ? _sightDrag.top : state.zMax;
 }
 function _sightX(z, W, top) { return _SIGHT_X0 + z / top * (W - _SIGHT_X0 - _SIGHT_PAD_R); }
 function _sightZ(x, W, top) { return (x - _SIGHT_X0) / (W - _SIGHT_X0 - _SIGHT_PAD_R) * top; }
@@ -2957,7 +2973,6 @@ function renderSightLine() {
     const x = _sightX(z, W, top).toFixed(1);
     p.push(`<path class="sl-sight-tick" d="M${x} ${y - 3}V${y + 3}"/>`);
   }
-  p.push(`<text class="sl-sight-end" x="${W - 2}" y="${y + 4}" text-anchor="end">z ${+top.toFixed(1)}</text>`);
   // Selected and hovered marks are drawn last so they sit on top of a neighbour.
   const order = [...state.planes].sort((a, b) =>
     (a.id === state.selectedPlaneId) - (b.id === state.selectedPlaneId) || (a.id === _sightHot) - (b.id === _sightHot));
@@ -3080,7 +3095,7 @@ function attachDrawerHandlers() {
     const z   = Math.min(10, Math.round((top + 0.5) * 100) / 100);
     if (state.planes.length >= MAX_PLANES) { showToast(`Limit reached: at most ${MAX_PLANES} planes.`); return; }
     record();
-    if (z > state.zMax) state.zMax = Math.min(10, Math.ceil(z));
+    if (z > state.zMax) setZMax(Math.ceil(z));
     const pl = addPlane(z);
     state.selectedPlaneId = pl.id;
     state.selectedObjId   = null;
