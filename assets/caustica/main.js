@@ -4124,7 +4124,6 @@ function imageWrapToArcsec(wrap, e) {
 // overlap on the image, a click always picks the selected plane's object.
 // Whether an object can be grabbed in the current view (as drawn by drawOverlay).
 function _grabbable(plane, obj) {
-  if (obj.hidden) return false;
   if (state.vizMode === 8 && !state.lineArt && obj.type === 'source' && !obj.hybridId) return false;
   if (obj.type === 'mask' && !masksShown()) return false;
   return true;
@@ -4168,9 +4167,9 @@ function hitTestImage(wrap, e) {
   const seenHybrids = new Set();
   const selPl   = selectedPlane();
   const ordered = selPl ? [selPl, ...state.planes.filter(p => p !== selPl)] : state.planes;
+  // Hidden objects are drawn greyed and stay selectable, as in the plane viewers.
   for (const plane of ordered) {
     for (const obj of plane.objects) {
-      if (obj.hidden) continue;
       // Sources are hidden on the image-number map (a source-plane view of where a
       // source could be), so they are not draggable there either.
       if (state.vizMode === 8 && !state.lineArt && obj.type === 'source' && !obj.hybridId) continue;
@@ -7881,11 +7880,15 @@ function _drawOverlayPane() {
         if (_imgNumView && obj.type === 'source' && !obj.hybridId) continue;
         if (obj.type === 'mask' && !masksShown()) continue;
         const markerType = obj.hybridId ? 'hybrid' : obj.type;
-        const col = _pal ? _pal[markerType] : typeColorHex(markerType);
+        // A hidden object (a hybrid only with both halves hidden) is greyed, as in
+        // the plane viewers, but still drawn so it can be selected and shown again.
+        const isHidden = obj.hidden && (!obj.hybridId || plane.objects.every(o => o.hybridId !== obj.hybridId || o.hidden));
+        const col = isHidden ? (document.documentElement.getAttribute('data-theme') === 'dark' ? '#555' : '#bbb')
+                  : _pal ? _pal[markerType] : typeColorHex(markerType);
         const [px, py] = toPixel(obj.cx, obj.cy);
         const sel = isObjSelected(plane, obj);
         overlayCtx.fillStyle   = col;
-        overlayCtx.globalAlpha = sel ? 1 : 0.7;
+        overlayCtx.globalAlpha = isHidden ? 0.4 : sel ? 1 : 0.7;
         drawShapeMarker(overlayCtx, markerType, px, py, RAD);
         overlayCtx.fill();
         overlayCtx.globalAlpha = 1;
