@@ -21,8 +21,8 @@ pane0Active: 0
 pane1Tabs: 9
 pane1Active: 0
 focusPane: 0
-unlinked: zoom
-pane1Own: showCritCurves=false showCaustics=false showMarkers=false fov=1.43
+unlinked: zoom display
+pane1Own: showCritCurves=false showCaustics=false showMarkers=false fov=1.43 showShapes=false
 obsCard: true
 planes:
   - z: 0.380
