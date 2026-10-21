@@ -2679,6 +2679,7 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
   .sl-sight-axis { stroke: var(--hairline); stroke-width: 1.5; fill: none; }
   .sl-sight-tick { stroke: var(--muted); stroke-opacity: 0.55; stroke-width: 1; }
   .sl-sight-ring { fill: none; stroke-width: 1.4; }
+  .sl-sight-stem path { stroke-width: 1; stroke-opacity: 0.75; }
   .sl-sight-ghost path { fill: none; stroke: currentColor; stroke-width: 1.2; stroke-dasharray: 2 2; }
   .sl-sight-ghost text {
     fill: var(--fg-soft);

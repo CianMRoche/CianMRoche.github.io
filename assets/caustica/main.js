@@ -2983,6 +2983,33 @@ function renderDrawer() {
 // the box at its right end (setZMax); it is frozen while a mark is dragged so
 // the scale does not move under the pointer.
 const _SIGHT_X0 = 22, _SIGHT_PAD_R = 8;
+// Marks that would overlap step into a lane above, then below, the axis, with a
+// stem down to their true redshift, so every plane stays visible and grabbable
+// within the strip's height. _sightLaneY holds each mark's drawn height, which
+// the hit test reads, so a click lands on what is drawn.
+const _SIGHT_LANE_DY = 10, _SIGHT_LANE_SEP = 10;    // px: lane spacing, closest marks in one lane
+let _sightLaneY = new Map();
+function _sightAssignLanes(W, top) {
+  // In z order, the dragged mark last, so a drag never shuffles the others.
+  const dragId = _sightDrag?.id;
+  const order  = state.planes.filter(p => p.id !== dragId);
+  const dragged = state.planes.find(p => p.id === dragId);
+  if (dragged) order.push(dragged);
+  const placed = [], lanes = new Map();
+  for (const pl of order) {
+    const x = _sightX(pl.z, W, top);
+    // The first lane with room (axis, above, below); failing that, the roomiest.
+    let lane = 0, room = -1;
+    for (const l of [0, -1, 1]) {
+      const gap = placed.reduce((m, q) => q.lane === l ? Math.min(m, Math.abs(q.x - x)) : m, Infinity);
+      if (gap >= _SIGHT_LANE_SEP) { lane = l; break; }
+      if (gap > room) { room = gap; lane = l; }
+    }
+    placed.push({ x, lane });
+    lanes.set(pl.id, lane);
+  }
+  return lanes;
+}
 function _sightTop() {
   return _sightDrag ? _sightDrag.top : state.zMax;
 }
@@ -3010,18 +3037,29 @@ function renderSightLine() {
     p.push(`<g class="sl-sight-ghost"><path d="M${x.toFixed(1)} ${y - s}l${s} ${s}l${-s} ${s}l${-s} ${-s}z"/>` +
       `<text x="${(x + (right ? 9 : -9)).toFixed(1)}" y="${y + 3.5}" text-anchor="${right ? 'start' : 'end'}">+ z ${_sightGhost.toFixed(2)}</text></g>`);
   }
+  const lanes = _sightAssignLanes(W, top);
+  _sightLaneY = new Map([...lanes].map(([id, l]) => [id, y + l * _SIGHT_LANE_DY]));
+  // Stems first, so marks sit over them: from a lane's mark to a dot on the axis
+  // at the plane's true redshift.
+  for (const pl of state.planes) {
+    const ly = _sightLaneY.get(pl.id);
+    if (ly === y) continue;
+    const x = _sightX(pl.z, W, top).toFixed(1), type = planeEffectiveType(pl);
+    const col = type === 'empty' ? 'currentColor' : typeColorHex(type);
+    p.push(`<g class="sl-sight-stem" stroke="${col}" fill="${col}"><path d="M${x} ${y}V${(ly + (ly < y ? 3.6 : -3.6)).toFixed(1)}"/><circle cx="${x}" cy="${y}" r="1.6" stroke="none"/></g>`);
+  }
   // Selected and hovered marks are drawn last so they sit on top of a neighbour.
   const order = [...state.planes].sort((a, b) =>
     (a.id === state.selectedPlaneId) - (b.id === state.selectedPlaneId) || (a.id === _sightHot) - (b.id === _sightHot));
   for (const pl of order) {
-    const x   = _sightX(pl.z, W, top);
+    const x   = _sightX(pl.z, W, top), ly = _sightLaneY.get(pl.id);
     const sel = pl.id === state.selectedPlaneId, hot = pl.id === _sightHot;
-    const s   = hot ? 4.8 : 4;
+    const s   = (hot ? 4.8 : 4) * (ly === y ? 1 : 0.9);   // a little smaller off the axis
     const type = planeEffectiveType(pl);
     const fill = type === 'empty' ? 'none' : typeColorHex(type);
     p.push(`<g><title>${_PLANE_TITLES[type]}, z ${pl.z.toFixed(2)}</title>` +
-      (sel ? `<circle class="sl-sight-ring" cx="${x.toFixed(1)}" cy="${y}" r="${s + 3.4}" stroke="${typeColorHex(type)}"/>` : '') +
-      `<path d="M${x.toFixed(1)} ${y - s}l${s} ${s}l${-s} ${s}l${-s} ${-s}z" fill="${fill}" stroke="${type === 'empty' ? 'currentColor' : fill}" stroke-width="1.2"/></g>`);
+      (sel ? `<circle class="sl-sight-ring" cx="${x.toFixed(1)}" cy="${ly}" r="${s + 3.4}" stroke="${typeColorHex(type)}"/>` : '') +
+      `<path d="M${x.toFixed(1)} ${ly - s}l${s} ${s}l${-s} ${s}l${-s} ${-s}z" fill="${fill}" stroke="${type === 'empty' ? 'currentColor' : fill}" stroke-width="1.2"/></g>`);
   }
   p.push('</svg>');
   el.innerHTML = p.join('');
@@ -3044,7 +3082,7 @@ function _sightHit(e) {
   const top = _sightTop();
   let best = null, bestD = 9;
   for (const pl of state.planes) {
-    const d = Math.hypot(mx - _sightX(pl.z, el.clientWidth, top), my - 14);
+    const d = Math.hypot(mx - _sightX(pl.z, el.clientWidth, top), my - (_sightLaneY.get(pl.id) ?? 14));
     if (d < bestD || (d === bestD && pl.id === state.selectedPlaneId)) { bestD = d; best = pl; }
   }
   return best;
