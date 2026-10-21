@@ -2161,7 +2161,7 @@ function buildDOM() {
           <button class="sl-drawer-handle" id="sl-drawer-handle" type="button" title="Show or tuck away the scene drawer" aria-label="Show or tuck away the scene drawer" aria-expanded="true"></button>
           <div class="sl-drawer-hdr">
             <span class="sl-drawer-title">Scene</span>
-            <div class="sl-sight" id="sl-sight" role="img" aria-label="Line of sight: the observer, then each plane at its redshift. Drag a mark to move its plane; click a blank stretch to add a plane there."></div>
+            <div class="sl-sight" id="sl-sight" role="img" aria-label="Line of sight: the observer, then each plane at its redshift, and a line at the reference source redshift. Drag a mark to move its plane; click a blank stretch to add a plane there; drag the z_s line to set the reference redshift."></div>
             <label class="sl-sight-zmax" title="Far end of the redshift strip. Type a value, or drag sideways on the box to scrub.">z<sub>max</sub><input type="number" id="sl-drawer-zmax" min="0.1" max="10" step="0.01" aria-label="Maximum redshift of the strip"></label>
             <button class="sl-drawer-btn" id="sl-drawer-add" type="button" title="Add a plane behind the farthest one">+ Plane</button>
             <button class="sl-drawer-toggle" id="sl-drawer-toggle" type="button" title="Show or tuck away the scene drawer" aria-label="Show or tuck away the scene drawer" aria-expanded="true">
@@ -2956,6 +2956,8 @@ let   _obsCardOpen = false;
 let   _sightDrag   = null;        // { id, top, x0, moved } while a strip mark is dragged
 let   _sightAdd    = null;        // { x0, z } while a press on a blank stretch of the strip is held
 let   _sightGhost  = null;        // z under the pointer on a blank stretch (a click adds a plane there)
+let   _sightZsDrag = null;        // { top, x0, moved } while the z_s ref line is dragged
+let   _sightZsHot  = false;       // the pointer is on the z_s ref line
 
 const _PLANE_TITLES = { lens: 'Lens plane', source: 'Source plane', hybrid: 'Lens + source', empty: 'Empty plane' };
 
@@ -3116,7 +3118,7 @@ function _sightAssignLanes(W, top) {
   return lanes;
 }
 function _sightTop() {
-  return _sightDrag ? _sightDrag.top : state.zMax;
+  return _sightDrag ? _sightDrag.top : _sightZsDrag ? _sightZsDrag.top : state.zMax;
 }
 function _sightX(z, W, top) { return _SIGHT_X0 + z / top * (W - _SIGHT_X0 - _SIGHT_PAD_R); }
 function _sightZ(x, W, top) { return (x - _SIGHT_X0) / (W - _SIGHT_X0 - _SIGHT_PAD_R) * top; }
@@ -3141,6 +3143,17 @@ function renderSightLine() {
     const right = x < W - 64;
     p.push(`<g class="sl-sight-ghost"><path d="M${x.toFixed(1)} ${y - s}l${s} ${s}l${-s} ${s}l${-s} ${-s}z"/>` +
       `<text x="${(x + (right ? 9 : -9)).toFixed(1)}" y="${y + 3.5}" text-anchor="${right ? 'start' : 'end'}">+ z ${_sightGhost.toFixed(2)}</text></g>`);
+  }
+  // The reference source redshift (View → Field, z_s ref): a hairline across the
+  // strip under the marks, dashed while Auto. Dragging it sets a custom value.
+  const zs = effectiveCritZs();
+  if (zs > 0 && zs <= top + 1e-9) {
+    const x = _sightX(zs, W, top), auto = state.critZs === null;
+    const right = x < W - 30;
+    p.push(`<g class="sl-sight-zs${auto ? ' sl-sight-zs-auto' : ''}${_sightZsHot || _sightZsDrag ? ' sl-sight-zs-hot' : ''}">` +
+      `<title>z_s ref ${zs.toFixed(2)} (${auto ? 'auto' : 'custom'}): the source redshift the critical curves and caustics are drawn for. Drag to set it; double-click for Auto.</title>` +
+      `<path d="M${x.toFixed(1)} 1V${H - 1}"/>` +
+      `<text x="${(x + (right ? 3 : -3)).toFixed(1)}" y="8" text-anchor="${right ? 'start' : 'end'}">z<tspan dy="2" font-size="7">s</tspan></text></g>`);
   }
   const lanes = _sightAssignLanes(W, top);
   _sightLaneY = new Map([...lanes].map(([id, l]) => [id, y + l * _SIGHT_LANE_DY]));
@@ -3194,6 +3207,25 @@ function _sightHit(e) {
   return best;
 }
 
+// Whether the pointer is on the z_s ref line (within a few pixels of it).
+function _sightZsHit(e) {
+  const el = document.getElementById('sl-sight');
+  const r  = el.getBoundingClientRect();
+  const mx = (e.clientX - r.left) * el.clientWidth / r.width;
+  const top = _sightTop(), zs = effectiveCritZs();
+  return zs > 0 && zs <= top + 1e-9 && Math.abs(mx - _sightX(zs, el.clientWidth, top)) <= 4;
+}
+// A z_s ref set from the strip: custom from then on. The View panel's controls
+// follow in place, so a drag does not rebuild the panel under them.
+function _setZsFromSight(z) {
+  state.critZs = z;
+  const m = document.getElementById('sl-zs-mode');
+  if (m) m.value = z === null ? 'auto' : 'custom';
+  const g = document.getElementById('sl-crit-zs-gen');
+  if (g) { g.value = effectiveCritZs().toFixed(2); g.disabled = z === null; }
+  updateZsChip(); updateThetaEReadout(); redraw(); renderSightLine();
+}
+
 // Whether the pointer is on the observer's eye, at the strip's left end.
 function _sightOnObserver(e) {
   const el = document.getElementById('sl-sight');
@@ -3244,7 +3276,18 @@ function attachSightHandlers() {
   if (!el) return;
   el.addEventListener('pointermove', e => {
     // A release the strip never saw would leave a drag running with no button down.
-    if ((_sightDrag || _sightAdd) && e.pointerType === 'mouse' && !(e.buttons & 1)) end();
+    if ((_sightDrag || _sightAdd || _sightZsDrag) && e.pointerType === 'mouse' && !(e.buttons & 1)) end();
+    if (_sightZsDrag) {
+      e.preventDefault();
+      if (!_sightZsDrag.moved && Math.abs(e.clientX - _sightZsDrag.x0) < 3) return;
+      _sightZsDrag.moved = true;
+      const r  = el.getBoundingClientRect();
+      const mx = (e.clientX - r.left) * el.clientWidth / r.width;
+      const top = _sightZsDrag.top;
+      const z = Math.max(0.1, Math.min(top, Math.round(_sightZ(mx, el.clientWidth, top) * 100) / 100));
+      if (z !== state.critZs) _setZsFromSight(z);
+      return;
+    }
     if (_sightAdd) {
       // A press on a blank stretch adds a plane only as a click: moving off cancels.
       if (Math.abs(e.clientX - _sightAdd.x0) >= 4) { _sightAdd = null; _setSightGhost(null); }
@@ -3265,23 +3308,42 @@ function attachSightHandlers() {
       renderPlaneCard(); drawAxisCanvas(); redraw();
       const zEl = document.querySelector('#sl-obj-panel .sl-params-z');
       if (zEl) zEl.textContent = `z: ${z.toFixed(2)}`;
+      // An Auto z_s ref follows the farthest source plane, and its readout with it.
+      const zsEl = document.getElementById('sl-crit-zs-gen');
+      if (zsEl && state.critZs === null) zsEl.value = effectiveCritZs().toFixed(2);
       updateThetaEReadout();
       return;
     }
     const hit = _sightHit(e);
-    const eye = !hit && _sightOnObserver(e);
-    const gz  = hit || eye ? null : _sightBlankZ(e);
-    el.style.cursor = hit ? 'grab' : eye ? 'pointer' : gz != null ? 'copy' : '';
+    const zsl = !hit && _sightZsHit(e);
+    const eye = !hit && !zsl && _sightOnObserver(e);
+    const gz  = hit || zsl || eye ? null : _sightBlankZ(e);
+    el.style.cursor = hit ? 'grab' : zsl ? 'ew-resize' : eye ? 'pointer' : gz != null ? 'copy' : '';
+    if (zsl !== _sightZsHot) { _sightZsHot = zsl; renderSightLine(); }
     _setSightHot(hit?.id ?? (eye ? OBS_ID : null));
     _setSightGhost(gz);
   });
   el.addEventListener('pointerleave', () => {
     if (!_sightDrag) _setSightHot(null);
     if (!_sightAdd) _setSightGhost(null);
+    if (_sightZsHot && !_sightZsDrag) { _sightZsHot = false; renderSightLine(); }
+  });
+  // Double-click the z_s ref line to return it to Auto.
+  el.addEventListener('dblclick', e => {
+    if (_sightHit(e) || !_sightZsHit(e) || state.critZs === null) return;
+    _setZsFromSight(null);
+    renderSidebar();
   });
   el.addEventListener('pointerdown', e => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     const hit = _sightHit(e);
+    if (!hit && _sightZsHit(e)) {
+      e.preventDefault();
+      el.setPointerCapture(e.pointerId);
+      _sightZsDrag = { top: _sightTop(), x0: e.clientX, moved: false };
+      _setSightGhost(null);
+      return;
+    }
     if (!hit && _sightOnObserver(e)) { setObsCardOpen(!_obsCardOpen); return; }
     if (!hit) {
       const z = _sightBlankZ(e);
@@ -3304,6 +3366,13 @@ function attachSightHandlers() {
     }
   });
   const end = () => {
+    if (_sightZsDrag) {
+      const { moved } = _sightZsDrag;
+      _sightZsDrag = null;
+      if (moved) renderSidebar();   // the panels that quote z_s ref catch up
+      renderSightLine();
+      return;
+    }
     if (_sightAdd) {
       const { z } = _sightAdd;
       _sightAdd = null; _sightGhost = null;

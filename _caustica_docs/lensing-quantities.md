@@ -83,7 +83,7 @@ Rounding matters too, since the shader works in single precision. The isothermal
 
 ## Colour scale, limits, and palette
 
-The $\kappa$, $\gamma$, $\lvert\mu\rvert$, and $\lvert\hat{\boldsymbol{\alpha}}\rvert$ maps share a set of controls in the **Color map** section (the **Colors** panel on a computer, the View tab on phones). Each map remembers its own settings. The reference source redshift these maps use is set by the **z<sub>s</sub> ref** control in the View tab's Display section (Auto tracks the highest source plane; a chip on the image shows the value in use), and quick toggles for critical curves, caustics, and markers sit beside the view dropdown on the image itself.
+The $\kappa$, $\gamma$, $\lvert\mu\rvert$, and $\lvert\hat{\boldsymbol{\alpha}}\rvert$ maps share a set of controls in the **Color map** section (the **Colors** panel on a computer, the View tab on phones). Each map remembers its own settings. The reference source redshift these maps use is set by the **z<sub>s</sub> ref** control in the View tab's Field section (Auto tracks the highest source plane; a chip on the image shows the value in use). On a computer it is also a thin line across the scene drawer's redshift strip, labelled z<sub>s</sub>, dashed while Auto and solid once custom: dragging the line sets a custom value (switching the control to Custom), and double-clicking it returns to Auto, and quick toggles for critical curves, caustics, and markers sit beside the view dropdown on the image itself.
 
 A raw quantity value $v$ is mapped to a colour in two steps: first warped to a normalised position $t \in [0,1]$ between the chosen limits, then passed through the selected colour palette.
 

@@ -2680,6 +2680,12 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
   .sl-sight-axis { stroke: var(--hairline); stroke-width: 1.5; fill: none; }
   .sl-sight-tick { stroke: var(--muted); stroke-opacity: 0.55; stroke-width: 1; }
   .sl-sight-ring { fill: none; stroke-width: 1.4; }
+  /* The z_s ref line: quiet until pointed at, dashed while Auto. */
+  .sl-sight-zs path { fill: none; stroke: var(--fg-soft); stroke-width: 1; stroke-opacity: 0.55; }
+  .sl-sight-zs-auto path { stroke-dasharray: 2 2; }
+  .sl-sight-zs text { fill: var(--fg-soft); fill-opacity: 0.75; font: 9.5px system-ui, -apple-system, sans-serif; font-style: italic; }
+  .sl-sight-zs-hot path { stroke: var(--fg); stroke-opacity: 1; stroke-width: 1.4; }
+  .sl-sight-zs-hot text { fill: var(--fg); fill-opacity: 1; }
   .sl-sight-obs path { fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
   .sl-sight-obs-on  { color: var(--fg-soft); }
   .sl-sight-obs-hot { color: var(--fg); }
