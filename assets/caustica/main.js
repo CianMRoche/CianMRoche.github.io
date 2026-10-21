@@ -2282,6 +2282,11 @@ function attachHandlers() {
   });
   attachPlaneCardHandlers(document.getElementById('sl-plane-canvas'));
   attachDrawerHandlers();
+  // The pasted-image source's Load image button (the Object panel is rebuilt on
+  // every render, so this listens on its container).
+  document.getElementById('sl-obj-panel')?.addEventListener('click', e => {
+    if (e.target.closest('[data-load-image]')) document.getElementById('sl-plane-file')?.click();
+  });
   attachPaneHandlers();
 
   // Timeline z_max control (static DOM, wired once).
@@ -2592,6 +2597,13 @@ function attachHandlers() {
       removePlane(pl.id); renderPlaneCard(); renderSidebar(); redraw();
       return;
     }
+    if ((e.key === ',' || e.key === '.') && !e.metaKey && !e.ctrlKey && !e.altKey && _splitAllowed()) {
+      // Previous / next panel of the right-hand icon bar, wrapping around.
+      const n = INSPECTOR_CATS.length;
+      const i = INSPECTOR_CATS.findIndex(c => c.key === activeCat);
+      setInspectorCat(INSPECTOR_CATS[(i + (e.key === '.' ? 1 : -1) + n) % n].key);
+      return;
+    }
     if ((e.key === '[' || e.key === ']') && !e.metaKey && !e.ctrlKey && !e.altKey) {
       selectPlaneOffset(e.key === '[' ? -1 : 1);  // previous / next plane along the z-sorted list
       return;
@@ -2836,7 +2848,6 @@ function _makeDrawerCard(pl) {
       <span class="sl-dcard-cap">Redshift</span>
       <input type="number" class="sl-dcard-z-input" min="0.01" max="10" step="0.01" aria-label="Plane redshift" title="Redshift of this plane. Drag sideways to scrub.">
       <span class="sl-dcard-type"></span>
-      <button type="button" class="sl-dcard-act" data-act="paste" title="Load an image file into this plane's image source">Image…</button>
       <span class="sl-dcard-gap"></span>
       <button type="button" class="sl-dcard-act" data-act="clear" title="Clear all objects on this plane (O)"><span class="sl-pglyph">○</span> Clear</button>
       <button type="button" class="sl-dcard-act" data-act="delete" title="Delete plane (X)"><span class="sl-pglyph sl-pglyph-x">×</span> Delete</button>
@@ -2901,7 +2912,6 @@ function renderDrawer() {
     c.el.querySelector('.sl-dcard-zlabel').textContent = `z ${pl.z.toFixed(2)}`;
     c.el.querySelector('.sl-dcard-type').textContent = _PLANE_TITLES[type];
     if (document.activeElement !== c.zIn) c.zIn.value = pl.z.toFixed(2);
-    c.el.querySelector('[data-act="paste"]').hidden = !pl.objects.some(o => o.model === 'pastedimage');
     if (shown) drawPlaneCanvas(c.canvas, pl);
   });
   let empty = document.getElementById('sl-drawer-empty');
@@ -3093,9 +3103,6 @@ function attachDrawerHandlers() {
       } else if (act === 'delete') {
         record();
         removePlane(pl.id);
-      } else if (act === 'paste') {
-        document.getElementById('sl-plane-file')?.click();
-        return;
       }
       renderPlaneCard(); renderSidebar(); drawAxisCanvas(); redraw();
       return;
@@ -3872,7 +3879,7 @@ const _pinchPtrs = new Map();      // pointerId → last client position on the 
 
 // ── Keyboard-shortcut overlay (the "?" button) ────────────────────────────────
 const SHORTCUTS = [
-  ['1 / 2 / 3', 'Toggle the Lens / Source / Hybrid tool (click the plane viewer to place)'],
+  ['1 / 2 / 3', 'Toggle the Lens / Source / Hybrid tool (click a plane viewer or the image to place)'],
   ['C', 'Toggle critical curves and caustics'],
   ['I', 'Show lensed image (exit any quantity map)'],
   ['K / G / M / A', 'Convergence κ / Shear γ / Magnification |μ| / Deflection |α| map'],
@@ -3880,15 +3887,17 @@ const SHORTCUTS = [
   ['P', 'Parity map (image types I / II / III)'],
   ['N', 'Image number map (source plane)'],
   ['U', 'Delensed background image (source plane)'],
-  ['4', 'Toggle the Mask tool (Delensed view only)'],
+  ['4', 'Toggle the Mask tool (while a Delensed image view is open)'],
   ['H', 'Hide / show the selected object'],
   ['O', 'Clear all objects from the selected plane'],
   ['X', 'Delete the selected plane'],
   ['[ / ]', 'Select the previous / next plane'],
+  [', / .', 'Previous / next panel on the right (Object, View, Colors, …)'],
   ['R', 'Start / stop live recording'],
   ['L', 'Toggle ruler mode'],
   ['D', 'Toggle dark / light theme'],
   ['?', 'Show this shortcut reference'],
+  ['⌘/Ctrl + click', 'Add or remove an object from the selection (drag a box on the image to select several)'],
   ['⌘/Ctrl + C / V', 'Copy the selected object / paste a duplicate'],
   ['⌘/Ctrl + Z / ⇧Z', 'Undo / redo the last scene edit'],
   ['↑ ↓ ← →', 'Nudge the selected object (hold to accelerate)'],
@@ -6733,9 +6742,11 @@ function sourceParamRows(obj, showAttach) {
 
   if (obj.model === 'pastedimage') {
     const hint = obj.pasteCanvas ? '' :
-      '<p style="font-size:11px;color:var(--muted);font-style:italic;margin-top:6px;grid-column:1/-1">Use the image button in the plane header to load an image, or Ctrl+V with this object selected</p>';
+      '<p style="font-size:11px;color:var(--muted);font-style:italic;margin-top:6px;grid-column:1/-1">Load an image with the button above, or paste one with Ctrl+V while this object is selected</p>';
+    const loadRow = `<div style="grid-column:1/-1"><button type="button" class="sl-capture-btn" data-load-image title="Choose an image file for this source">${obj.pasteCanvas ? 'Replace image…' : 'Load image…'}</button></div>`;
     const stretchRow = `<label class="sl-param-check" title="Run the picture through the View tab's brightness stretch along with the analytic sources. Off (the default) shows its supplied tones, since a photograph is already display-encoded and the stretch washes it out."><input type="checkbox" data-param-bool="stretch" ${p.stretch === true ? 'checked' : ''}> Apply brightness stretch</label>`;
-    return sliderRowLog('Scale', 'sigma', 0.05, 4.0, p.sigma ?? 1.0)
+    return loadRow
+         + sliderRowLog('Scale', 'sigma', 0.05, 4.0, p.sigma ?? 1.0)
          + sliderRow('Brightness', 'amplitude', 0.1, 5.0, 0.1, p.amplitude ?? 1.0)
          + sliderRow('Contrast', 'contrast', 0.3, 2.5, 0.05, p.contrast ?? 1.0)
          + sliderRow('Saturation', 'saturation', 0, 2, 0.05, p.saturation ?? 1.0)
