@@ -1811,6 +1811,15 @@ function buildDOM() {
         </div>
       </div>
       <div class="sl-body" data-tab="scene">
+        <!-- Placement tools (desktop): arm one, then click a plane's viewer to place
+             on that plane, or the image to place on the selected plane. -->
+        <nav class="sl-toolcol" id="sl-toolcol" aria-label="Place objects">
+          <button type="button" class="sl-tool-btn" data-tool="lens"   title="Add lens (1): click the image or a plane's viewer to place. Click again, or Esc, to stop." aria-label="Add lens">L</button>
+          <button type="button" class="sl-tool-btn" data-tool="source" title="Add source (2): click the image or a plane's viewer to place. Click again, or Esc, to stop." aria-label="Add source">S</button>
+          <button type="button" class="sl-tool-btn" data-tool="hybrid" title="Add hybrid, a lens and a source together (3): click the image or a plane's viewer to place. Click again, or Esc, to stop." aria-label="Add hybrid">H</button>
+          <button type="button" class="sl-tool-btn" data-tool="mask"   title="Add mask (4): cuts a patch out of the background image before it is delensed. Click the image or a plane's viewer to place. Click again, or Esc, to stop." aria-label="Add mask" style="display:none">M</button>
+          <button type="button" class="sl-tool-btn sl-tool-del" id="sl-tool-del" title="Delete the selected object" aria-label="Delete the selected object"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 4h11M4 4l.5 7h5l.5-7M5 4V3h4v1"/></svg></button>
+        </nav>
         <div class="sl-stage" id="sl-stage">
           <!-- Desktop view panes (see the panes section): each a tab strip over an
                image. The wrappers are layout-neutral on phones. -->
@@ -1951,10 +1960,13 @@ function buildDOM() {
             <div class="sl-image-wrap sl-image-wrap2" id="sl-image-wrap2">
               <canvas id="sl-gl-canvas2"></canvas>
               <canvas class="sl-overlay" id="sl-overlay2"></canvas>
+              <div class="sl-zs-chip" id="sl-zs-chip2" style="display:none"></div>
+              <div class="sl-chooser" id="sl-chooser" hidden></div>
             </div>
           </div>
           </div>
           <div class="sl-drop-zone" id="sl-drop-zone" hidden>Drop to open beside</div>
+          <div class="sl-place-hint" id="sl-place-hint" aria-hidden="true" hidden></div>
         </div>
         <div class="sl-timeline" id="sl-timeline">
           <div class="sl-axis-wrap">
@@ -2579,6 +2591,11 @@ function setCanvasTool(tool) {
   if (tool === 'mask' && !maskToolAvailable()) return;
   // Clicking the already-active creation tool toggles it back off (no-tool).
   state.addMode = (tool === state.addMode && tool !== 'select') ? 'select' : tool;
+  // Placing and measuring both take clicks on the image: one tool at a time.
+  if (state.addMode !== 'select' && state.rulerActive) {
+    state.rulerActive = false; state.rulerDraft = null;
+    updateRulerUI(); drawOverlay();
+  }
   updateCanvasTools();
 }
 
@@ -2592,14 +2609,12 @@ function updateCanvasTools() {
     b.classList.toggle('active', state.addMode === b.dataset.tool);
     if (b.dataset.tool === 'mask') b.style.display = maskToolAvailable() ? '' : 'none';
   });
-  // The drawer's Place buttons light up on the selected plane's card only.
-  document.querySelectorAll('.sl-dcard').forEach(card => {
-    const sel = +card.dataset.planeId === state.selectedPlaneId;
-    card.querySelectorAll('.sl-dplace-btn').forEach(b => {
-      b.classList.toggle('active', sel && state.addMode === b.dataset.tool);
-      if (b.dataset.tool === 'mask') b.style.display = maskToolAvailable() ? '' : 'none';
-    });
+  document.querySelectorAll('.sl-tool-btn[data-tool]').forEach(b => {
+    b.classList.toggle('active', state.addMode === b.dataset.tool);
+    b.setAttribute('aria-pressed', state.addMode === b.dataset.tool ? 'true' : 'false');
+    if (b.dataset.tool === 'mask') b.style.display = maskToolAvailable() ? '' : 'none';
   });
+  _updatePlaceHint();
 }
 
 // Select the previous/next plane along the z-sorted list (plane-viewer arrows,
@@ -2700,9 +2715,9 @@ function _syncSwitcher() {
 // ── Scene drawer (desktop) ───────────────────────────────────────────────────
 // One card per plane in z order, under a line-of-sight strip in the drawer's
 // header that marks every plane at its true redshift. The selected plane's card
-// carries the plane tools, laid out like the phone plane viewer: a column of
-// L/S/H (M) and delete-object beside its viewer, then the redshift box and the
-// plane actions. Every other card shrinks to its viewer and z. Cards are keyed by
+// shows the plane's redshift box and actions beside its viewer; every other card
+// shrinks to its viewer and z. The placement tools are the column at the left
+// of the window (#sl-toolcol), shared by every viewer and the main image. Cards are keyed by
 // plane id and updated in place, never rebuilt: each owns a plane-viewer canvas
 // whose pointer handlers may be mid-drag when a render comes through.
 const _drawerCards = new Map();   // plane id → { el, canvas, zIn }
@@ -2726,13 +2741,6 @@ function _makeDrawerCard(pl) {
   el.className = 'sl-dcard';
   el.dataset.planeId = pl.id;
   el.innerHTML = `
-    <div class="sl-dcard-tools" role="group" aria-label="Place on this plane">
-      <button type="button" class="sl-dplace-btn" data-tool="lens"   title="Add lens: click this viewer to place (1). Click again to stop adding.">L</button>
-      <button type="button" class="sl-dplace-btn" data-tool="source" title="Add source: click this viewer to place (2). Click again to stop adding.">S</button>
-      <button type="button" class="sl-dplace-btn" data-tool="hybrid" title="Add hybrid: click this viewer to place (3). Click again to stop adding.">H</button>
-      <button type="button" class="sl-dplace-btn" data-tool="mask"   title="Add mask: cuts a patch out of the background image before it is delensed. Click this viewer to place (4). Click again to stop adding.">M</button>
-      <button type="button" class="sl-dcard-delobj" title="Delete selected object" aria-label="Delete selected object"><svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 4h11M4 4l.5 7h5l.5-7M5 4V3h4v1"/></svg></button>
-    </div>
     <div class="sl-dcard-view">
       <canvas class="sl-dcard-canvas"></canvas>
       <span class="sl-dcard-zlabel" aria-hidden="true"></span>
@@ -2791,7 +2799,6 @@ function renderDrawer() {
   const live = new Set(state.planes.map(p => p.id));
   for (const [id, c] of _drawerCards) if (!live.has(id)) { c.el.remove(); _drawerCards.delete(id); }
   if (!live.has(_sightHot)) _sightHot = null;
-  const mask  = maskToolAvailable();
   const shown = _drawerShown();
   state.planes.forEach(pl => {
     let c = _drawerCards.get(pl.id);
@@ -2808,11 +2815,6 @@ function renderDrawer() {
     c.el.querySelector('.sl-dcard-type').textContent = _PLANE_TITLES[type];
     if (document.activeElement !== c.zIn) c.zIn.value = pl.z.toFixed(2);
     c.el.querySelector('[data-act="paste"]').hidden = !pl.objects.some(o => o.model === 'pastedimage');
-    c.el.querySelectorAll('.sl-dplace-btn').forEach(b => {
-      b.classList.toggle('active', sel && state.addMode === b.dataset.tool);
-      if (b.dataset.tool === 'mask') b.style.display = mask ? '' : 'none';
-    });
-    c.el.classList.toggle('sl-dcard-mask', mask);   // five tools: packed tighter
     if (shown) drawPlaneCanvas(c.canvas, pl);
   });
   let empty = document.getElementById('sl-drawer-empty');
@@ -2826,6 +2828,7 @@ function renderDrawer() {
     host.appendChild(empty);
   } else empty?.remove();
   renderSightLine();
+  _updatePlaceHint();
 }
 
 // ── Line-of-sight strip (drawer header) ──
@@ -3010,9 +3013,6 @@ function attachDrawerHandlers() {
       renderPlaneCard(); renderSidebar(); drawAxisCanvas(); redraw();
       return;
     }
-    if (e.target.closest('.sl-dcard-delobj')) { deleteSelectedObject(); return; }
-    const place = e.target.closest('.sl-dplace-btn');
-    if (place) { setCanvasTool(place.dataset.tool); renderDrawer(); return; }
     // Anywhere else on a card that is not a control selects its plane (the
     // viewer selects on pointerdown itself).
     if (!e.target.closest('input, canvas, button')) {
@@ -3026,6 +3026,34 @@ function attachDrawerHandlers() {
     const b = e.target.closest('.sl-cat-btn');
     if (b) setInspectorCat(b.dataset.cat);
   });
+  document.getElementById('sl-toolcol')?.addEventListener('click', e => {
+    const b = e.target.closest('.sl-tool-btn');
+    if (!b) return;
+    if (b.id === 'sl-tool-del') deleteSelectedObject();
+    else setCanvasTool(b.dataset.tool);
+  });
+}
+
+// While a placement tool is armed, a small label beside the pointer over the
+// image says what a click places and on which plane.
+function _updatePlaceHint() {
+  const el = document.getElementById('sl-place-hint');
+  if (!el) return;
+  if (state.addMode === 'select' || !_splitAllowed()) { el.hidden = true; return; }
+  const pl   = selectedPlane();
+  const what = { lens: 'Lens', source: 'Source', hybrid: 'Hybrid', mask: 'Mask' }[state.addMode] ?? 'Object';
+  el.textContent = pl ? `${what} → z ${pl.z.toFixed(2)}` : 'Add a plane first';
+  el.dataset.type = state.addMode;
+}
+function _movePlaceHint(e) {
+  const el = document.getElementById('sl-place-hint');
+  const stage = document.getElementById('sl-stage');
+  if (!el || !stage || state.addMode === 'select' || !_splitAllowed()) { if (el) el.hidden = true; return; }
+  const sr = stage.getBoundingClientRect();
+  const k  = stage.offsetWidth / sr.width;   // the app may be CSS-scaled
+  el.style.left = `${(e.clientX - sr.left) * k + 14}px`;
+  el.style.top  = `${(e.clientY - sr.top) * k + 16}px`;
+  el.hidden = false;
 }
 
 // ── View panes and tabs (desktop) ────────────────────────────────────────────
@@ -3043,10 +3071,11 @@ let   _pane1Fermat = null;     // pane 1's Fermat stationary points, for its ove
 let   _overlayCtx2 = null;
 let   _dragTab = null;         // { p, i } while a tab is being dragged
 
-const _VIZ_GLYPHS = { 0: 'θ', 1: 'κ', 2: 'γ', 3: 'μ', 5: 'α', 6: 'φ', 7: '±', 8: 'N', 9: 'β' };
-const _VIZ_TAB_NAMES = { 0: 'Lensed image', 1: 'Convergence', 2: 'Shear', 3: 'Magnification', 5: 'Deflection',
-                         6: 'Fermat potential', 7: 'Parity', 8: 'Image number', 9: 'Delensed image' };
 const _VIZ_KEY_OF = { 0: 'I', 1: 'K', 2: 'G', 3: 'M', 5: 'A', 6: 'T', 7: 'P', 8: 'N', 9: 'U' };
+// The views that show the source plane rather than the sky as observed.
+const SOURCE_PLANE_VIEWS = [8, 9];
+function isSourcePlaneView(mode) { return SOURCE_PLANE_VIEWS.includes(mode); }
+const _VIEW_GROUPS = [['Image plane', [0, 1, 2, 3, 5, 6, 7]], ['Source plane', SOURCE_PLANE_VIEWS]];
 
 function _paneMode(i) { const p = _panes[i]; return p.tabs[p.active]; }
 function _splitAllowed() { return window.innerWidth > 640; }
@@ -3084,7 +3113,8 @@ function _afterViewChange() {
 }
 
 function focusPane(i) {
-  if (i === _focusPane || !_panes[i]) return;
+  // A pane still waiting for its view (a new one, blank) can't take the focus.
+  if (i === _focusPane || !_panes[i] || _paneMode(i) == null) return;
   _focusPane = i;
   state.vizMode = _paneMode(i);
   _afterViewChange();
@@ -3092,16 +3122,28 @@ function focusPane(i) {
 
 function _activateTab(p, i) {
   _panes[p].active = i;
+  if (_paneMode(p) == null) { renderTabs(); redraw(); return; }   // a blank tab
   _focusPane = p;
   state.vizMode = _paneMode(p);
   _afterViewChange();
+}
+
+// Show view `mode` in tab i of pane p, or switch to the pane's tab that has it.
+function _setTabView(p, i, mode) {
+  const pane = _panes[p];
+  const j = pane.tabs.indexOf(mode);
+  if (j >= 0 && j !== i) { _activateTab(p, j); return; }
+  pane.tabs[i] = mode;
+  _activateTab(p, i);
 }
 
 // Open a view in pane p: its tab if it has one, else a new tab.
 function _addTab(p, mode) {
   const pane = _panes[p];
   let i = pane.tabs.indexOf(mode);
+  if (i < 0 && pane.tabs[pane.active] == null) i = pane.active;   // fill a blank tab
   if (i < 0) { pane.tabs.push(mode); i = pane.tabs.length - 1; }
+  pane.tabs[i] = mode;
   _activateTab(p, i);
 }
 
@@ -3142,29 +3184,48 @@ function _moveTab(p, i, q, j) {
   const target = _panes[q];
   const mode = _takeTab(p, i);
   const qq = _panes.indexOf(target);   // pane indices shift if p closed
-  if (!target.tabs.includes(mode)) target.tabs.splice(j === undefined ? target.tabs.length : j, 0, mode);
+  const blank = target.tabs.indexOf(null);
+  if (blank >= 0) target.tabs[blank] = mode;   // a dropped view fills a blank tab
+  else if (!target.tabs.includes(mode)) target.tabs.splice(j === undefined ? target.tabs.length : j, 0, mode);
   _activateTab(qq, target.tabs.indexOf(mode));
 }
 
 // Open a second pane beside the first, showing view `mode`; a tab dragged out of
-// pane 0 moves there unless it is that pane's only one.
-function _splitWith(mode, fromIdx) {
-  if (_panes.length > 1) { _addTab(1, mode); return; }
+// pane 0 moves there unless it is that pane's only one. With no view the pane
+// opens blank, offering a choice of views (see _chooserHtml).
+function _splitWith(mode = null, fromIdx) {
+  if (_panes.length > 1) { if (mode != null) _addTab(1, mode); return; }
   if (fromIdx !== undefined && _panes[0].tabs.length > 1) _takeTab(0, fromIdx);
   _panes.push({ tabs: [mode], active: 0 });
+  if (mode == null) { renderTabs(); redraw(); return; }
   _focusPane = 1;
   state.vizMode = mode;
   _afterViewChange();
 }
 
+// The blank pane's view picker, grouped by the plane each view shows.
+function _chooserHtml() {
+  return `<div class="sl-chooser-title">Choose a view</div>` + _VIEW_GROUPS.map(([g, ms]) =>
+    `<div class="sl-chooser-group${g === 'Source plane' ? ' sl-chooser-src' : ''}"><div class="sl-chooser-hdr">${g}</div>` +
+    ms.map(m => `<button type="button" data-mode="${m}">${_VIZ_NAMES[m]}<span class="k">${_VIZ_KEY_OF[m]}</span></button>`).join('') +
+    `</div>`).join('');
+}
+
 function _tabbarHtml(p) {
   const pane = _panes[p];
-  const only = _panes.length === 1 && pane.tabs.length === 1;
+  const only = pane.tabs.length === 1 && p === 0 && (_panes.length === 1 || _paneMode(1) == null);
   const tabs = pane.tabs.map((m, i) => {
-    const on = i === pane.active;
-    return `<div class="sl-tab${on ? ' active' : ''}${on && p === _focusPane ? ' focus' : ''}" role="tab" aria-selected="${on}" draggable="true" data-pane="${p}" data-idx="${i}" title="${_VIZ_NAMES[m]} (${_VIZ_KEY_OF[m]})${_splitAllowed() ? '. Drag to the right half of the image to see it beside this one.' : ''}">` +
-      `<span class="sl-tab-glyph">${_VIZ_GLYPHS[m]}</span><span class="sl-tab-name">${_VIZ_TAB_NAMES[m]}</span>` +
-      (only ? '' : `<button type="button" class="sl-tab-x" data-act="close" aria-label="Close ${_VIZ_TAB_NAMES[m]}" title="Close">×</button>`) +
+    const on    = i === pane.active;
+    const blank = m == null;
+    const name  = blank ? 'New view' : _VIZ_NAMES[m];
+    const cls   = `sl-tab${on ? ' active' : ''}${on && p === _focusPane && !blank ? ' focus' : ''}${blank ? ' sl-tab-blank' : ''}${!blank && isSourcePlaneView(m) ? ' sl-tab-src' : ''}`;
+    const tip   = blank ? 'Choose a view for this pane'
+      : `${name}${isSourcePlaneView(m) ? ', in the source plane' : ''} (${_VIZ_KEY_OF[m]}). ${on ? 'Click to change the view' : 'Click to show'}${_splitAllowed() ? '; drag to move it, or onto the right half of the image to see it beside this one' : ''}.`;
+    return `<div class="${cls}" role="tab" aria-selected="${on}" draggable="${!blank}" data-pane="${p}" data-idx="${i}" title="${tip}">` +
+      `<span class="sl-tab-name">${name}</span>` +
+      (!blank && isSourcePlaneView(m) ? `<span class="sl-tab-tag">source</span>` : '') +
+      (on ? `<svg class="sl-tab-caret" width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>` : '') +
+      (only ? '' : `<button type="button" class="sl-tab-x" data-act="close" aria-label="Close ${name}" title="Close">×</button>`) +
       `</div>`;
   }).join('');
   const split = p === 0 && _panes.length === 1
@@ -3190,6 +3251,12 @@ function renderTabs() {
     paneEl.classList.toggle('sl-pane-focus', shown && p === _focusPane);
     if (shown) bar.innerHTML = _tabbarHtml(p);
   }
+  const chooser = document.getElementById('sl-chooser');
+  if (chooser) {
+    const blank = !!_panes[1] && _paneMode(1) == null;
+    chooser.hidden = !blank;
+    if (blank && !chooser.childElementCount) chooser.innerHTML = _chooserHtml();
+  }
   // The overlay toggles sit at the end of the last pane's tab strip on desktop,
   // and on the image itself on phones.
   const home  = _splitAllowed()
@@ -3200,18 +3267,21 @@ function renderTabs() {
 
 // ── The add-a-view menu ──
 function _closeTabMenu() { document.getElementById('sl-tab-menu')?.remove(); }
-function _openTabMenu(anchor, p, forSplit) {
+// kind: 'add' (a new tab in pane p), 'change' (tab idx of pane p).
+function _openTabMenu(anchor, p, kind, idx) {
   _closeTabMenu();
   const stage = document.getElementById('sl-stage');
-  const open  = forSplit ? [] : _panes[p].tabs;
+  const pane  = _panes[p];
+  const cur   = kind === 'change' ? pane.tabs[idx] : null;
   const menu  = document.createElement('div');
   menu.id = 'sl-tab-menu';
   menu.className = 'sl-tab-menu';
   menu.setAttribute('role', 'menu');
-  menu.innerHTML = `<div class="sl-tab-menu-hdr">${forSplit ? 'Open beside' : 'Add a view'}</div>` +
-    VIZ_CYCLE.map(m => `<button type="button" role="menuitem" data-mode="${m}"${open.includes(m) ? ' class="on"' : ''}><span class="sl-tab-glyph">${_VIZ_GLYPHS[m]}</span>${_VIZ_TAB_NAMES[m]}<span class="k">${_VIZ_KEY_OF[m]}</span></button>`).join('');
+  menu.innerHTML = `<div class="sl-tab-menu-hdr">${kind === 'change' ? 'Show in this tab' : 'Add a view'}</div>` +
+    _VIEW_GROUPS.map(([g, ms]) => `<div class="sl-tab-menu-group${g === 'Source plane' ? ' sl-chooser-src' : ''}">${g}</div>` +
+      ms.map(m => `<button type="button" role="menuitem" data-mode="${m}"${m === cur ? ' class="on"' : ''}>${_VIZ_NAMES[m]}<span class="k">${_VIZ_KEY_OF[m]}</span></button>`).join('')).join('');
   stage.appendChild(menu);
-  // Place it under its button, in the stage's own (unscaled) units.
+  // Place it under its anchor, in the stage's own (unscaled) units.
   const sr = stage.getBoundingClientRect(), ar = anchor.getBoundingClientRect();
   const k  = stage.offsetWidth / sr.width;
   let left = (ar.left - sr.left) * k;
@@ -3223,7 +3293,7 @@ function _openTabMenu(anchor, p, forSplit) {
     if (!b) return;
     _closeTabMenu();
     const mode = +b.dataset.mode;
-    if (forSplit) _splitWith(mode); else _addTab(p, mode);
+    if (kind === 'change') _setTabView(p, idx, mode); else _addTab(p, mode);
   });
 }
 
@@ -3242,12 +3312,22 @@ function attachPaneHandlers() {
     const act = e.target.closest('[data-act]')?.dataset.act;
     const tab = e.target.closest('.sl-tab');
     if (act === 'close' && tab) { _closeTab(p, +tab.dataset.idx); return; }
-    if (act === 'add')   { _openTabMenu(e.target.closest('[data-act]'), p, false); return; }
-    if (act === 'split') { _openTabMenu(e.target.closest('[data-act]'), p, true); return; }
-    if (tab) _activateTab(p, +tab.dataset.idx);
+    if (act === 'add')   { _openTabMenu(e.target.closest('[data-act]'), p, 'add'); return; }
+    if (act === 'split') { _closeTabMenu(); _splitWith(); return; }
+    if (!tab) return;
+    // A click on the showing tab opens its view menu; any other tab is shown.
+    const i = +tab.dataset.idx;
+    if (i === _panes[p].active) {
+      if (document.getElementById('sl-tab-menu')) { _closeTabMenu(); return; }
+      _openTabMenu(tab, p, 'change', i);
+    } else _activateTab(p, i);
+  });
+  document.getElementById('sl-chooser')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-mode]');
+    if (b && _panes[1]) _setTabView(1, _panes[1].active, +b.dataset.mode);
   });
   document.addEventListener('pointerdown', e => {
-    if (!e.target.closest('#sl-tab-menu, .sl-tab-add, .sl-tab-split')) _closeTabMenu();
+    if (!e.target.closest('#sl-tab-menu, .sl-tab-add, .sl-tab-split, .sl-tab.active')) _closeTabMenu();
   });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') _closeTabMenu(); });
 
@@ -3282,7 +3362,7 @@ function attachPaneHandlers() {
     if (!tab) return;
     _dragTab = { p: +tab.dataset.pane, i: +tab.dataset.idx };
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', _VIZ_TAB_NAMES[_panes[_dragTab.p].tabs[_dragTab.i]]);
+    e.dataTransfer.setData('text/plain', _VIZ_NAMES[_panes[_dragTab.p].tabs[_dragTab.i]]);
     tab.classList.add('dragging');
     _closeTabMenu();
   });
@@ -3339,7 +3419,10 @@ function _copyGLToPane1() {
 // The overlay of every visible pane: pane 1's first, so pane 0's computed
 // curves and image positions are the ones left cached for the CSV export.
 function drawOverlay() {
-  if (_isSplit()) {
+  if (_isSplit() && _paneMode(1) == null) {
+    const c = document.getElementById('sl-overlay2');
+    c?.getContext('2d').clearRect(0, 0, c.width, c.height);
+  } else if (_isSplit()) {
     const keepCtx = overlayCtx, keepF = state.fermatPoints, keepP = state.saddlePhis;
     _overlayCtx2 ??= document.getElementById('sl-overlay2')?.getContext('2d');
     if (_overlayCtx2) _withView(_paneMode(1), () => {
@@ -3487,15 +3570,29 @@ function updateOverlayChips() {
 // Reference-plane chip under the viz dropdown: shows which source redshift the
 // quantity maps and critical curves refer to. Hidden in plain lensed-image view
 // with no curves shown.
+// Each pane's reference-redshift chip, for that pane's view. On a source-plane
+// view it says so, in the source colour, and the pane is framed in that colour.
 function updateZsChip() {
-  const chip = document.getElementById('sl-zs-chip');
+  _withView(_paneMode(0), () => _updateZsChipFor('sl-zs-chip', 'sl-image-wrap'));
+  const two = _isSplit() && _paneMode(1) != null;
+  if (two) _withView(_paneMode(1), () => _updateZsChipFor('sl-zs-chip2', 'sl-image-wrap2'));
+  else {
+    const c2 = document.getElementById('sl-zs-chip2'); if (c2) c2.style.display = 'none';
+    document.getElementById('sl-image-wrap2')?.classList.remove('sl-src-view');
+  }
+}
+function _updateZsChipFor(id, wrapId) {
+  document.getElementById(wrapId)?.classList.toggle('sl-src-view', isSourcePlaneView(state.vizMode));
+  const chip = document.getElementById(id);
   if (!chip) return;
+  const src      = isSourcePlaneView(state.vizMode) && !state.lineArt;
   const relevant = state.vizMode !== 0 || state.showCritCurves || state.showCaustics;
   const hasPlane = state.planes.length > 0;
+  chip.classList.toggle('sl-zs-src', src);
   if (!relevant || !hasPlane || state.hideOverlays) { chip.style.display = 'none'; return; }
   const auto = state.critZs === null;
   chip.style.display = '';
-  chip.textContent = `zₛ = ${effectiveCritZs().toFixed(2)}${auto ? ' (auto)' : ''}`;
+  chip.textContent = `${src ? 'Source plane · ' : ''}zₛ = ${effectiveCritZs().toFixed(2)}${auto ? ' (auto)' : ''}`;
 }
 
 // Set the visualization mode and sync the dropdown, colorbar, and canvas class.
@@ -3785,6 +3882,7 @@ function toggleRulerTool() {
   const wasHidden = !state.showRuler;
   if (wasHidden) state.showRuler = true;
   state.rulerActive = !state.rulerActive;
+  if (state.rulerActive && state.addMode !== 'select') { state.addMode = 'select'; updateCanvasTools(); }
   state.rulerDraft  = null;   // cancel any in-progress draw; measurements persist
   updateRulerUI();
   if (wasHidden) renderSidebar();  // sync the "Show ruler" checkbox
@@ -3846,8 +3944,7 @@ function attachImageHandlers(wrap) {
   // scrolling here, at touchstart: a second finger (pinch zoom), a touch on an
   // object (drag), a touch on a ruler (edit), or an armed ruler (draw).
   wrap.addEventListener('touchstart', e => {
-    if (e.target !== wrap &&
-        !(e.target.id === 'sl-gl-canvas' || e.target.classList?.contains('sl-overlay'))) return;
+    if (e.target !== wrap && e.target.tagName !== 'CANVAS') return;
     if (e.touches.length >= 2) { e.preventDefault(); return; }
     const t    = e.touches[0];
     const fake = { clientX: t.clientX, clientY: t.clientY };
@@ -3862,8 +3959,7 @@ function attachImageHandlers(wrap) {
     // with reliable tap handling on touch devices.)
     // Ignore presses that start on ANY on-canvas chrome (view chips, dropdown,
     // badges, ruler buttons): only the canvases themselves interact.
-    if (e.target !== wrap &&
-        !(e.target.id === 'sl-gl-canvas' || e.target.classList?.contains('sl-overlay'))) return;
+    if (e.target !== wrap && e.target.tagName !== 'CANVAS') return;
     if (e.button !== 0 && e.pointerType === 'mouse') return;
 
     // A second finger starts a pinch zoom: cancel any one-finger gesture in flight.
@@ -3910,6 +4006,24 @@ function attachImageHandlers(wrap) {
     //    empty-space presses and pinches are always safe here.
     if (state.selectedRulerId) { state.selectedRulerId = null; updateRulerUI(); drawOverlay(); }
     const hit = hitTestImage(wrap, e);
+    // With a placement tool armed (desktop), empty space places a new object on
+    // the selected plane, at the same angular position the plane viewers use,
+    // and it can be dragged into place before release.
+    if (!hit && state.addMode !== 'select' && _splitAllowed()) {
+      const pl = selectedPlane();
+      if (!pl) { showToast('Add a plane first: + Plane in the scene drawer.'); return; }
+      e.preventDefault();
+      wrap.setPointerCapture(e.pointerId);
+      record();
+      const pos = imageWrapToArcsec(wrap, e);
+      const obj = _makeAddObjects(pl, pos.x, pos.y);
+      state.selectedObjId = obj.id;
+      clearRulerSelectionForObject();
+      imgDrag = { obj, plane: pl, startCx: obj.cx, startCy: obj.cy, startMx: pos.x, startMy: pos.y, historyRecorded: true };
+      wrap.style.cursor = 'grabbing';
+      renderPlaneCard(); renderSidebar(); redraw();
+      return;
+    }
     if (!hit) {
       // Empty space: on touch this may become a horizontal swipe that cycles the
       // visualization mode (committed on release). No preventDefault, so a
@@ -3966,7 +4080,10 @@ function attachImageHandlers(wrap) {
       }
       // While the ruler tool is armed, keep the crosshair and never show the object grab cursor.
       if (state.rulerActive && state.showRuler) { wrap.style.cursor = 'crosshair'; return; }
-      wrap.style.cursor = hitTestImage(wrap, e) ? 'grab' : '';
+      const overObj = hitTestImage(wrap, e);
+      wrap.style.cursor = overObj ? 'grab' : (state.addMode !== 'select' && _splitAllowed()) ? 'crosshair' : '';
+      if (overObj) { const h = document.getElementById('sl-place-hint'); if (h) h.hidden = true; }
+      else _movePlaceHint(e);
       return;
     }
     e.preventDefault();
@@ -4018,6 +4135,8 @@ function attachImageHandlers(wrap) {
     wrap.style.cursor = '';
     imgDrag = null;
   });
+
+  wrap.addEventListener('pointerleave', () => { const h = document.getElementById('sl-place-hint'); if (h) h.hidden = true; });
 
   wrap.addEventListener('pointercancel', () => {
     vizSwipe = null;  // browser claimed the gesture (e.g. a vertical page scroll)
@@ -7679,7 +7798,9 @@ function _drawColorbarFixed(ctx, w, h, info) {
   ctx.restore();
 }
 
-function _updateColorbar() {
+// Pane 0's DOM colorbar, for pane 0's view (pane 1's is drawn on its overlay).
+function _updateColorbar() { _withView(_paneMode(0), _updateColorbarNow); }
+function _updateColorbarNow() {
   const bar   = document.getElementById('sl-colorbar');
   const strip = document.getElementById('sl-colorbar-bar');
   const minEl = document.getElementById('sl-colorbar-min');
@@ -7855,7 +7976,7 @@ function _doRedraw() {
 
   // Pane 1 first: its frame is copied off the WebGL canvas, which then ends on
   // pane 0's view (see the panes section).
-  if (_isSplit()) _withView(_paneMode(1), () => {
+  if (_isSplit() && _paneMode(1) != null) _withView(_paneMode(1), () => {
     syncBackdrop(); syncDetector();
     _renderGL(sorted, isDark);
     _pane1Fermat = { points: state.fermatPoints, phis: state.saddlePhis };
@@ -8590,15 +8711,15 @@ const TOUR_STEPS = [
     text: 'The drawer holds your line of sight. The strip in its header runs from the observer (the circle at its left) out in redshift, with a mark for each plane at its z: drag a mark to move that plane, and point at one to find its card. Below are the planes themselves, in order of redshift, each with a viewer showing the true positions of its objects. Click a card to select its plane, add a plane behind the farthest with <b>+ Plane</b>, and use the chevron to tuck the drawer away when you only want to look.',
   },
   {
-    target: '.sl-dcard-sel',
+    target: '#sl-toolcol',
     desktopOnly: true,
     onEnter: () => {
       _tourOpenPlaneSetup();
       if (!selectedPlane() && state.planes[0]) { state.selectedPlaneId = state.planes[0].id; renderPlaneCard(); }
     },
-    arrow: 'above',
+    arrow: 'right',
     label: 'Placing objects',
-    text: 'The selected plane\'s card holds its tools. Pick <b>L</b>, <b>S</b> or <b>H</b> (keys <kbd>1</kbd>, <kbd>2</kbd>, <kbd>3</kbd>) and click the viewer to place a <b>Lens</b> that bends light, a <b>Source</b> that emits it, or a <b>Hybrid</b> that does both; click the lit letter again, or press <kbd>Esc</kbd>, to stop placing. Drag objects in the viewer to move them and click one to edit it; the trash deletes the selected object. Beside the viewer are the plane\'s <b>Redshift</b> box (type a value, or drag sideways on it), <b>Clear</b> (key <kbd>O</kbd>) and <b>Delete</b> (key <kbd>X</kbd>). <kbd>[</kbd> and <kbd>]</kbd> step through the planes.',
+    text: 'Pick <b>L</b>, <b>S</b> or <b>H</b> here (keys <kbd>1</kbd>, <kbd>2</kbd>, <kbd>3</kbd>), then click a plane\'s viewer in the drawer to place a <b>Lens</b> that bends light, a <b>Source</b> that emits it, or a <b>Hybrid</b> that does both on that plane, or click the image to place it on the selected plane. Click the lit letter again, or press <kbd>Esc</kbd>, to stop placing. Drag objects to move them and click one to edit it; the trash deletes the selected object. Beside the selected plane\'s viewer are its <b>Redshift</b> box (type a value, or drag sideways on it), <b>Clear</b> (key <kbd>O</kbd>) and <b>Delete</b> (key <kbd>X</kbd>). <kbd>[</kbd> and <kbd>]</kbd> step through the planes.',
   },
   {
     target: '.sl-axis-wrap',

@@ -2266,7 +2266,7 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
    right. Phones keep the timeline / plane card / tab bar layout above; these
    elements are hidden there. */
 
-.sl-switcher, .sl-drawer, .sl-insp-title { display: none; }
+.sl-switcher, .sl-drawer, .sl-insp-title, .sl-toolcol, .sl-place-hint { display: none; }
 /* Phones show one view: the pane wrappers are layout-neutral and the desktop
    tab strips, second pane and drop zone are hidden. */
 .sl-panes, .sl-pane { display: contents; }
@@ -2281,11 +2281,11 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
 
 @media (min-width: 641px) {
   .sl-body {
-    grid-template-columns: minmax(0, 1fr) minmax(272px, 312px) 48px;
+    grid-template-columns: 44px minmax(0, 1fr) minmax(272px, 312px) 48px;
     grid-template-rows: minmax(0, 1fr) auto;
     grid-template-areas:
-      "stage  rail switch"
-      "drawer rail switch";
+      "tools stage  rail switch"
+      "tools drawer rail switch";
   }
   .sl-timeline, .sl-rail-tabs, #sl-plane-card { display: none !important; }
 
@@ -2302,8 +2302,11 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
   .sl-pane.drop-into .sl-image-wrap { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
   .sl-viz-chip { display: none; }
   .sl-zs-chip { top: 8px; }
+  /* No black behind the canvas: it showed through the anti-aliased rounded
+     corners as a dark fringe. */
+  .sl-image-wrap { background: transparent; }
 
-  .sl-tabbar { display: flex; align-items: center; gap: 2px; height: 34px; min-width: 0; }
+  .sl-tabbar { display: flex; align-items: center; gap: 2px; height: 34px; width: 0; min-width: 100%; }
   .sl-tabbar.drop-end .sl-tab-add { box-shadow: inset 2px 0 0 var(--accent); }
   .sl-tabs { display: flex; align-items: center; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
   .sl-tabs::-webkit-scrollbar { display: none; }
@@ -2324,10 +2327,58 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
   .sl-tab.active { background: var(--bg-soft2); color: var(--fg); }
   .sl-tab.dragging { opacity: 0.4; }
   .sl-tab.drop-before { box-shadow: inset 2px 0 0 var(--accent); }
-  .sl-tab-glyph { min-width: 10px; text-align: center; font-weight: 700; color: var(--muted); }
-  .sl-tab.active .sl-tab-glyph { color: var(--fg-soft); }
-  .sl-tab.focus .sl-tab-glyph { color: var(--accent); }
-  .sl-tab-name { max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+  .sl-tab-name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+  .sl-tab-caret { flex-shrink: 0; margin-left: -2px; color: var(--muted); }
+  .sl-tab.focus { box-shadow: inset 0 -2px 0 var(--accent); }
+  .sl-tab-blank .sl-tab-name { font-style: italic; color: var(--muted); }
+  /* Source-plane views carry the source colour: on the tab, the frame and the z_s chip. */
+  .sl-tab-tag {
+    flex-shrink: 0;
+    padding: 0 5px;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--src-color) 18%, transparent);
+    color: var(--src-color);
+    font-size: 10.5px;
+    font-weight: 600;
+  }
+  .sl-tab-src.focus { box-shadow: inset 0 -2px 0 var(--src-color); }
+  .sl-image-wrap.sl-src-view { border-color: var(--src-color); }
+  .sl-split .sl-pane-focus .sl-image-wrap.sl-src-view { border-color: var(--src-color); box-shadow: 0 0 0 1px var(--src-color); }
+  .sl-zs-chip.sl-zs-src { color: var(--src-color); border-color: color-mix(in srgb, var(--src-color) 60%, transparent); font-weight: 600; }
+
+  /* A blank pane offers the views, grouped by the plane they show. */
+  .sl-chooser {
+    position: absolute;
+    inset: 0;
+    z-index: 15;
+    display: flex;
+    flex-wrap: wrap;
+    align-content: center;
+    gap: 10px 16px;
+    padding: 16px 5%;
+    background: var(--bg-soft);
+    overflow: auto;
+  }
+  .sl-chooser-title { flex: 1 0 100%; }
+  .sl-chooser-group { flex: 1 1 110px; min-width: 0; }
+  .sl-chooser[hidden] { display: none; }
+  .sl-chooser-title { font-size: 14px; font-weight: 600; color: var(--fg); }
+  .sl-chooser-group { display: flex; flex-direction: column; gap: 2px; }
+  .sl-chooser-hdr, .sl-tab-menu-group { padding: 4px 8px 2px; font-size: 11px; font-weight: 600; color: var(--muted); }
+  .sl-chooser-src .sl-chooser-hdr, .sl-tab-menu-group.sl-chooser-src { color: var(--src-color); }
+  .sl-chooser button {
+    display: flex;
+    align-items: center;
+    padding: 6px 8px;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    color: var(--fg-soft);
+    font: 13px system-ui, -apple-system, sans-serif;
+    text-align: left;
+    cursor: pointer;
+  }
+  .sl-chooser .k { margin-left: auto; font-size: 11px; color: var(--muted); }
   .sl-tab-x {
     width: 18px;
     height: 18px;
@@ -2551,8 +2602,7 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
     box-shadow: 0 0 0 1px color-mix(in srgb, var(--pc) 35%, transparent);
     cursor: default;
   }
-  .sl-dcard-tools, .sl-dcard-side { display: none; }
-  .sl-dcard-sel .sl-dcard-tools { display: flex; flex-direction: column; gap: 4px; }
+  .sl-dcard-side { display: none; }
   .sl-dcard-sel .sl-dcard-side  { display: flex; flex-direction: column; width: 84px; min-width: 0; }
   .sl-dcard-sel .sl-dcard-zlabel { display: none; }
 
@@ -2578,32 +2628,6 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
     font-variant-numeric: tabular-nums;
     pointer-events: none;
   }
-
-  .sl-dplace-btn, .sl-dcard-delobj {
-    width: 26px;
-    height: 26px;
-    flex-shrink: 0;
-    padding: 0;
-    border: 1px solid var(--hairline);
-    border-radius: 6px;
-    background: var(--bg);
-    color: var(--fg-soft);
-    font: 600 11.5px system-ui, -apple-system, sans-serif;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-  }
-  .sl-dcard-delobj { margin-top: auto; }
-  /* With the mask tool there are five buttons; keep the column to the viewer's height. */
-  .sl-dcard-mask.sl-dcard-sel .sl-dcard-tools { gap: 2.5px; }
-  .sl-dcard-mask .sl-dplace-btn, .sl-dcard-mask .sl-dcard-delobj { width: 22px; height: 22px; }
-  /* An armed tool lights in the colour of what it places. */
-  .sl-dplace-btn { --tc: var(--lens-color); }
-  .sl-dplace-btn[data-tool="source"] { --tc: var(--src-color); }
-  .sl-dplace-btn[data-tool="hybrid"] { --tc: var(--hybrid-color); }
-  .sl-dplace-btn[data-tool="mask"]   { --tc: var(--mask-color); }
-  .sl-dplace-btn.active { border-color: var(--tc); background: color-mix(in srgb, var(--tc) 16%, transparent); color: var(--tc); }
 
   .sl-dcard-cap { margin-bottom: 3px; font-size: 10.5px; color: var(--muted); }
   .sl-dcard-z-input {
@@ -2635,6 +2659,60 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
     cursor: pointer;
   }
   .sl-dcard-act[hidden] { display: none; }
+
+  /* Placement tools: a thin column down the left edge, no border. An armed tool
+     lights in the colour of what it places. */
+  .sl-toolcol {
+    grid-area: tools;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 50px 0 12px;
+    background: var(--bg);
+  }
+  .sl-tool-btn {
+    --tc: var(--lens-color);
+    width: 30px;
+    height: 30px;
+    flex-shrink: 0;
+    padding: 0;
+    border: 1px solid var(--hairline);
+    border-radius: 7px;
+    background: var(--bg);
+    color: var(--fg-soft);
+    font: 600 12px system-ui, -apple-system, sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .sl-tool-btn[data-tool="source"] { --tc: var(--src-color); }
+  .sl-tool-btn[data-tool="hybrid"] { --tc: var(--hybrid-color); }
+  .sl-tool-btn[data-tool="mask"]   { --tc: var(--mask-color); }
+  .sl-tool-btn.active { border-color: var(--tc); background: color-mix(in srgb, var(--tc) 16%, transparent); color: var(--tc); }
+  .sl-tool-del { margin-top: 10px; }
+
+  /* Where a click on the image will place the armed object. */
+  .sl-place-hint {
+    --tc: var(--lens-color);
+    display: block;
+    position: absolute;
+    z-index: 30;
+    padding: 2px 8px;
+    border: 1px solid color-mix(in srgb, var(--tc) 60%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    color: var(--tc);
+    font: 600 11.5px system-ui, -apple-system, sans-serif;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  .sl-place-hint[data-type="source"] { --tc: var(--src-color); }
+  .sl-place-hint[data-type="hybrid"] { --tc: var(--hybrid-color); }
+  .sl-place-hint[data-type="mask"]   { --tc: var(--mask-color); }
+  .sl-place-hint[hidden] { display: none; }
 
   /* ── Inspector panels: no boxes, no borders, sections always open ── */
   .sl-rail .sl-tab-content { padding: 10px 16px 18px; }
@@ -2678,12 +2756,11 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
 @media (min-width: 641px) and (hover: hover) {
   .sl-cat-btn:hover:not(.active),
   .sl-drawer-toggle:hover { color: var(--fg); background: var(--bg-soft2); }
-  .sl-dplace-btn:hover:not(.active),
-  .sl-dcard-delobj:hover,
+  .sl-tool-btn:hover:not(.active) { color: var(--fg); border-color: var(--fg-soft); }
   .sl-dcard-act:hover { color: var(--fg); border-color: var(--fg-soft); }
   .sl-drawer-btn:hover { background: var(--hairline); }
   .sl-tab:hover:not(.active) { color: var(--fg-soft); background: color-mix(in srgb, var(--bg-soft2) 60%, transparent); }
   .sl-tab-x:hover, .sl-tab-add:hover, .sl-tab-split:hover,
   .sl-tabbar .sl-overlay-chips button:hover { color: var(--fg); background: var(--bg-soft2); }
-  .sl-tab-menu button:hover { background: var(--bg-soft2); color: var(--fg); }
+  .sl-tab-menu button:hover, .sl-chooser button:hover { background: var(--bg-soft2); color: var(--fg); }
 }
