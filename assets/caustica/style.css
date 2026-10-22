@@ -2855,7 +2855,9 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
   .sl-tool-btn[data-tool="hybrid"] { --tc: var(--hybrid-color); }
   .sl-tool-btn[data-tool="mask"]   { --tc: var(--mask-color); }
   .sl-tool-btn.active { border-color: var(--tc); background: color-mix(in srgb, var(--tc) 16%, transparent); color: var(--tc); }
-  .sl-tool-ruler { margin-top: 10px; --tc: var(--fg); }
+  /* The ruler sits below the object controls, after a short centred hairline. */
+  .sl-toolcol-sep { flex: none; width: 16px; height: 1px; margin: 5px 0; background: var(--hairline); }
+  .sl-tool-ruler { --tc: var(--fg); }
   .sl-tool-del { margin-top: 10px; }
   /* The ruler is armed from the tool column on a computer; the image keeps only
      its clear and delete buttons. */
