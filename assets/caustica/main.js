@@ -388,7 +388,7 @@ const CONFIG_DEFAULTS = {
   showLegend:         true,
   legendBg:           false,  // translucent panel behind the legend so overlays under it stay legible
   showColorbar:       true,
-  showRuler:          false,  // ruler tool + its measurement lines (off by default; View toggle or the L key enables it)
+  showRuler:          false,  // whether the ruler measurements are shown (the Display toggle; arming the ruler turns it on)
   critGridN:          512,
   fovBuffer:          5,      // arcsec: critical curves are sampled over max(1.3 × FOV, this), so they
                               // aren't cut off when zoomed in on the caustics (Quality & performance)
@@ -2009,7 +2009,8 @@ function buildDOM() {
           <button type="button" class="sl-tool-btn" data-tool="source" title="Add source, something that emits light (2). Click the image or a plane's viewer to place; click again, or Esc, to stop." aria-label="Add source">${toolIcon('source')}</button>
           <button type="button" class="sl-tool-btn" data-tool="hybrid" title="Add hybrid, a lens and a source together, like a galaxy (3). Click the image or a plane's viewer to place; click again, or Esc, to stop." aria-label="Add hybrid">${toolIcon('hybrid')}</button>
           <button type="button" class="sl-tool-btn" data-tool="mask"   title="Add mask (4): cuts a patch out of the observation before it is delensed. Click the image or the observation's card to place; click again, or Esc, to stop." aria-label="Add mask">${toolIcon('mask')}</button>
-          <button type="button" class="sl-tool-btn sl-tool-del" id="sl-tool-del" title="Delete the selected object" aria-label="Delete the selected object"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 4h11M4 4l.5 7h5l.5-7M5 4V3h4v1"/></svg></button>
+          <button type="button" class="sl-tool-btn sl-tool-ruler" id="sl-tool-ruler" title="Ruler: measure distances and angles on the image (L). Click again, or Esc, to stop." aria-label="Ruler" aria-pressed="false"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1.5" y="5" width="13" height="6" rx="1"/><line x1="4.5" y1="5" x2="4.5" y2="8"/><line x1="8" y1="5" x2="8" y2="8.5"/><line x1="11.5" y1="5" x2="11.5" y2="8"/></svg></button>
+          <button type="button" class="sl-tool-btn sl-tool-del" id="sl-tool-del" title="Delete the selected object or measurement" aria-label="Delete the selected object or measurement"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 4h11M4 4l.5 7h5l.5-7M5 4V3h4v1"/></svg></button>
         </nav>
         <div class="sl-stage" id="sl-stage">
           <!-- Desktop view panes (see the panes section): each a tab strip over an
@@ -3495,7 +3496,8 @@ function attachDrawerHandlers() {
   document.getElementById('sl-toolcol')?.addEventListener('click', e => {
     const b = e.target.closest('.sl-tool-btn');
     if (!b) return;
-    if (b.id === 'sl-tool-del') deleteSelectedObject();
+    if (b.id === 'sl-tool-del') { if (!deleteSelectedRuler()) deleteSelectedObject(); }
+    else if (b.id === 'sl-tool-ruler') toggleRulerTool();
     else setCanvasTool(b.dataset.tool);
   });
 }
@@ -4559,6 +4561,8 @@ function updateRulerUI() {
     state.selectedRulerId = null;
   if (tools) tools.style.display = state.showRuler ? '' : 'none';
   if (btn)   btn.classList.toggle('active', state.rulerActive);
+  const col = document.getElementById('sl-tool-ruler');   // the tool column's, always there
+  if (col) { col.classList.toggle('active', state.rulerActive); col.setAttribute('aria-pressed', state.rulerActive ? 'true' : 'false'); }
   if (del)   del.style.display = (state.showRuler && state.selectedRulerId) ? '' : 'none';
   if (clr)   clr.style.display = (state.showRuler && state.rulers.length > 0) ? '' : 'none';
 }
@@ -4593,6 +4597,9 @@ function clearRulerSelectionForObject() {
 
 // Arm/disarm the ruler drawing tool. Shared by the toolbar button and the "L"
 // shortcut. Enables the tool if it was hidden; keeps committed measurements.
+// Arm or disarm the ruler (L, or its button in the tool column). Arming shows the
+// measurements if the Display toggle had hidden them, since a hidden ruler could
+// not show what it draws.
 function toggleRulerTool() {
   const wasHidden = !state.showRuler;
   if (wasHidden) state.showRuler = true;
@@ -6646,7 +6653,7 @@ function renderViewPanel() {
             <label title="Whiskers along the direction images are stretched; longer means more distorted"><input type="checkbox" id="sl-show-stretch" ${state.showStretch?'checked':''}> Stretch</label>
           </div>
           <div class="sl-checkbox-row">
-            <label title="Measure distances and angles on the image (key L also enables the ruler)"><input type="checkbox" id="sl-show-ruler" ${state.showRuler?'checked':''}> Ruler</label>
+            <label title="Show or hide the ruler measurements. The ruler itself is in the tool column at the left (key L)."><input type="checkbox" id="sl-show-ruler" ${state.showRuler?'checked':''}> Rulers</label>
             <label class="${tdAvail?'':'sl-label-disabled'}" title="${tdTitle}"><input type="checkbox" id="sl-show-td" ${state.showTimeDelays?'checked':''} ${tdAvail?'':'disabled'}> Time delays</label>
           </div>
         </div>
@@ -6837,6 +6844,8 @@ function renderViewPanel() {
     document.querySelector('.sl-body')?.classList.toggle('sl-hide-ov', state.hideOverlays);
     _updateColorbar(); updateZsChip(); redraw();
   });
+  // Shows or hides the measurements; hiding them also disarms the ruler, which
+  // would otherwise draw lines nobody can see.
   document.getElementById('sl-show-ruler')?.addEventListener('change', e => {
     state.showRuler = e.target.checked;
     if (!state.showRuler && state.rulerActive) { state.rulerActive = false; state.rulerDraft = null; }
@@ -9774,7 +9783,7 @@ const TOUR_STEPS = [
     },
     arrow: 'right',
     label: 'Placing objects',
-    text: 'Pick <b>L</b>, <b>S</b> or <b>H</b> here (keys <kbd>1</kbd>, <kbd>2</kbd>, <kbd>3</kbd>), then click a plane\'s viewer in the drawer to place a <b>Lens</b> that bends light, a <b>Source</b> that emits it, or a <b>Hybrid</b> that does both on that plane, or click the image to place it on the selected plane. Click the lit letter again, or press <kbd>Esc</kbd>, to stop placing. Drag objects to move them and click one to edit it; the trash deletes the selected object. The selected plane\'s <b>Redshift</b> box (type a value, or drag sideways on it), <b>Clear</b> (key <kbd>O</kbd>) and <b>Delete</b> (key <kbd>X</kbd>) are at the right end of the drawer. <kbd>[</kbd> and <kbd>]</kbd> step through the planes.',
+    text: 'Pick <b>L</b>, <b>S</b> or <b>H</b> here (keys <kbd>1</kbd>, <kbd>2</kbd>, <kbd>3</kbd>), then click a plane\'s viewer in the drawer to place a <b>Lens</b> that bends light, a <b>Source</b> that emits it, or a <b>Hybrid</b> that does both on that plane, or click the image to place it on the selected plane. Click the lit button again, or press <kbd>Esc</kbd>, to stop placing. The ruler below them (<kbd>L</kbd>) measures distances and angles on the image. Drag objects to move them and click one to edit it; the trash deletes the selected object. The selected plane\'s <b>Redshift</b> box (type a value, or drag sideways on it), <b>Clear</b> (key <kbd>O</kbd>) and <b>Delete</b> (key <kbd>X</kbd>) are at the right end of the drawer. <kbd>[</kbd> and <kbd>]</kbd> step through the planes.',
   },
   {
     target: '.sl-axis-wrap',

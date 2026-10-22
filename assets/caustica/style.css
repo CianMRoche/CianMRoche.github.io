@@ -2855,7 +2855,11 @@ html[data-theme="dark"] .sl-tour-bubble { box-shadow: 0 8px 22px rgba(0,0,0,0.55
   .sl-tool-btn[data-tool="hybrid"] { --tc: var(--hybrid-color); }
   .sl-tool-btn[data-tool="mask"]   { --tc: var(--mask-color); }
   .sl-tool-btn.active { border-color: var(--tc); background: color-mix(in srgb, var(--tc) 16%, transparent); color: var(--tc); }
+  .sl-tool-ruler { margin-top: 10px; --tc: var(--fg); }
   .sl-tool-del { margin-top: 10px; }
+  /* The ruler is armed from the tool column on a computer; the image keeps only
+     its clear and delete buttons. */
+  #sl-ruler-btn { display: none; }
 
   /* Where a click on the image will place the armed object. */
   .sl-place-hint {
