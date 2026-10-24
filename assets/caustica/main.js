@@ -503,6 +503,13 @@ const state = {
   obsNatH:         0,
 };
 
+// Line art is a style of the lensed-image view: it draws there while switched on,
+// and every other view keeps drawing as usual. Inside a pane's pass (_withPane),
+// state.vizMode is that pane's view, so this answers for the pane being drawn.
+function lineArtOn() {
+  return state.lineArt && state.vizMode === 0;
+}
+
 // True when a background image is actually on screen. It replaces the flat field
 // of the lensed-image view only: the quantity maps colour every pixel themselves,
 // and line art paints its own opaque palette background over the GL canvas. The
@@ -4069,7 +4076,7 @@ function _copyGLToPane1() {
   }
   const ctx = c2.getContext('2d');
   ctx.clearRect(0, 0, c2.width, c2.height);
-  if (!state.lineArt) ctx.drawImage(glCanvas, 0, 0);   // line art paints its own background on the overlay
+  if (!lineArtOn()) ctx.drawImage(glCanvas, 0, 0);   // line art paints its own background on the overlay
   c2.classList.toggle('sl-viz-active', state.vizMode !== 0);
 }
 
@@ -4087,7 +4094,7 @@ function drawOverlay() {
       if (_pane1Fermat) { state.fermatPoints = _pane1Fermat.points; state.saddlePhis = _pane1Fermat.phis; }
       try {
         _drawOverlayPane();
-        if (!state.hideOverlays && !state.lineArt)
+        if (!state.hideOverlays && !lineArtOn())
           _drawColorbarOnto(overlayCtx, overlayCtx.canvas.width, overlayCtx.canvas.height, true);
         _drawMarquee();
       } finally { overlayCtx = keepCtx; state.fermatPoints = keepF; state.saddlePhis = keepP; }
@@ -4488,7 +4495,7 @@ function imageWrapToArcsec(wrap, e) {
 // overlap on the image, a click always picks the selected plane's object.
 // Whether an object can be grabbed in the current view (as drawn by drawOverlay).
 function _grabbable(plane, obj) {
-  if (state.vizMode === 8 && !state.lineArt && obj.type === 'source' && !obj.hybridId) return false;
+  if (state.vizMode === 8 && obj.type === 'source' && !obj.hybridId) return false;
   if (obj.type === 'mask' && !masksShown()) return false;
   return true;
 }
@@ -4536,7 +4543,7 @@ function hitTestImage(wrap, e) {
     for (const obj of plane.objects) {
       // Sources are hidden on the image-number map (a source-plane view of where a
       // source could be), so they are not draggable there either.
-      if (state.vizMode === 8 && !state.lineArt && obj.type === 'source' && !obj.hybridId) continue;
+      if (state.vizMode === 8 && obj.type === 'source' && !obj.hybridId) continue;
       // Masks are drawn (and so can be grabbed) wherever markers are, but not in line art.
       if (obj.type === 'mask' && !masksShown()) continue;
       if (obj.hybridId) {
@@ -5561,9 +5568,9 @@ function activeMasks() {
   return state.obs.objects.filter(o => !o.hidden).slice(0, MAX_MASKS);
 }
 
-// Masks are drawn, and can be grabbed, in every view but line art.
+// Masks are drawn, and can be grabbed, in every view but the line-art lensed image.
 function masksShown() {
-  return !state.lineArt;
+  return !lineArtOn();
 }
 
 // The observation's [w, h] on the sky in arcsec, from its pixel scale, or null
@@ -6324,9 +6331,9 @@ function instrReadoutHtml() {
     html += `
     <p class="sl-muted-note" style="margin:6px 0 0">Only a few pixels span this field — that is genuinely what this detector delivers at this zoom.</p>`;
   }
-  if (state.vizMode !== 0 || state.lineArt) {
+  if (state.vizMode !== 0 || lineArtOn()) {
     html += `
-    <p class="sl-muted-note" style="margin:6px 0 0">Shown in the lensed-image view only${state.lineArt ? ' (Line art draws its own vectors)' : ', not on the quantity maps'}.</p>`;
+    <p class="sl-muted-note" style="margin:6px 0 0">Shown in the lensed-image view only${lineArtOn() ? ' (Line art draws its own vectors)' : ', not on the quantity maps'}.</p>`;
   }
   return html;
 }
@@ -6346,7 +6353,7 @@ function observationSectionHtml() {
   const delensOpen = _delensShowing();
   const note = renderer && !renderer.delensSupported
     ? 'This browser cannot draw the delensed view: it needs WebGL2 float render targets (<code>EXT_color_buffer_float</code>), which this GPU does not offer.'
-    : state.lineArt ? 'Line art draws its own vectors; switch it off to see the delensed image.' : '';
+    : '';
   const offRow = a => `<div class="sl-global-input" title="Where the picture's centre sits on the sky, in arcseconds (+ ${a === 'X' ? 'right' : 'up'})">
             <label>Offset ${a}</label>
             <input type="range" id="sl-obs-off${a.toLowerCase()}" data-disp-dec="2" min="${-R}" max="${R}" step="any" data-drag-step="${+(R / 100).toPrecision(2)}" value="${state['obsOff' + a]}">
@@ -6479,8 +6486,8 @@ function lineArtColorsSectionHtml() {
         <div class="sl-view-hdr">
           <span class="sl-panel-title" style="flex:1">Line art</span>
           ${infoSection('sl-lineart-info', `
-            Flat vector line-art of the lensing structure, in place of the rendered image. Only <b>uniform-disc</b> and <b>point</b> sources are drawn; other source types are ignored. Its colors come from the <b>Palette</b>, and each can be changed after; the scale bar, legend, ruler and other annotations take the <b>Annotations</b> ink above.`)}
-          <label style="display:flex;align-items:center;cursor:pointer;margin:0 0 0 4px" title="Vector line-art render mode">
+            Flat vector line-art of the lensing structure, in place of the rendered image. It restyles the <b>Lensed image</b> view only: the quantity maps and the source-plane views keep drawing as usual, so a line-art lensed image can sit beside a map. Only <b>uniform-disc</b> and <b>point</b> sources are drawn; other source types are ignored. Its colors come from the <b>Palette</b>, and each can be changed after; the scale bar, legend, ruler and other annotations take the <b>Annotations</b> ink above.`)}
+          <label style="display:flex;align-items:center;cursor:pointer;margin:0 0 0 4px" title="Vector line-art style for the Lensed image view">
             <input type="checkbox" id="sl-lineart" ${state.lineArt?'checked':''} style="margin:0">
           </label>
         </div>
@@ -6517,7 +6524,7 @@ function backgroundSectionHtml() {
   // A loaded image that isn't currently visible: say why rather than looking broken.
   const inertNote = !has || bgImageActive() ? ''
     : hid            ? 'Hidden. Use the eye button to show it again.'
-    : state.lineArt  ? 'Line art draws its own background; switch it off to see the image.'
+    : lineArtOn()    ? 'Line art draws its own background; switch it off to see the image.'
     : 'Shown in the lensed-image view only, not on the quantity maps.';
   return `
       <div class="sl-hybrid-section">
@@ -6868,7 +6875,7 @@ function renderViewPanel() {
   document.getElementById('sl-lineart')?.addEventListener('change', e => {
     state.lineArt = e.target.checked;
     renderSidebar();            // reveal / hide the palette sub-panel
-    _updateColorbar();          // line art suppresses the colorbar
+    _updateColorbar();
     redraw();
   });
   document.getElementById('sl-lineart-palette')?.addEventListener('change', e => {
@@ -7199,9 +7206,9 @@ function renderExportPanel() {
                   recState.active ? '■ Stop [R]' : recState.encoding ? '⏳ Encoding…' : '● Record [R]'}</button>
       </div>
       <div class="sl-capture-row" style="margin-top:6px">
-        <button class="sl-capture-btn" id="sl-svg-btn" ${state.lineArt ? '' : 'disabled'}
-                title="${state.lineArt ? 'Export the Line art view as a scalable vector SVG' : 'Enable Line art (View tab) to export a vector SVG'}">Save SVG (line art)</button>
-        <button class="sl-capture-btn ${recState.svgBg ? 'active' : ''}" id="sl-svg-bg-btn" ${state.lineArt ? '' : 'disabled'}
+        <button class="sl-capture-btn" id="sl-svg-btn" ${_withPane(0, lineArtOn) ? '' : 'disabled'}
+                title="${_withPane(0, lineArtOn) ? 'Export the Line art view as a scalable vector SVG' : 'Show the lensed image with Line art on (Colors) to export a vector SVG'}">Save SVG (line art)</button>
+        <button class="sl-capture-btn ${recState.svgBg ? 'active' : ''}" id="sl-svg-bg-btn" ${_withPane(0, lineArtOn) ? '' : 'disabled'}
                 title="Include the palette background in the saved SVG (off = transparent background)">Background</button>
       </div>
 
@@ -8097,8 +8104,8 @@ function _drawOverlayPane() {
   // Line-art mode: paint the opaque palette background + disc-image outlines as a
   // base layer, then fall through so the usual annotations draw on top (recolored to
   // the palette below via _pal). Switching to line art therefore hides nothing.
-  const _pal = state.lineArt ? lineArtPalette() : null;
-  if (state.lineArt) drawLineArtBase(W, H, dpr);
+  const _pal = lineArtOn() ? lineArtPalette() : null;
+  if (lineArtOn()) drawLineArtBase(W, H, dpr);
 
   const hasLens     = state.planes.some(p => p.objects.some(o => o.type === 'lens'));
   // The image-number map and the delensed image are drawn in the source plane, so
@@ -8109,8 +8116,8 @@ function _drawOverlayPane() {
   // keeps them, since a source marker sits at its own source-plane position and can
   // be laid over the reconstruction. Line art replaces the raster view, so it keeps
   // its usual overlay.
-  const _srcPlaneView = (state.vizMode === 8 || state.vizMode === 9) && !state.lineArt;
-  const _imgNumView   = state.vizMode === 8 && !state.lineArt;
+  const _srcPlaneView = state.vizMode === 8 || state.vizMode === 9;
+  const _imgNumView   = state.vizMode === 8;
   // The hide-overlays master switch (View tab) suppresses annotations for a clean
   // plot; point-source image circles stay (they ARE the lensed light), and critical
   // curves / caustics stay too (they are structure, not a labelling annotation).
@@ -8516,7 +8523,7 @@ function _drawOverlayPane() {
     if (state.showCritCurves && hasLens && !_srcPlaneView) legendItems.push({ color: _critCol, label: 'Critical curves', isLine: true });
     if (state.showCaustics   && hasLens) legendItems.push({ color: _causCol, label: 'Caustics',        isLine: true });
   }
-  if (state.vizMode === 7 && !state.lineArt) {
+  if (state.vizMode === 7) {
     for (const [t, label] of [[1, 'Type I (minimum)'], [2, 'Type II (saddle)'], [3, 'Type III (maximum)']])
       legendItems.push({ color: parityColor(t), label, isSwatch: true });
     if (_paritySeen.has('pos')) legendItems.push({ color: _paritySeen.get('pos'), label: 'Positive-parity image', isParity: +1 });
@@ -8872,7 +8879,7 @@ function _updateColorbarNow() {
   const ttl   = document.getElementById('sl-colorbar-title');
   if (!bar) return;
   const info = _VIZ_COLORBAR[state.vizMode];
-  const on = !!info && state.showColorbar && !state.hideOverlays && !state.lineArt;
+  const on = !!info && state.showColorbar && !state.hideOverlays;
   // The colorbar keeps the bottom-left corner; this class lifts the ruler
   // cluster and warning badges clear of it (see --sl-bl-lift in the CSS).
   document.getElementById('sl-image-wrap')?.classList.toggle('sl-colorbar-visible', on);
@@ -9069,7 +9076,7 @@ function _doRedraw() {
 
 // Draw the scene for state.vizMode onto the WebGL canvas.
 function _renderGL(sorted, isDark) {
-  if (state.lineArt) {
+  if (lineArtOn()) {
     // Line-art mode draws everything as vectors on the overlay; skip the raster GL
     // pass entirely (the opaque overlay background covers the GL canvas).
     state.fermatPoints = null;
@@ -9105,7 +9112,7 @@ function _buildCompositeCanvas() {
   const ov  = document.getElementById('sl-overlay');
   // Line-art mode: the overlay already holds the opaque background + all vectors,
   // so it IS the finished image. Skip the (skipped/stale) GL layer and colorbar.
-  if (state.lineArt) {
+  if (lineArtOn()) {
     const off = document.createElement('canvas');
     off.width  = ov.width;
     off.height = ov.height;
@@ -9166,7 +9173,7 @@ function _captureSnapshot() {
 // point-source dots) via the shared lens.js extractors and returns an SVG document
 // string, so the output is resolution-independent and editable in vector tools.
 function buildLineArtSVGString() {
-  if (!state.lineArt || !state.dist) return null;
+  if (!lineArtOn() || !state.dist) return null;
   const pal = lineArtPalette();
   const S   = 1000;                 // SVG user units (square viewBox)
   const fov = state.fov;
@@ -9250,7 +9257,7 @@ function buildLineArtSVGString() {
 }
 
 function exportLineArtSVG() {
-  const svg = buildLineArtSVGString();
+  const svg = _withPane(0, buildLineArtSVGString);   // the exports are pane 0's
   if (svg) downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), 'caustica-lineart.svg');
 }
 
@@ -9653,7 +9660,7 @@ function _gifReservedColors() {
     '#f871c4', '#86efac'];                                   // CRIT_COLOR / CAUS_COLOR, opaque
   if (state.vizMode === 7) hexes.push(...Object.values(PARITY_COLORS[dark ? 'dark' : 'light']));
   if (state.vizMode === 6) hexes.push('#FF6B35', '#CC44FF', '#FFE600', '#1144DD');
-  if (state.lineArt) hexes.push(...Object.values(lineArtPalette()).filter(v => typeof v === 'string' && v.startsWith('#')));
+  if (lineArtOn()) hexes.push(...Object.values(lineArtPalette()).filter(v => typeof v === 'string' && v.startsWith('#')));
   for (const pl of state.planes) for (const o of pl.objects)
     if (o.type === 'source' && o.model === 'pointsource' && o.params.color)
       hexes.push(dark ? o.params.color : invertHexColor(o.params.color));
