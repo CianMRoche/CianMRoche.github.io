@@ -1136,8 +1136,8 @@ const PRESETS = [
   { file: 'butterfly_caustic.yaml', name: 'Butterfly Caustic' },
   { file: 'group.yaml',         name: 'Galaxy group' },
   { file: 'image_recreation.yaml', name: 'Image recreation' },
-  { file: 'henrys_arc.yaml',    name: "Henry's arc" },
   { file: 'delensing.yaml',     name: 'Delensing' },
+  { file: 'henrys_arc.yaml',    name: "Henry's arc" },
   { file: 'realistic.yaml',     name: 'Realistic' },
   { file: 'line_art.yaml',      name: 'Line art' },
 ];
