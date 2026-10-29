@@ -31,7 +31,7 @@ export const MAX_PLANES = 8;
 // costs a few uniform vectors; 32 stays within the WebGL2 fragment-uniform
 // budget on the hardware this runs on.
 export const MAX_OBJECTS = 32;
-const MAX_PASTED  = 4;   // simultaneous pasted-image texture slots
+export const MAX_PASTED = 4;   // simultaneous pasted-image texture slots; the UI warns past it
 
 // ── Vertex shader ─────────────────────────────────────────────────────────────
 const VERT_SRC =
@@ -477,6 +477,10 @@ float fermatPotential(vec2 theta, int targetIdx) {
 
 vec4 samplePasted(int idx, vec2 beta) {
   int  slot = u_pastedSlot[idx];
+  // A pasted image past the MAX_PASTED texture slots has none of its own (-1). It
+  // draws nothing rather than falling through to the last slot's picture. The
+  // branch is on a uniform, so control flow stays uniform for the fetches below.
+  if (slot < 0) return vec4(0.0);
   vec2 sz;
   if      (slot == 0) sz = u_pastedSz0;
   else if (slot == 1) sz = u_pastedSz1;

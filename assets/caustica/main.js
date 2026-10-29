@@ -1,6 +1,6 @@
 // Caustica: main.js
 
-import { Renderer, MAX_OBJECTS, MAX_PLANES, MAX_MASKS } from './renderer.js';
+import { Renderer, MAX_OBJECTS, MAX_PLANES, MAX_MASKS, MAX_PASTED } from './renderer.js';
 import { precomputeDistances,
          computeCriticalCurves,
          computeDiscImageOutlines,
@@ -322,17 +322,23 @@ function reportObjectCap() {
     return;
   }
   const cap = renderer?.maxObjects ?? MAX_OBJECTS;
-  let nLens = 0, nSrc = 0;
-  for (const pl of state.planes)
+  let nLens = 0, nSrc = 0, nPaste = 0;
+  // Planes in redshift order, as the renderer packs them, so the pasted images
+  // counted are those within the source cap, which compete for texture slots.
+  for (const pl of [...state.planes].sort((a, b) => a.z - b.z))
     for (const o of pl.objects) {
       if (o.hidden) continue;
       if (o.type === 'lens')        nLens++;
-      else if (o.type === 'source') nSrc++;
+      else if (o.type === 'source') {
+        if (nSrc < cap && o.model === 'pastedimage') nPaste++;
+        nSrc++;
+      }
     }
   const overL = Math.max(0, nLens - cap);
   const overS = Math.max(0, nSrc - cap);
   const overP = Math.max(0, state.planes.length - MAX_PLANES);
-  const over  = overL + overS + overP;
+  const overI = Math.max(0, nPaste - MAX_PASTED);   // pasted images past the texture slots
+  const over  = overL + overS + overP + overI;
   if (over === 0) {
     badge.style.display = 'none';
     if (pop) pop.style.display = 'none';
@@ -341,7 +347,7 @@ function reportObjectCap() {
   const label = document.getElementById('sl-cap-warn-label');
   if (label) {
     const bits = [];
-    if (overL + overS) bits.push(`${overL + overS} object${overL + overS > 1 ? 's' : ''}`);
+    if (overL + overS + overI) bits.push(`${overL + overS + overI} object${overL + overS + overI > 1 ? 's' : ''}`);
     if (overP)         bits.push(`${overP} plane${overP > 1 ? 's' : ''}`);
     label.textContent = `${bits.join(' + ')} not shown`;
   }
@@ -357,6 +363,13 @@ function reportObjectCap() {
         `${parts.join(' and ')} beyond that limit ${overL + overS > 1 ? 'are' : 'is'} not rendered — ` +
         `they still appear in the object list and as markers, but add no light or lensing. ` +
         `Hide or delete objects to bring the count under the limit.`;
+    }
+    if (overI) {
+      html += `${html ? '<br><br>' : ''}` +
+        `The image can display at most <b>${MAX_PASTED}</b> pasted images. ` +
+        `The <b>${overI}</b> farthest (by redshift, then list order) ${overI > 1 ? 'are' : 'is'} not drawn, ` +
+        `but still ${overI > 1 ? 'appear' : 'appears'} in the object list and as ${overI > 1 ? 'markers' : 'a marker'}. ` +
+        `Hide or delete pasted images to bring the count under the limit.`;
     }
     if (overP) {
       html += `${html ? '<br><br>' : ''}` +
@@ -5688,7 +5701,7 @@ function reportDetector() {
   const pop = document.getElementById('sl-res-pop');
   const st  = detectorStats();
   const show = !_resWarnDismissed && !!st && !st.ok && !state.instrHidden &&
-               state.vizMode === 0 && !state.lineArt;
+               isLightView(state.vizMode) && !lineArtOn();
   if (!show) {
     badge.style.display = 'none';
     if (pop) pop.style.display = 'none';
@@ -6275,7 +6288,7 @@ function instrumentSectionHtml() {
           ${infoSection('sl-instr-info', `
             Resamples the lensed image onto a telescope's pixels, averaging over each one. Not <b>Render scale</b> (Settings), which sets how finely the sky is computed rather than how coarsely it is sampled.<br><br>
             <b>Include PSF</b> blurs first, using an <b>approximate Gaussian</b> — not the instrument's real PSF, which has diffraction rings, spikes or a seeing halo.<br><br>
-            Lensed image only. Needs 2+ computed samples per pixel, or it is skipped with a warning.
+            Lensed image and Unlensed views only. Needs 2+ computed samples per pixel, or it is skipped with a warning.
             <a href="/caustica-documentation/instrument/" target="_blank" rel="noopener">Details and sources</a>`)}
         </div>
         ${_open(_instrExpanded) ? `<div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
@@ -6340,9 +6353,11 @@ function instrReadoutHtml() {
     html += `
     <p class="sl-muted-note" style="margin:6px 0 0">Only a few pixels span this field — that is genuinely what this detector delivers at this zoom.</p>`;
   }
-  if (state.vizMode !== 0 || lineArtOn()) {
+  // The detector applies wherever the lensed light is drawn: the lensed-image and
+  // Unlensed views (isLightView), but not Line art, which replaces that raster.
+  if (!isLightView(state.vizMode) || lineArtOn()) {
     html += `
-    <p class="sl-muted-note" style="margin:6px 0 0">Shown in the lensed-image view only${lineArtOn() ? ' (Line art draws its own vectors)' : ', not on the quantity maps'}.</p>`;
+    <p class="sl-muted-note" style="margin:6px 0 0">${lineArtOn() ? 'Not applied to Line art, which draws its own vectors.' : 'Shown in the lensed-image and Unlensed views only, not on the maps.'}</p>`;
   }
   return html;
 }

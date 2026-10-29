@@ -4,69 +4,54 @@ nav_title: "9. Critical curves and caustics"
 order: 10
 ---
 
-**Critical curves** are contours in the image plane where $\det(\partial\boldsymbol{\beta}/\partial\boldsymbol{\theta}) = 0$.
-Sources near a critical curve are highly magnified and stretched into arcs.
-Their pre-images in the source plane are the **caustics**; crossing a caustic changes the image count by two.
+**Critical curves** are the lines on the image where $\det A = 0$, with $A$ the matrix of derivatives of the source position $\boldsymbol{\beta}$ with respect to the image position $\boldsymbol{\theta}$ (<a href="/caustica-documentation/lensing-quantities/#the-lens-mapping-jacobian">§4</a>). The magnification is infinite there, and sources near them are stretched into arcs. The same lines traced back to the source plane are the **caustics**; a source crossing a caustic gains or loses two images. Press **C** to show or hide both. They are computed for z<sub>s</sub> ref (<a href="/caustica-documentation/lensing-quantities/">§4</a>) in four steps.
 
-The computation proceeds in four steps:
-
-1. **Sample a ray grid.** Trace $N \times N$ rays (the **Critical curves** resolution in the Settings tab, default $N = 512$) to the chosen source plane, recording $\boldsymbol{\beta}$ at each point. The grid covers $1.3\times$ the field, so curves near the edge are found in full, or the **FOV buffer** (Settings tab, default 5″) if that is larger. Zoomed in on the caustics, their critical curves can lie well outside the view, and the buffer keeps them on the grid; since the grid size is fixed, a larger buffer makes it coarser at high zoom.
-
-2. **Compute the Jacobian.** At each interior grid point, approximate the $2\times2$ Jacobian $\partial\boldsymbol{\beta}/\partial\boldsymbol{\theta}$ via central finite differences and compute its determinant.
-
-3. **Find zero-crossings.** Apply marching squares: for each $2\times2$ cell, linearly interpolate zero-crossings on edges where the determinant changes sign. Each cell contributes one short segment; adjacent cells chain into smooth curves.
-
-4. **Map to caustics.** Each critical-curve point is traced to the source plane by interpolating from the already-computed $\boldsymbol{\beta}$ grid.
-
+1. **Trace a grid.** Trace $N \times N$ rays to the source plane, with $N$ set by **Critical curves** under **Settings**: 256, 512 (default), 1024 or 2048. The grid spans 1.3 times the FOV, or the **FOV buffer** (**Settings**, default 5″, up to 60″) if that is larger, so curves just outside the view are found in full. When you zoom in on the caustics, their critical curves can lie well outside the view; the buffer keeps them on the grid, at the cost of a coarser grid.
+2. **Compute $\det A$** at each grid point from its neighbours' $\boldsymbol{\beta}$.
+3. **Find where it changes sign.** In each grid cell whose corners have both signs of $\det A$, a short line segment is placed where the linear interpolation between corners is zero (the marching-squares method). The segments join into curves.
+4. **Map to caustics.** Each point of a critical curve is moved to its $\boldsymbol{\beta}$, interpolated from the same grid.
 
 <figure>
   <img class="img-light" src="/images/caustica-docs/crit-light.png" alt="Critical curves and caustics of a compound lens.">
   <img class="img-dark"  src="/images/caustica-docs/crit-dark.png"  alt="Critical curves and caustics of a compound lens.">
-  <figcaption>Critical curves (image plane) and their caustics for a compound lens, toggled with the C key. The extra mass components merge and distort the curves well beyond the simple SIE case. A source crossing a caustic changes the image count by two.</figcaption>
+  <figcaption>Critical curves and caustics of a lens with several mass components.</figcaption>
 </figure>
 
-<div class="doc-note" markdown="1">
-**Note.** Fine features such as cusps are only resolved at higher resolutions.
-</div>
+Small features such as the sharp points of caustics (cusps) need a higher **Critical curves** setting.
 
 ## Tangential and radial curves
 
-On a critical curve one eigenvalue of $A$ is zero and the other equals $\operatorname{tr} A$. A segment is **tangential** when $\operatorname{tr} A > 0$ (for a single plane, $1-\kappa-\gamma = 0$) and **radial** when $\operatorname{tr} A < 0$ ($1-\kappa+\gamma = 0$), and the test holds for multiplane lenses too. Each caustic segment takes the label of its critical segment.
+On a critical curve one of the two eigenvalues of $A$ (the factors by which $A$ stretches its two special directions) is zero, and the other equals $\operatorname{tr} A = A_{11} + A_{22}$. A segment is **tangential** where $\operatorname{tr} A > 0$ and **radial** where $\operatorname{tr} A < 0$. For a single lens plane these are where $1 - \kappa - \gamma = 0$ and $1 - \kappa + \gamma = 0$, with $\kappa$ and $\gamma$ the convergence and shear (<a href="/caustica-documentation/lensing-quantities/">§4</a>); the test also works for several planes. Arcs along a tangential curve are stretched along it, and along a radial curve across it. Each caustic segment takes the type of its critical segment.
 
-With **Curve types** on (View tab, Critical curves section; on by default), radial curves and caustics are dotted and tangential ones solid, each with a legend entry, and **Show** can limit the display to one type. With it off, all curves are solid.
+With **Curve types** on (**View** → **Critical curves**, on by default), radial curves are dotted and tangential ones solid, each with a legend entry, and **Show** can limit the display to one type. With it off, all curves are solid.
 
-A point mass has no radial curve. An SIE's radial critical curve is a tiny loop set by the numerical softening, but its radial caustic, the cut, is full size. An NIE with $r_c > 0$ and an EPL with $\gamma' < 2$ have resolved radial curves. Radial loops under 12 coarse-grid segments are dropped as artefacts of a singular centre.
+A point mass has no radial curve. An SIE's radial critical curve is a tiny loop around its 0.001″ core, but its radial caustic is full size. An NIE and an EPL with $\gamma' < 2$ have resolved radial curves. Radial loops of fewer than 12 segments are dropped, since a singular centre leaves a small spurious loop at any grid size.
 
 ## Line art (vector render mode)
 
-The **Line art** switch in the Colors section replaces the raster (WebGL) lensed image with a flat, minimal **vector** rendering of the lensing structure, drawn entirely on the 2D overlay canvas. It is a style of the **Lensed image** view only: the quantity maps and the source-plane views keep drawing as usual while it is on, so switching to κ shows the κ map, switching back shows the line art again, and in a split a line-art lensed image can sit beside a map (with the line-art group unlinked, the two views can also differ in whether line art is on). The **Save SVG** export follows the main (left) view, so it is offered while that view shows the line-art lensed image. It is meant for clean, poster-style figures: filled and stroked lensed-image outlines, point-source image dots, and (following their own View-tab toggles) critical curves and caustics, in a chosen **palette**. The palettes are fixed looks (independent of the site's light/dark theme): **Default**, **Ink**, **Ink (inv.)**, **Crimson**, **Crimson (inv.)**, **Blueprint**, **Blueprint (inv.)**, **Espresso**, **Mint**, and **Noir**. **Default** is the one line art starts on: the dark-mode page background (`#0d1117`) behind the homepage hero blue (`#93c5fd`) for the images and critical curves, so a fresh line-art view matches the artwork on the front page, with the caustics picked out in the source marker's gold (`#fbbf24`). While line art is on, the section shows its options, palette and colors: below the palette dropdown, a **color picker for each role** (background, image fill, image line, critical, caustic, point image, and the lens / source / hybrid markers) lets you fine-tune any color after choosing a palette; re-selecting a palette resets them. The marker colors also drive the matching "show shape" outlines. Above the palette are a **Fill** toggle that switches between filled shapes and outline-only, a **Smooth** toggle that controls curve smoothing, and a **Fill alpha** box: the opacity of the lensed-image fill, from 0 (outline only) to 1 (solid), defaulting to 0.9 (greyed out while Fill is off). Like the other numeric fields in the app you can type into it or drag left/right across it to scrub. The palette choice, any per-role overrides, and the fill alpha are saved in the config file. The section's **i** button explains what is drawn.
+**Colors** → **Line art** replaces the lensed image with flat vector drawing, for clean figures. It restyles the **Lensed image** view only: quantity maps and source-plane views draw as usual. It draws:
 
-Line art is a **restyle** of the normal overlay, not a stripped-down separate view: the position markers, ruler, scale bar, and legend all remain visible exactly as before (per their own toggles), so switching line art on hides nothing. The raster image layer is simply replaced by the flat palette background plus the vector structure. Those remaining annotations take their color from **Annotation color** below rather than from the palette.
+- the lensed images of **uniform-disc** sources, filled and outlined;
+- **point-source** images, as dots;
+- the critical curves and caustics, following their own toggles.
 
-**Export.** Because line art draws to the overlay, PNG capture and recording pick it up unchanged. The Export tab also offers **Save SVG (line art)** (enabled while line art is on), which re-serialises the same geometry to a resolution-independent SVG document (`<path>` outlines and curves, `<circle>` image dots) for editing in vector tools or printing at any size. The **Background** toggle beside it (on by default) controls whether that document carries the opaque palette-colored backing rectangle; switching it off exports the vector structure on a transparent canvas, ready to drop onto a background of its own.
+Gaussian, exponential and pasted-image sources have no sharp edge and are not drawn. Markers, ruler, scale bar and legend stay as usual, in the **Annotations** colour (below). The background and the observation are not shown, since line art draws its own background.
 
-Only two source types produce clean lines and are drawn in this mode; Gaussian, exponential, and pasted-image sources have no hard edge and are ignored:
+**Controls.** **Fill images** switches between filled shapes and outlines only, **Fill alpha** sets the fill's opacity (0 to 1, default 0.9), and **Smooth** rounds off the curves. **Palette** picks a fixed colour scheme, the same in both themes: **Default** (the site's dark background `#0d1117`, light blue `#93c5fd` images and critical curves, gold `#fbbf24` caustics), **Ink**, **Ink (inv.)**, **Crimson**, **Crimson (inv.)**, **Blueprint**, **Blueprint (inv.)**, **Espresso**, **Mint** or **Noir**. Below it, a colour picker for each role (background, image fill, image line, critical, caustic, point image, and the lens, source and hybrid markers) overrides the palette; choosing a palette again resets them. All of these are saved in configs.
 
-- **Point sources** are their solved image positions, drawn as dots.
-- **Uniform-disc sources** have a hard edge, so their lensed image has a well-defined boundary: the zero level-set of
+**Export.** Line art is drawn on the overlay, so saved images and recordings include it. **Export** → **Save SVG (line art)** saves the same drawing as a vector SVG file, for editing or printing at any size, while the left (or only) view shows line art. Its **Background** toggle (on by default) sets whether the file includes the background colour; off gives a transparent background.
 
-$$g(\boldsymbol{\theta}) = r_\text{ell}\!\left(\boldsymbol{\beta}(\boldsymbol{\theta})\right) - r,$$
+**How the disc outlines are found.** A disc's lensed image is where
 
-where $r_\text{ell}$ is the disc's elliptical radius (Section 6) and $r$ its semi-major-axis radius. This is extracted by marching squares over the **same** $\boldsymbol{\beta}$ grid used for the critical curves (one ray trace feeds both when they are shown together), thresholding $g$ instead of the Jacobian determinant.
+$$g(\boldsymbol{\theta}) = r_\text{ell}\big(\boldsymbol{\beta}(\boldsymbol{\theta})\big) - \sigma \le 0,$$
 
-**Adaptive smoothing.** Near critical curves the magnification diverges, so $g$ is strongly nonlinear and a naive contour looks ragged or breaks up on thin, elongated arcs. Two mechanisms address this without a costly uniform grid:
+with $r_\text{ell}$ the disc's elliptical radius and $\sigma$ its semi-major axis (the **r** control; <a href="/caustica-documentation/source-models/#uniform-disc">§6</a>). Its outline, $g = 0$, is found by marching squares on the same grid as the critical curves (one set of rays serves both). Near critical curves $g$ changes quickly, so a plain contour would look ragged, and two steps fix this:
 
-1. **Per-vertex secant refinement.** Marching squares first places each crossing by linear interpolation of $g$ along a cell edge; a few bounded false-position steps then re-evaluate $g$ (by tracing that ray) and pull the vertex onto the true contour. The cost scales with contour *length* rather than grid area, and the iterations self-concentrate exactly where $g$ bends most, i.e. the high-magnification regions.
-2. **Curvature-aware Chaikin smoothing.** The refined segments are chained into ordered polylines and corner-cut, but vertices whose turn is sharper than a threshold (a genuine cusp) are pinned, so sampling staircase is rounded off while real sharp features are preserved.
-
-The base grid follows the **Critical curves** resolution setting (capped for live responsiveness); the secant refinement supplies the smoothness, so a moderate grid suffices.
+1. **Refinement.** Each outline point is moved onto the true outline by a few extra ray traces along its grid edge. The extra work goes where the outline bends most.
+2. **Smoothing.** The outline is smoothed by repeatedly cutting its corners, except at sharp points (real cusps), which are kept.
 
 ## Annotation color
 
-The **Annotations** row of the Colors section sets the single ink used for the plot furniture that is not tied to a particular object: the scale bar, the legend text, the ruler lines and their measurement labels, the time-delay pills, and the Fermat stationary-point markers and their legend. Object-specific colors (lens / source markers, critical curves, caustics, point-source dots, and every line-art role) are unaffected.
+**Colors** → **Annotations** sets the colour of the scale bar, legend text, ruler lines and labels, time-delay labels, and Fermat markers and their legend. Object markers, critical curves, caustics, point-source dots and line-art colours are not affected. With **Auto** on (the default) it is white in the dark theme and black in the light theme. Picking a colour turns Auto off and keeps that colour, which helps with a light line-art palette on a dark page. Backgrounds behind labels switch between dark and light to contrast with the chosen colour. Saved in configs as `annotAuto` and `annotColor`.
 
-With **Auto** on (the default) the ink snaps to white or black with the page's light / dark theme, giving the white-on-dark and black-on-light annotations the plot has always had. Choosing a color in the picker turns Auto off and pins that color, so annotations can be black on a dark page (or any other color) without switching the whole site theme. Re-checking **Auto** hands control back to the theme; unchecking it by hand pins whatever color was showing, so nothing jumps. Line art is the case this matters most for: a light palette (Ink inv., Mint, Espresso) on a dark page needs a black ink to keep the scale bar and legend readable, and pinning one is how you get it without flipping the whole site to light mode.
-
-The **Legend BG** toggle (Display section, off by default) puts a translucent panel behind the legend and the Fermat image-type legend, so overlays underneath don't run through the text.
-
-The picker takes any color, not just black or white. Halos, label-pill backgrounds and marker backings pick the contrasting member of their pair from the ink's brightness, so a light ink keeps its dark backing and vice versa. Both the Auto switch and the pinned color are saved in the config file (`annotAuto`, `annotColor`); the page theme itself is not, since it is a site-wide preference.
+**View** → **Display** → **Legend BG** (off by default) puts a translucent panel behind the legend so lines underneath do not run through the text.
