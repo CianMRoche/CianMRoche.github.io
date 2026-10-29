@@ -71,7 +71,7 @@ Sign changes of $\boldsymbol{\beta} - (c_x, c_y)$ on a coarse grid of $\boldsymb
 
 ## Pasted image
 
-Select the object and paste a picture with Ctrl+V (Cmd+V), or use **Load image…** in its controls. It is centred on $(c_x, c_y)$, with its height set to the field of view when you load it (later zooming does not resize it). Here $\sigma$ is **Scale**, a multiplier on that size, and $A$ is **Brightness**. There is no $q$, $\varphi$ or **Color**. The picture is sampled bilinearly from a mipmap chain.
+Select the object and paste a picture with Ctrl+V (Cmd+V), or use **Load image…** in its controls. It is centred on $(c_x, c_y)$, with its height set to the field of view when you load it (later zooming does not resize it). Here $\sigma$ is **Scale**, a multiplier on that size, and $A$ is **Brightness**. There is no $q$, $\varphi$ or **Color**. The picture is sampled bilinearly from a mipmap chain. At most four pasted images are drawn at once; any more (the farthest by redshift) are not drawn, and a warning on the image says so.
 
 A pasted image is opaque: its dark pixels hide what is behind them rather than letting the background through (<a href="/caustica-documentation/background-image/">§7</a>). Its coverage $C$ is 1 inside the picture and falls to 0 over a soft border,
 

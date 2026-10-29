@@ -24,7 +24,7 @@ The factor $D_{kj}/D_j$ turns the bending at plane $k$ into a shift in position 
 
 Every object is either a **lens** or a **source**, whatever plane it is on. Only lenses bend rays; sources only emit light. A plane can hold both. The ray's position on a source's plane is that source's $\boldsymbol{\beta}$, where its brightness is evaluated (<a href="/caustica-documentation/source-models/">§6</a>).
 
-A scene can have up to 8 planes, 32 lenses and 32 sources (hidden objects do not count; some GPUs allow fewer). Objects or planes beyond that still appear in the scene but are not drawn, and a warning on the image says how many.
+A scene can have up to 8 planes, 32 lenses and 32 sources, of which 4 can be pasted images (hidden objects do not count; some GPUs allow fewer). Objects or planes beyond that still appear in the scene but are not drawn, and a warning on the image says how many.
 
 <div class="doc-figpair">
   <figure class="figpair-main">
