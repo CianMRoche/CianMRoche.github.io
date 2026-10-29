@@ -61,6 +61,20 @@ Crossing a caustic changes the count by two, so the count is $n_0 + 2k$, where $
 
 In this view sources are hidden and can't be dragged, but lenses can. Critical curves, image dots, time delays, and stretch whiskers are hidden too.
 
+## Source magnification
+
+The **Source magnification** view (key `B`) maps the source plane at the reference $z_s$ by the total magnification a point source at each position would get, summed over all of its images:
+
+$$\mu_\text{tot}(\boldsymbol{\beta}) = \sum_i \lvert\mu(\boldsymbol{\theta}_i)\rvert,$$
+
+the factor by which its combined flux is brightened. Far from the lens it tends to $1$. It rises toward the caustics, formally without limit on them (as the inverse square root of the distance from a fold), and jumps where a caustic adds or removes a pair of images, so the caustics show as sharp bright lines and each multiply-imaged region as a plateau. This is the source-plane counterpart of the **Magnification** map, which is the same quantity read at a point of the image instead; it is the standard object of quasar microlensing ("magnification patterns", through which a moving source traces its light curve) and, as the area of source plane above a given $\mu_\text{tot}$, of the magnification corrections and lensing cross-sections of cluster and statistical lensing. For the singular isothermal sphere it is $2\theta_E/\beta$ inside the Einstein radius and $1 + \theta_E/\beta$ outside, which the view reproduces to about $0.2\%$ on average, away from the very centre and a thin band just inside $\theta_E$ where the second image is faint and sits on the singular centre.
+
+It is computed with the delensed view's mesh (<a href="/caustica-documentation/background-image/">§7</a>) and no picture: the image plane, over a square three times the field of view and centred on it, is traced into the source plane on a $768 \times 768$ grid, and every triangle adds its $\lvert\mu\rvert$ to the source-plane pixels it covers, so each pixel sums the $\lvert\mu\rvert$ of every sheet over it. The same limits apply: images outside that square are missed, each image's $\lvert\mu\rvert$ is capped at $100$, images below $\lvert\mu\rvert = 0.05$ are left out, and the caustics are as sharp as the mesh allows. The map is for a point source; an extended source sees it averaged over its own profile, so its own magnification stays finite even across a caustic. The colour mapping is set in the Colors section like the image-plane maps, with a log scale from $1$ to $30$ by default.
+
+## Unlensed
+
+The **Unlensed** view (key `S`) shows every source as it really is: each plane's sources at their own positions, drawn exactly as in the lensed-image view but with every lens left out, so nothing is deflected or magnified. Beside the lensed image it shows what the lensing does to them. Point sources appear as one dot each, at their positions. The background and the observation are not drawn, as they show the lensed sky; the light follows the lensed image's colour mapping, and the instrument model too if one is on. Like the other source-plane views it hides the image-plane overlays (critical curves, image dots, time delays, stretch whiskers) and can show the caustics at $z_s$.
+
 ## Distance weighting and the effective shear
 
 In the multiplane recursion, a lens at plane $k$ contributes to $A$ with weight $D_{kj}/D_j$, where $j$ indexes the source plane.

@@ -523,8 +523,11 @@ function bgImageActive() {
 // their own theming (see style.css). PNG capture and recording replicate the
 // inversion, and the shader pre-inverts the background image to cancel it, so
 // all three read this one test.
+// The views that show light (the lensed image, and the sources with no lensing),
+// as against the quantity maps, which carry their own theming.
+function isLightView(mode) { return mode === 0 || mode === 11; }
 function glCanvasInverted() {
-  return state.vizMode === 0 &&
+  return isLightView(state.vizMode) &&
          document.documentElement.getAttribute('data-theme') !== 'dark';
 }
 
@@ -537,6 +540,7 @@ const DEFAULT_VIZ_SCALE = {
   2: { scale: 0, param: 0.5, min: 0, max: 0.5, palette: 0 },  // shear γ
   3: { scale: 4, param: 0.5, min: 1, max: 30,  palette: 0 },  // magnification |μ| (log)
   5: { scale: 0, param: 0.5, min: 0, max: 2,   palette: 0 },  // deflection |α| (arcsec)
+  10: { scale: 4, param: 0.5, min: 1, max: 30, palette: 0 },  // source magnification Σ|μ| (log)
 };
 const VIZ_PALETTE_NAMES = ['Default', 'Viridis', 'Inferno', 'Plasma', 'Turbo', 'Grayscale'];
 // Colour-bar CSS gradients per palette. Index 0 is theme-dependent (see _updateColorbar).
@@ -554,7 +558,7 @@ function _cloneVizScaleDefaults() {
   return o;
 }
 // The viz modes that use the colour-mapping warp (Fermat φ=6 uses contours, not this).
-function vizModeHasScale(m) { return m === 0 || m === 1 || m === 2 || m === 3 || m === 5; }
+function vizModeHasScale(m) { return m === 0 || m === 1 || m === 2 || m === 3 || m === 5 || m === 10; }
 // Settings { scale, param, min, max } for a given mode (defaults if unset).
 function vizScaleFor(mode) {
   return (state.vizScale && state.vizScale[mode]) || DEFAULT_VIZ_SCALE[mode] || DEFAULT_VIZ_SCALE[0];
@@ -966,7 +970,7 @@ function configToYaml() {
   let y = `fov: ${state.fov}\nzMax: ${state.zMax}\n`;
   y += `vizMode: ${state.vizMode}\n`;
   // Per-mode colour mapping: "scale param min max palette".
-  for (const m of [0, 1, 2, 3, 5]) {
+  for (const m of [0, 1, 2, 3, 5, 10]) {
     const v = vizScaleFor(m);
     y += `vizScale${m}: ${v.scale} ${v.param} ${v.min} ${v.max} ${v.palette ?? 0}\n`;
   }
@@ -1273,7 +1277,7 @@ function loadConfigFromYaml(yaml) {
     state.vizMode = (typeof cfg.vizMode === 'number') ? cfg.vizMode : CONFIG_DEFAULTS.vizMode;
     // Per-mode colour mapping: "scale param min max" strings.
     state.vizScale = _cloneVizScaleDefaults();
-    for (const m of [0, 1, 2, 3, 5]) {
+    for (const m of [0, 1, 2, 3, 5, 10]) {
       const raw = cfg[`vizScale${m}`];
       if (typeof raw === 'string') {
         const [scale, param, min, max, palette] = raw.trim().split(/\s+/).map(Number);
@@ -1398,7 +1402,7 @@ function loadConfigFromYaml(yaml) {
     if (typeof cfg.obsCard === 'boolean') _obsCardOpen = cfg.obsCard;
     const _vizSel = document.getElementById('sl-viz-mode');
     if (_vizSel) _vizSel.value = state.vizMode;
-    glCanvas?.classList.toggle('sl-viz-active', state.vizMode !== 0);
+    glCanvas?.classList.toggle('sl-viz-active', !isLightView(state.vizMode));
     invalidateDistances();
     state.rulerActive = false; state.rulers = []; state.rulerDraft = null;  // measurements are not part of a config
     resetHistory();  // a freshly loaded scene is a new document; don't undo into the previous one
@@ -2104,7 +2108,9 @@ function buildDOM() {
                 <option value="5">Deflection |α|</option>
                 <option value="6">Fermat potential φ</option>
                 <option value="7">Parity</option>
+                <option value="11">Unlensed</option>
                 <option value="8">Image number</option>
+                <option value="10">Source magnification</option>
                 <option value="9">Delensed image</option>
               </select>
             </div>
@@ -2796,7 +2802,7 @@ function attachHandlers() {
       return;
     }
     // Visualization mode shortcuts: toggle on/off; pressing the same key again returns to image.
-    const VIZ_KEYS = { k: 1, K: 1, g: 2, G: 2, m: 3, M: 3, a: 5, A: 5, i: 0, I: 0, t: 6, T: 6, p: 7, P: 7, n: 8, N: 8, u: 9, U: 9 };
+    const VIZ_KEYS = { k: 1, K: 1, g: 2, G: 2, m: 3, M: 3, a: 5, A: 5, i: 0, I: 0, t: 6, T: 6, p: 7, P: 7, n: 8, N: 8, u: 9, U: 9, b: 10, B: 10, s: 11, S: 11 };
     if (e.key in VIZ_KEYS) {
       setVizMode(VIZ_KEYS[e.key]);
       return;
@@ -2954,7 +2960,8 @@ const INSPECTOR_CATS = [
 const _CAT_TITLES = { object: 'Object', view: 'View', colors: 'Colors', background: 'Background image',
                       instrument: 'Instrument', export: 'Export', settings: 'Settings' };
 const _VIZ_NAMES  = { 0: 'Lensed image', 1: 'Convergence κ', 2: 'Shear γ', 3: 'Magnification |μ|', 5: 'Deflection |α|',
-                      6: 'Fermat potential φ', 7: 'Parity', 8: 'Image number', 9: 'Delensed image' };
+                      6: 'Fermat potential φ', 7: 'Parity', 8: 'Image number', 9: 'Delensed image',
+                      10: 'Source magnification', 11: 'Unlensed' };
 let activeCat = 'object';
 
 function setInspectorCat(cat) {
@@ -3549,9 +3556,9 @@ let   _pane1Fermat = null;     // pane 1's Fermat stationary points, for its ove
 let   _overlayCtx2 = null;
 let   _dragTab = null;         // { p, i } while a tab is being dragged
 
-const _VIZ_KEY_OF = { 0: 'I', 1: 'K', 2: 'G', 3: 'M', 5: 'A', 6: 'T', 7: 'P', 8: 'N', 9: 'U' };
+const _VIZ_KEY_OF = { 0: 'I', 1: 'K', 2: 'G', 3: 'M', 5: 'A', 6: 'T', 7: 'P', 8: 'N', 9: 'U', 10: 'B', 11: 'S' };
 // The views that show the source plane rather than the sky as observed.
-const SOURCE_PLANE_VIEWS = [8, 9];
+const SOURCE_PLANE_VIEWS = [11, 8, 10, 9];   // in menu order: unlensed, image number, source magnification, delensed
 function isSourcePlaneView(mode) { return SOURCE_PLANE_VIEWS.includes(mode); }
 const _VIEW_GROUPS = [['Image plane', [0, 1, 2, 3, 5, 6, 7]], ['Source plane', SOURCE_PLANE_VIEWS]];
 
@@ -4077,7 +4084,7 @@ function _copyGLToPane1() {
   const ctx = c2.getContext('2d');
   ctx.clearRect(0, 0, c2.width, c2.height);
   if (!lineArtOn()) ctx.drawImage(glCanvas, 0, 0);   // line art paints its own background on the overlay
-  c2.classList.toggle('sl-viz-active', state.vizMode !== 0);
+  c2.classList.toggle('sl-viz-active', !isLightView(state.vizMode));
 }
 
 // The overlay of every visible pane: pane 1's first, so pane 0's computed
@@ -4266,7 +4273,7 @@ function setVizMode(mode) {
 
 // Step to the previous/next visualization mode, wrapping around. The order
 // matches the on-canvas dropdown (image, κ, γ, |μ|, |α|, Fermat φ).
-const VIZ_CYCLE = [0, 1, 2, 3, 5, 6, 7, 8, 9];
+const VIZ_CYCLE = [0, 1, 2, 3, 5, 6, 7, 11, 8, 10, 9];
 function cycleVizMode(dir) {
   const i = VIZ_CYCLE.indexOf(state.vizMode);
   setVizMode(VIZ_CYCLE[((i < 0 ? 0 : i) + dir + VIZ_CYCLE.length) % VIZ_CYCLE.length]);
@@ -4359,6 +4366,8 @@ const SHORTCUTS = [
   ['P', 'Parity map (image types I / II / III)'],
   ['N', 'Image number map (source plane)'],
   ['U', 'Delensed image: the observation traced back to the source plane'],
+  ['S', 'Unlensed: every source as it is, with no lensing'],
+  ['B', 'Source magnification: total magnification of a source at each position'],
   ['4', 'Toggle the Mask tool (while there is an observation)'],
   ['H', 'Hide / show the selected object'],
   ['O', 'Clear all objects from the selected plane'],
@@ -6835,6 +6844,31 @@ function renderViewPanel() {
           </div>
         </div>
       </div>` : ''}
+      ${state.vizMode === 10 ? `
+      <div class="sl-hybrid-section">
+        <div class="sl-view-hdr">
+          <span class="sl-panel-title" style="flex:1">Source magnification</span>
+          ${infoSection('sl-srcmag-info', `
+            For a point source at each position in the source plane at <b>z<sub>s</sub> ref</b>, the sum of |μ| over all of its images: how much brighter it would look in total. It rises toward the caustics (formally without limit on them) and jumps where a caustic adds or removes a pair of images.<br><br>
+            It is computed by tracing the image plane, over a square 3 times the field of view, into the source plane as a mesh: every image-plane triangle adds its |μ| to the source-plane pixels it covers. Images outside that square are missed, each image's |μ| is capped at 100, and images fainter than |μ| = 0.05 are left out, so the caustics come out as sharp as the mesh allows rather than infinite.<br><br>
+            An extended source sees this map averaged over its own size. The colour scale is set under <b>Colors</b> (log by default).`)}
+        </div>
+        <div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
+          <p class="sl-muted-note" style="margin:0">Total magnification Σ|μ| of a point source at each position, at z<sub>s</sub> ref = ${effectiveCritZs().toFixed(2)}. Bright lines are the caustics.</p>
+        </div>
+      </div>` : ''}
+      ${state.vizMode === 11 ? `
+      <div class="sl-hybrid-section">
+        <div class="sl-view-hdr">
+          <span class="sl-panel-title" style="flex:1">Unlensed</span>
+          ${infoSection('sl-unlensed-info', `
+            Every source as it really is: each plane's sources drawn at their own positions, with every lens left out, so nothing is deflected or magnified. Beside the lensed image it shows what the lensing does. Point sources show as one dot each, and the caustics (at <b>z<sub>s</sub> ref</b>) can be drawn over it to see which sources sit near them.<br><br>
+            The light is coloured exactly as in the <b>Lensed image</b> view (its brightness stretch under <b>Colors</b>, and the instrument model if one is on). The background and the observation are not drawn: they show the lensed sky.`)}
+        </div>
+        <div class="sl-hybrid-body" style="display:block;padding:6px 2px 2px">
+          <p class="sl-muted-note" style="margin:0">The sources with no lensing, at their true positions.</p>
+        </div>
+      </div>` : ''}
       </div>
     </div>`;
 
@@ -8116,7 +8150,7 @@ function _drawOverlayPane() {
   // keeps them, since a source marker sits at its own source-plane position and can
   // be laid over the reconstruction. Line art replaces the raster view, so it keeps
   // its usual overlay.
-  const _srcPlaneView = state.vizMode === 8 || state.vizMode === 9;
+  const _srcPlaneView = isSourcePlaneView(state.vizMode);
   const _imgNumView   = state.vizMode === 8;
   // The hide-overlays master switch (View tab) suppresses annotations for a clean
   // plot; point-source image circles stay (they ARE the lensed light), and critical
@@ -8150,10 +8184,10 @@ function _drawOverlayPane() {
   if (_imgNumView && state.dist) drawImageNumberGrid(Wl, Hl);
 
   // Delensed view with nothing to delens: say where the input goes, since the
-  // panel is otherwise just an empty field.
-  if (_srcPlaneView && !_imgNumView && !hideOv) {
-    const msg = renderer && !renderer.delensSupported ? 'The delensed view needs WebGL2 float render targets'
-              : !state.obsCanvas ? 'Add an observation in the Observation panel' : '';
+  // panel is otherwise just an empty field. Both mesh views need float targets.
+  if ((state.vizMode === 9 || state.vizMode === 10) && !hideOv) {
+    const msg = renderer && !renderer.delensSupported ? `This view needs WebGL2 float render targets`
+              : state.vizMode === 9 && !state.obsCanvas ? 'Add an observation in the Observation panel' : '';
     if (msg) {
       overlayCtx.save();
       _pillLabel(overlayCtx, msg, Wl / 2, Hl / 2, window.innerWidth <= 640 ? 12 : 14);
@@ -8174,9 +8208,11 @@ function _drawOverlayPane() {
   for (const plane of state.planes) {
     for (const obj of plane.objects) {
       if (obj.type !== 'source' || obj.model !== 'pointsource' || obj.hidden) continue;
-      const imagePositions = findPointSourceImages(obj, plane);
-      for (const [tx, ty] of imagePositions) _psAll.push({ src: obj.id, x: tx, y: ty });
-      if (_srcPlaneView) continue;   // image positions mean nothing on the source-plane map
+      // Unlensed, a point source is its one dot at its own position.
+      const unlensedView = state.vizMode === 11;
+      const imagePositions = unlensedView ? [[obj.cx, obj.cy]] : findPointSourceImages(obj, plane);
+      if (!unlensedView) for (const [tx, ty] of imagePositions) _psAll.push({ src: obj.id, x: tx, y: ty });
+      if (_srcPlaneView && !unlensedView) continue;   // image positions mean nothing on the source-plane map
       // In the parity view the dot must be big enough to carry its +/− sign.
       const r_px = Math.max((obj.params.sigma ?? 0.05) / state.fov * Wl, _parityDots ? 7 : 2.5);
       const dark = document.documentElement.getAttribute('data-theme') === 'dark';
@@ -8831,6 +8867,7 @@ const _VIZ_COLORBAR = {
   2: ['γ',   ''],
   3: ['|μ|', ''],
   5: ['|α|', '″'],
+  10: ['Σ|μ|', ''],
 };
 
 // Format a colorbar limit compactly — at most 2 digits after the decimal point.
@@ -9056,7 +9093,7 @@ function _doRedraw() {
   _withPane(0, () => {
     syncBackdrop(); syncDetector();
     _renderGL(sorted, isDark);
-    glCanvas.classList.toggle('sl-viz-active', state.vizMode !== 0);
+    glCanvas.classList.toggle('sl-viz-active', !isLightView(state.vizMode));
     _updateColorbar();
   });
   for (const plane of state.planes) redrawPlaneCanvas(plane);
@@ -9079,6 +9116,17 @@ function _renderGL(sorted, isDark) {
   if (lineArtOn()) {
     // Line-art mode draws everything as vectors on the overlay; skip the raster GL
     // pass entirely (the opaque overlay background covers the GL canvas).
+    state.fermatPoints = null;
+    state.saddlePhis = [];
+  } else if (state.vizMode === 11) {
+    // Unlensed: every source's own light where it really is, as though no lens
+    // were there (the lensed-image rendering with the lenses left out), and no
+    // background or observation, which are pictures of the lensed sky.
+    const unlensed = sorted.map(p => ({ ...p, objects: p.objects.filter(o => o.type !== 'lens') }));
+    const keepBg = renderer.bgOpts, keepObs = renderer.obsOpts;
+    renderer.bgOpts = null; renderer.obsOpts = null;
+    try { renderer.setScene(unlensed, state.dist, state.fov, activeVizSettings(0), 0, 0, isDark, [], [0, 0]); }
+    finally { renderer.bgOpts = keepBg; renderer.obsOpts = keepObs; }
     state.fermatPoints = null;
     state.saddlePhis = [];
   } else if (state.vizMode !== 0) {
@@ -9156,13 +9204,7 @@ function _captureSnapshot() {
   syncBackdrop(); syncDetector();
   if (renderer && state.dist) {
     const isDark  = document.documentElement.getAttribute('data-theme') === 'dark' ? 1 : 0;
-    const sorted  = [...state.planes].sort((a, b) => a.z - b.z);
-    if (state.vizMode !== 0) {
-      const { planes, dist, vizSrcIdx, fermatBeta } = vizArgs(sorted);
-      renderer.setScene(planes, dist, state.fov, activeVizSettings(), state.vizMode, vizSrcIdx, isDark, state.saddlePhis ?? [], fermatBeta);
-    } else {
-      renderer.setScene(sorted, state.dist, state.fov, activeVizSettings(0), 0, 0, isDark);
-    }
+    _renderGL([...state.planes].sort((a, b) => a.z - b.z), isDark);
     drawOverlay();
   }
   buildCompositeCanvas().toBlob(blob => downloadBlob(blob, 'caustica.png'), 'image/png');
@@ -9367,19 +9409,7 @@ function startProgrammaticRecording() {
     // Recordings capture the left view, so the frame is drawn as that view.
     if (renderer && state.dist) _withPane(0, () => {
       const isDark   = document.documentElement.getAttribute('data-theme') === 'dark' ? 1 : 0;
-      const sorted   = [...state.planes].sort((a, b) => a.z - b.z);
-      if (state.vizMode !== 0) {
-        const { planes, dist, vizSrcIdx, fermatBeta } = vizArgs(sorted);
-        let saddlePhis = state.saddlePhis ?? [];
-        if (state.vizMode === 6) {
-          state.fermatPoints = findStationaryPoints(planes, dist, vizSrcIdx, state.fov, fermatBeta);
-          saddlePhis = state.fermatPoints.filter(p => p.type === 2).map(p => p.phiVal);
-          state.saddlePhis = saddlePhis;
-        }
-        renderer.setScene(planes, dist, state.fov, activeVizSettings(), state.vizMode, vizSrcIdx, isDark, saddlePhis, fermatBeta);
-      } else {
-        renderer.setScene(sorted, state.dist, state.fov, activeVizSettings(0), 0, 0, isDark);
-      }
+      _renderGL([...state.planes].sort((a, b) => a.z - b.z), isDark);
       const savedCrit = state.showCritCurves, savedCaus = state.showCaustics;
       if (!recState.useGif) { state.showCritCurves = false; state.showCaustics = false; }
       _drawOverlayPane();

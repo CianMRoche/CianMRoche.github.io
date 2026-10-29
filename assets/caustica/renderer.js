@@ -67,7 +67,8 @@ uniform float u_vizScaleParam; // γ for power, softening a for asinh
 uniform float u_vizMin;        // lower data limit mapped to colorbar 0
 uniform float u_vizMax;        // upper data limit mapped to colorbar 1
 uniform int   u_colormap;      // palette: 0=default 1=viridis 2=inferno 3=plasma 4=turbo 5=gray
-uniform int   u_vizMode;      // 0=surface brightness, 1=κ, 2=γ, 3=|μ|, 4=signed μ, 5=|α|, 6=φ (Fermat), 7=parity, 8=image number, 9=delensed (β grid pass)
+uniform int   u_vizMode;      // 0=surface brightness, 1=κ, 2=γ, 3=|μ|, 4=signed μ, 5=|α|, 6=φ (Fermat), 7=parity, 8=image number, 9=delensed (β grid pass), 10=source magnification (colour pass)
+uniform sampler2D u_magAcc;   // source magnification: Σ|μ| per canvas pixel, in .a (mode 10)
 uniform int   u_vizSrcIdx;    // target plane index for visualization Jacobian
 uniform vec2  u_traceSpan;    // delensed β pass: image-plane field covered by the target (arcsec, per axis)
 uniform vec2  u_traceOff;     // delensed β pass: the field's centre on the sky (the picture's, arcsec)
@@ -869,6 +870,16 @@ void main() {
   // |μ|, and picks the texture's mip level from w. The field is set per axis
   // because the grid follows the observation's aspect ratio (u_res is the
   // grid here). The Jacobian is by central differences with a step of a quarter node.
+  // Source magnification, last pass: the mesh pass summed |μ| over every image of
+  // each source-plane pixel into the accumulator; colour it like the |μ| map. A
+  // pixel no part of the mapped field reaches is left as the empty field.
+  if (u_vizMode == 10) {
+    float m = texelFetch(u_magAcc, ivec2(gl_FragCoord.xy), 0).a;
+    fragColor = vec4(m > 0.0 ? applyColormap(vizWarp(m, u_vizMin, u_vizMax, u_vizScale, u_vizScaleParam))
+                             : (u_isDark == 1 ? vec3(0.0) : vec3(1.0)), 1.0);
+    return;
+  }
+
   if (u_vizMode == 9) {
     vec2 th = (v_uv - 0.5) * u_traceSpan + u_traceOff;
     vec2 h  = 0.25 * u_traceSpan / u_res;
@@ -1007,6 +1018,21 @@ void main() {
 // and are averaged, see DELENS_MESH_FRAG. Drawn without attributes: gl_VertexID
 // picks the cell and the corner, two triangles per cell.
 const DELENS_GRID = 512;   // β-grid nodes along the image's long axis
+// Source magnification: the image-plane field mapped (a square this many times the
+// view, so the images of a source in view are inside it) and its nodes per side.
+const SRCMAG_SPAN = 3;
+const SRCMAG_GRID = 768;
+// Triangles with a corner below DELENS_MU_MIN are dropped whole. Those are the most demagnified
+// regions, chiefly around a singular lens centre, which map a few image pixels
+// across a wide patch of the source plane; their weight is already small, but
+// where nothing else covers a source pixel they would otherwise fill it with a
+// smear of whatever sits at the lens centre. Dropping the whole triangle, rather
+// than its fragments below the cut, also drops one whose corner nearest a
+// singular centre came out of the finite-difference Jacobian with a wild |μ|.
+// The cap keeps the thin, nearly
+// degenerate triangles that straddle a critical curve from swamping a pixel.
+const DELENS_MU_MIN = 0.05;
+const DELENS_MU_MAX = 100.0;
 const DELENS_MESH_VERT =
 `#version 300 es
 precision highp float;
@@ -1024,7 +1050,8 @@ void main() {
   int cell = gl_VertexID / 6;
   int k    = gl_VertexID - cell * 6;
   int cols = u_nodes.x - 1;
-  ivec2 c  = ivec2(cell - (cell / cols) * cols, cell / cols);
+  ivec2 base = ivec2(cell - (cell / cols) * cols, cell / cols);
+  ivec2 c  = base;
   // Corners: (0,0) (1,0) (0,1) | (0,1) (1,0) (1,1).
   if (k == 1 || k == 4) c.x += 1;
   else if (k == 2 || k == 3) c.y += 1;
@@ -1032,7 +1059,26 @@ void main() {
   vec4 node = texelFetch(u_beta, c, 0);
   v_img   = vec2(c) / vec2(u_nodes - 1);
   v_theta = (v_img - 0.5) * 2.0 * u_half + u_off;
-  v_mu    = node.z;
+  // A triangle the lens tears across the source plane, around a singular centre
+  // where neighbouring rays land on opposite sides, covers far more of it than its
+  // corners' |μ| allow (a real one, even across a critical curve, stays within a
+  // factor of about 2). A triangle with a corner below DELENS_MU_MIN is dropped
+  // as well. Every vertex of the triangle reaches the same verdict, and a dropped
+  // one's fragments carry v_mu < 0, which the fragment shader discards.
+  bool upper = k >= 3;
+  vec4 na = texelFetch(u_beta, base + (upper ? ivec2(0, 1) : ivec2(0, 0)), 0);
+  vec4 nb = texelFetch(u_beta, base + ivec2(1, 0), 0);
+  vec4 nc = texelFetch(u_beta, base + (upper ? ivec2(1, 1) : ivec2(0, 1)), 0);
+  float areaB  = 0.5 * abs((nb.x - na.x) * (nc.y - na.y) - (nc.x - na.x) * (nb.y - na.y));
+  vec2  cellT  = 2.0 * u_half / vec2(u_nodes - 1);
+  float expect = (1.0 / na.z + 1.0 / nb.z + 1.0 / nc.z) / 3.0 * 0.5 * cellT.x * cellT.y;
+  bool  torn   = areaB > 20.0 * expect + 1.0e-12;
+  bool  faint  = min(na.z, min(nb.z, nc.z)) < ${DELENS_MU_MIN.toFixed(4)};
+  // A corner's |μ| is held to 20 times what the triangle's own areas imply, which
+  // tames a wild finite-difference value at a node beside a singular centre but
+  // leaves a triangle across a critical curve (large implied |μ| too) untouched.
+  float muTri  = 0.5 * cellT.x * cellT.y / max(areaB, 1.0e-12);
+  v_mu    = torn || faint ? -1.0 : min(node.z, 20.0 * muTri);
   v_minor = node.w;
   gl_Position = vec4(node.xy / (0.5 * u_fov), 0.0, 1.0);
 }`;
@@ -1046,14 +1092,6 @@ void main() {
 // derivatives: the cells are often smaller than a pixel (most of all on a
 // magnified arc), where the rasteriser's sub-pixel vertex snapping makes those
 // derivatives noisy by tens of percent.
-// Triangles below DELENS_MU_MIN are dropped. Those are the most demagnified
-// regions, chiefly around a singular lens centre, which map a few image pixels
-// across a wide patch of the source plane; their weight is already small, but
-// where nothing else covers a source pixel they would otherwise fill it with a
-// smear of whatever sits at the lens centre. The cap keeps the thin, nearly
-// degenerate triangles that straddle a critical curve from swamping a pixel.
-const DELENS_MU_MIN = 0.05;
-const DELENS_MU_MAX = 100.0;
 // Masks (the Delensed view's mask objects) cut elliptical patches out of the
 // observed picture before it is delensed, e.g. over the lens galaxy, whose own
 // light would otherwise be spread across the source plane. They are tested at
@@ -1069,6 +1107,7 @@ in  float v_mu;
 in  float v_minor;
 out vec4 fragColor;
 uniform sampler2D u_img;
+uniform int   u_magOnly;    // 1: source magnification, accumulate |μ| alone (no picture, no masks)
 uniform float u_pixRatio;
 uniform float u_bright;     // the backdrop's Brightness
 uniform vec3  u_empty;      // the empty field, which Edge blend fades the picture into
@@ -1088,6 +1127,7 @@ void main() {
   float lod = log2(max(u_pixRatio * v_minor, 1.0));
   vec3 col = textureLod(u_img, clamp(uv, 0.0, 1.0), lod).rgb;
   if (v_mu < ${DELENS_MU_MIN.toFixed(4)}) discard;
+  if (u_magOnly == 1) { fragColor = vec4(0.0, 0.0, 0.0, min(v_mu, ${DELENS_MU_MAX.toFixed(1)})); return; }
   // Same elliptical radius as the analytic sources: r is the semi-major axis.
   for (int i = 0; i < ${MAX_MASKS}; i++) {
     if (i >= u_numMasks) break;
@@ -1499,7 +1539,7 @@ export class Renderer {
     // Likewise the delensed view's targets, created here before any of the scene's
     // textures are bound: _ensureFbo binds a target's texture on the active unit,
     // and left on a unit the main program samples it would be a feedback loop.
-    const delens    = vizMode === 9 ? this._delensTargets() : null;
+    const delens    = vizMode === 9 ? this._delensTargets() : vizMode === 10 ? this._srcMagTargets() : null;
     const renderFov = det?.applied ? det.fovFbo : fovArcsec;
     const outW      = scene ? scene.w : this.canvas.width;
     const outH      = scene ? scene.h : this.canvas.height;
@@ -1705,7 +1745,13 @@ export class Renderer {
     // Set whether or not a picture is loaded: it is the field behind everything.
     gl.uniform3fv(_locs.u_fieldColor, this.fieldColor ?? [0, 0, 0]);
 
-    if (vizMode === 9) { this._drawDelensed(delens, fovArcsec, isDark); return; }
+    // The source magnification's accumulator, on its own unit (the dummy otherwise).
+    gl.activeTexture(gl.TEXTURE0 + MAX_PASTED + 2);
+    gl.bindTexture(gl.TEXTURE_2D, this._dummyTex);
+    gl.uniform1i(_locs.u_magAcc, MAX_PASTED + 2);
+
+    if (vizMode === 9)  { this._drawDelensed(delens, fovArcsec, isDark); return; }
+    if (vizMode === 10) { this._drawSourceMag(delens, fovArcsec, isDark); return; }
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
 
@@ -1756,7 +1802,7 @@ export class Renderer {
       mesh: {
         u_beta: m('u_beta'), u_nodes: m('u_nodes'), u_half: m('u_half'), u_off: m('u_off'), u_fov: m('u_fov'),
         u_img:  m('u_img'),  u_pixRatio: m('u_pixRatio'),
-        u_bright: m('u_bright'), u_empty: m('u_empty'), u_feather: m('u_feather'),
+        u_bright: m('u_bright'), u_empty: m('u_empty'), u_feather: m('u_feather'), u_magOnly: m('u_magOnly'),
         u_numMasks: m('u_numMasks'), u_mask: m('u_mask'), u_maskRot: m('u_maskRot'),
       },
       resolve: {
@@ -1795,6 +1841,99 @@ export class Renderer {
     }
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     return t;
+  }
+
+  // The source magnification's targets: a square β grid over SRCMAG_SPAN times the
+  // view, and a canvas-sized accumulator. Null without float render targets.
+  _srcMagTargets() {
+    if (!this.delensSupported) return null;
+    const N = SRCMAG_GRID;
+    const t = {
+      N,
+      beta: this._ensureFbo('srcMagBeta', N, N, 'rgba32f'),
+      acc:  this._ensureFbo('srcMagAcc', this.canvas.width, this.canvas.height, 'rgba16f'),
+    };
+    const { gl } = this;
+    for (const f of [t.beta, t.acc]) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, f.fb);
+      if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+        this._delensOk = false;
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        return null;
+      }
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return t;
+  }
+
+  // Source magnification: the total magnification Σ|μ| a point source would get at
+  // each source-plane position. The delensed view's mesh machinery does the work:
+  // the image plane (SRCMAG_SPAN times the view, centred) is traced into the source
+  // plane as a triangle mesh, and every triangle adds its |μ| (capped at
+  // DELENS_MU_MAX, dropped below DELENS_MU_MIN) to the pixels it covers, so each
+  // pixel sums the |μ| of every image of its source position. Called from _draw()
+  // with the main program bound and the scene's uniforms set; the last pass goes
+  // back through the main program (mode 10) to colour the sum with the view's
+  // scale and palette.
+  _drawSourceMag(t, fovArcsec, isDark) {
+    const { gl } = this;
+    const W = this.canvas.width, H = this.canvas.height;
+    const empty = isDark ? [0, 0, 0] : [1, 1, 1];
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, W, H);
+    if (!t) {
+      gl.clearColor(empty[0], empty[1], empty[2], 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      return;
+    }
+    const { N, beta, acc } = t;
+    const span = SRCMAG_SPAN * fovArcsec;
+
+    // β pass (the delensed view's, mode 9) over the square field.
+    gl.bindFramebuffer(gl.FRAMEBUFFER, beta.fb);
+    gl.viewport(0, 0, N, N);
+    gl.uniform1i(this._locs.u_vizMode, 9);
+    gl.uniform2f(this._locs.u_traceSpan, span * N / (N - 1), span * N / (N - 1));
+    gl.uniform2f(this._locs.u_traceOff, 0, 0);
+    gl.uniform2f(this._locs.u_res, N, N);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+    // Mesh pass: |μ| summed per pixel.
+    const d = this._initDelens();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, acc.fb);
+    gl.viewport(0, 0, W, H);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.useProgram(d.meshProg);
+    gl.bindVertexArray(d.vao);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, beta.tex);
+    gl.uniform1i(d.mesh.u_beta, 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this._dummyTex);
+    gl.uniform1i(d.mesh.u_img, 1);
+    gl.uniform1i(d.mesh.u_magOnly, 1);
+    gl.uniform2i(d.mesh.u_nodes, N, N);
+    gl.uniform2f(d.mesh.u_half, span / 2, span / 2);
+    gl.uniform2f(d.mesh.u_off, 0, 0);
+    gl.uniform1f(d.mesh.u_fov, fovArcsec);
+    gl.uniform1i(d.mesh.u_numMasks, 0);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE);
+    gl.drawArrays(gl.TRIANGLES, 0, 6 * (N - 1) * (N - 1));
+    gl.disable(gl.BLEND);
+    gl.bindVertexArray(null);
+    gl.uniform1i(d.mesh.u_magOnly, 0);
+
+    // Colour pass through the main program.
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, W, H);
+    gl.useProgram(this._prog);
+    gl.activeTexture(gl.TEXTURE0 + MAX_PASTED + 2);
+    gl.bindTexture(gl.TEXTURE_2D, acc.tex);
+    gl.uniform1i(this._locs.u_vizMode, 10);
+    this._drawQuad(this._locs.a_pos);
+    gl.bindTexture(gl.TEXTURE_2D, this._dummyTex);   // nothing left bound that a later pass draws into
   }
 
   // Delensed view. Called from _draw() with the main program bound and the whole
@@ -1929,6 +2068,7 @@ export class Renderer {
       u_vizMax:        u('u_vizMax'),
       u_colormap:      u('u_colormap'),
       u_vizMode:      u('u_vizMode'),
+      u_magAcc:       u('u_magAcc'),
       u_vizSrcIdx:    u('u_vizSrcIdx'),
       u_traceSpan:    u('u_traceSpan'),
       u_traceOff:     u('u_traceOff'),

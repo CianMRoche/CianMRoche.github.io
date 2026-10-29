@@ -18,6 +18,8 @@ order: 1
 | `P` | Parity map |
 | `N` | Image number map |
 | `U` | Delensed image: the observation traced back to the source plane (<a href="/caustica-documentation/background-image/">§7</a>) |
+| `S` | Unlensed: every source as it is, with no lensing (<a href="/caustica-documentation/lensing-quantities/">§4</a>) |
+| `B` | Source magnification: the total magnification of a point source at each position (<a href="/caustica-documentation/lensing-quantities/">§4</a>) |
 | `H` | Hide / show the selected object |
 | `O` | Clear all objects from the selected plane |
 | `X` | Delete the selected plane |
