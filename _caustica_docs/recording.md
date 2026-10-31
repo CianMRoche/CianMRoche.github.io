@@ -4,7 +4,7 @@ nav_title: "10. Recording, capture, and animation"
 order: 11
 ---
 
-**Export** (the download icon) saves the image as a picture, a video, or an animation. Captures show what is on screen in the left (or only) view: the image or map, the overlays (markers, curves, ruler, legend) and the colour bar, with the same light-theme inversion as the screen. Buttons and other controls are not included.
+**Export** (the download icon) saves the image as a picture, a video, or an animation. Captures show what is on screen in the left (or only) view: the image or map, the overlays (markers, curves, ruler, legend) and the colour bar. In the light theme the lensed image is shown inverted (dark on white), and captures are inverted the same way. Buttons and other controls are not included.
 
 ## Still image
 

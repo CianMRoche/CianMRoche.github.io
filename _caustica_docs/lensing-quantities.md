@@ -6,24 +6,26 @@ order: 5
 
 Besides the lensed image, each view tab above the image can show a map of a lensing quantity (pick it from the tab's menu, or the view menu on phones). The **Delensed image** view is described in <a href="/caustica-documentation/background-image/">§7</a>.
 
+Two terms recur below. **Critical curves** are the lines on the sky where the magnification is infinite, and **caustics** are the same lines mapped back to the source plane; a source crossing a caustic gains or loses two images. Critical curves are **tangential** or **radial**, after the direction in which images near them are stretched (<a href="/caustica-documentation/critical-curves/">§9</a>).
+
 The maps are computed for one source redshift, the **z<sub>s</sub> ref** under **View** → **Field**. **Auto** uses the farthest plane that holds a source (2 if there is none); **Custom** takes a value you type. The value in use is shown on the image. On a computer it is also a line on the line-of-sight strip, dashed for Auto and solid for Custom: drag it to set a custom value, and double-click it to return to Auto. If no plane sits at that redshift, a temporary empty plane is added there for the calculation.
 
 ## The lens mapping Jacobian
 
 Tracing a ray from image position $\boldsymbol{\theta}$ gives its position $\boldsymbol{\beta}(\boldsymbol{\theta})$ on the source plane (<a href="/caustica-documentation/multiplane/">§3</a>). How a small patch of the image maps onto the source plane is described by the $2\times2$ matrix of derivatives (the Jacobian)
 
-$$A_{ij} = \frac{\partial\beta_i}{\partial\theta_j},$$
+$$A = \begin{pmatrix} A_{11} & A_{12} \\ A_{21} & A_{22} \end{pmatrix} = \begin{pmatrix} \partial\beta_x/\partial\theta_x & \partial\beta_x/\partial\theta_y \\ \partial\beta_y/\partial\theta_x & \partial\beta_y/\partial\theta_y \end{pmatrix}.$$
 
-where $i, j = 1, 2$ stand for the $x$ and $y$ components. Each entry is estimated from rays a small step $h = 0.004 \times \text{FOV}$ either side of $\boldsymbol{\theta}$, for example $A_{11} \approx [\beta_x(\boldsymbol{\theta}+h\hat{\mathbf{x}}) - \beta_x(\boldsymbol{\theta}-h\hat{\mathbf{x}})]/2h$, with $\hat{\mathbf{x}}$ the unit step in $x$.
+Each entry is estimated from rays a small step $h = 0.004 \times \text{FOV}$ either side of $\boldsymbol{\theta}$, for example $A_{11} \approx [\beta_x(\boldsymbol{\theta}+h\hat{\mathbf{x}}) - \beta_x(\boldsymbol{\theta}-h\hat{\mathbf{x}})]/2h$, with $\hat{\mathbf{x}}$ the unit step in $x$.
 
 | View (key) | Formula | Meaning | Default colour scale |
 |---|---|---|---|
 | Convergence $\kappa$ (K) | $1 - \tfrac{1}{2}(A_{11}+A_{22})$ | Projected mass density in units of the critical density $\Sigma_\text{cr} = c^2 D_s / (4\pi G D_l D_{ls})$ for one lens plane ($G$ is the gravitational constant, $D_l$, $D_s$, $D_{ls}$ the distances to the lens, to the source, and between them). Shown no lower than 0. | Linear, 0 to 2 |
 | Shear $\gamma$ (G) | $\sqrt{\gamma_1^2+\gamma_2^2}$, with $\gamma_1=\tfrac{1}{2}(A_{22}-A_{11})$, $\gamma_2=-\tfrac{1}{2}(A_{12}+A_{21})$ | How strongly a small round source is stretched into an ellipse | Linear, 0 to 0.5 |
 | Magnification $\lvert\mu\rvert$ (M) | $1/\lvert\det A\rvert$ | Ratio of image area to source area; infinite on the critical curves, shown up to 1000 | Log, 1 to 30 |
-| Deflection $\lvert\boldsymbol{\alpha}\rvert$ (A) | $\lvert\boldsymbol{\theta} - \boldsymbol{\beta}(\boldsymbol{\theta})\rvert$ | Total bending between the observer and the source plane (arcsec) | Linear, 0 to 2″ |
+| Deflection $\lvert\boldsymbol{\alpha}\rvert$ (A) | $\lvert\boldsymbol{\theta} - \boldsymbol{\beta}(\boldsymbol{\theta})\rvert$ | Total shift on the sky between the image and source positions (arcsec): the bending, scaled by distance (<a href="/caustica-documentation/multiplane/">§3</a>) | Linear, 0 to 2″ |
 
-Here $\det A = A_{11}A_{22} - A_{12}A_{21}$. For reference, for a round lens the average of $\kappa$ inside the Einstein ring is 1, while $\kappa$ on the ring itself is smaller (0.5 for a round isothermal lens, 0 for a point mass).
+Here $\det A = A_{11}A_{22} - A_{12}A_{21}$. For reference, for a round lens the average of $\kappa$ inside the Einstein ring is 1, while $\kappa$ on the ring itself is usually smaller (0.5 for a round isothermal lens, 0 for a point mass).
 
 <div class="doc-figrow">
   <figure>
@@ -56,7 +58,7 @@ The **Parity** view (P) colours each point by the kind of image that would form 
 
 The **Image number** view (N) covers the source plane at z<sub>s</sub> ref with a grid of numbers, each the number of images a point source at that spot would have. One grid point sits at the centre of the view. The **Image Number** section under **View** sets the grid **Spacing** (12 to 120 screen pixels) and **Number size** (6 to 40 pixels). A count of 1 is grey and each higher count has its own colour.
 
-Crossing a caustic adds or removes two images, so the count is $n_0 + 2k$, where $k$ is the number of caustic loops enclosing the point, counted with how many times each loop winds around it. $n_0$ is the count outside all caustics. It is usually 1, but a point mass has a second image everywhere, so $n_0$ is found by solving for the images (as for a point source, <a href="/caustica-documentation/source-models/#point-source">§6</a>) at four points just outside the caustics and taking the majority. Typical results: 1, 3 and 5 for an SIE or NIE (Caustica's SIE has a tiny core, so it also has a radial caustic), and 2 for a point mass.
+Crossing a caustic adds or removes two images, so the count is $n_0 + 2m$, where $m$ is the number of caustic loops enclosing the point, counted with how many times each loop winds around it. $n_0$ is the count outside all caustics. It is usually 1, but a point mass has a second image everywhere, so $n_0$ is found by solving for the images (as for a point source, <a href="/caustica-documentation/source-models/#point-source">§6</a>) at four points just outside the caustics and taking the majority. Typical results: 1, 3 and 5 for an SIE or NIE (Caustica's SIE has a tiny core, so it also has a radial caustic), and 2 for a point mass.
 
 ## Source magnification
 
@@ -66,7 +68,7 @@ $$\mu_\text{tot}(\boldsymbol{\beta}) = \sum_i \lvert\mu(\boldsymbol{\theta}_i)\r
 
 Far from the lens it tends to 1. It grows without limit toward a caustic, and jumps where a caustic adds or removes a pair of images, so the caustics show as bright lines. For a round isothermal lens with Einstein radius $\theta_E$ it is $2\theta_E/\lvert\boldsymbol{\beta}\rvert$ inside the ring and $1 + \theta_E/\lvert\boldsymbol{\beta}\rvert$ outside; the view matches this to about 0.2% on average, except at the very centre and just inside $\theta_E$. An extended source sees this map averaged over its size, so its own magnification stays finite.
 
-It is computed with the delensed view's mesh (<a href="/caustica-documentation/background-image/#delensed-view">§7</a>): a 768 × 768 grid over a square 3 times the FOV, centred on the view, is traced to the source plane, and every grid triangle adds its $\lvert\mu\rvert$ to the source-plane pixels it covers. So images outside that square are missed, each image's $\lvert\mu\rvert$ is capped at 100, images with $\lvert\mu\rvert < 0.05$ are left out, and the caustics are only as sharp as the grid. The default colour scale is log, 1 to 30.
+It is computed with the delensed view's mesh (<a href="/caustica-documentation/background-image/#delensed-view">§7</a>): a 768 × 768 grid over a square 3 times the FOV, centred on the view, is traced to the source plane, and every grid triangle adds its $\lvert\mu\rvert$ to the source-plane pixels it covers. So images outside that square are missed, each image's $\lvert\mu\rvert$ is capped at 100, images with $\lvert\mu\rvert < 0.05$ are left out, and the caustics are only as sharp as the grid. Like the delensed view, it needs a GPU that can render to floating-point images. The default colour scale is log, 1 to 30.
 
 ## Unlensed
 
@@ -76,7 +78,7 @@ Image number, Source magnification, Unlensed and Delensed show the source plane,
 
 ## Distance weighting and the effective shear
 
-A lens on plane $k$ affects the source plane $j$ with the weight $D_{kj}/D_j$ (<a href="/caustica-documentation/multiplane/">§3</a>). For a single lens plane, the shear and convergence in the maps are therefore the model values scaled by $D_{ls}/D_s$, the ratio of the lens-to-source and observer-to-source distances:
+Each lens's bending is scaled by a ratio of distances before it moves the ray (<a href="/caustica-documentation/multiplane/">§3</a>). For a single lens plane, the shear and convergence in the maps are therefore the model values scaled by $D_{ls}/D_s$, the ratio of the lens-to-source and observer-to-source distances:
 
 $$\gamma_\text{map} = \gamma_\text{model}\,\frac{D_{ls}}{D_s}, \qquad \kappa_\text{map} = \kappa_\text{model}\,\frac{D_{ls}}{D_s}.$$
 
@@ -90,17 +92,17 @@ The isothermal deflections (SIE, NIE; <a href="/caustica-documentation/lens-mode
 
 ## Colour scale, limits, and palette
 
-The $\kappa$, $\gamma$, $\lvert\mu\rvert$, $\lvert\boldsymbol{\alpha}\rvert$ and source-magnification maps share the controls in **Colors** → **Color map**, and each map keeps its own settings. A value $v$ becomes a colour in two steps. First it is mapped to $t \in [0, 1]$ between **Min** and **Max** (values outside are clamped) by the **Scale**, using $u = (v - \text{Min})/(\text{Max} - \text{Min})$ clamped to $[0,1]$:
+The $\kappa$, $\gamma$, $\lvert\mu\rvert$, $\lvert\boldsymbol{\alpha}\rvert$ and source-magnification maps share the controls in **Colors** → **Color map**, and each map keeps its own settings. A value $v$ becomes a colour in two steps. First it is mapped to a position $\ell \in [0, 1]$ between **Min** and **Max** (values outside are clamped) by the **Scale**, using $u = (v - \text{Min})/(\text{Max} - \text{Min})$ clamped to $[0,1]$:
 
-| Scale | $t$ |
+| Scale | $\ell$ |
 |---|---|
 | Linear | $u$ |
 | Square root | $\sqrt{u}$ |
 | Log | $(\ln v - \ln\text{Min})/(\ln\text{Max} - \ln\text{Min})$, clamped to $[0,1]$; needs Min > 0 |
-| Power law | $u^{\gamma}$, with **Power** $\gamma \in [0.1, 2]$; $\gamma < 1$ lifts low values |
+| Power law | $u^{p}$, with **Power** $p \in [0.1, 2]$ (labelled γ in the app); $p < 1$ lifts low values |
 | Asinh | $\operatorname{asinh}(a\,u)/\operatorname{asinh}(a)$, with **Softening** $a \in [0.5, 20]$; linear for small $u$, logarithmic for large |
 
-Then **Colormap** turns $t$ into a colour: **Default**, **Viridis**, **Inferno**, **Plasma**, **Turbo** or **Grayscale**. Default runs black → purple → orange → yellow in the dark theme and white → orange → purple → black in the light theme. In the light theme the other palettes are shown inverted (each colour replaced by its opposite), so low values are light like the page.
+Then **Colormap** turns $\ell$ into a colour: **Default**, **Viridis**, **Inferno**, **Plasma**, **Turbo** or **Grayscale**. Default runs black → purple → orange → yellow in the dark theme and white → orange → purple → black in the light theme. In the light theme the other palettes are shown inverted (each colour replaced by its opposite), so low values are light like the page.
 
 You can type Min and Max, step them with the arrows, or drag across them to scrub. **View** → **Display** → **Colorbar** adds a colour bar to the image, labelled with Min and Max. The same Min, Max and Scale also set the brightness stretch of the lensed image (<a href="/caustica-documentation/source-models/#compositing-and-brightness-stretch">§6</a>).
 
@@ -140,7 +142,7 @@ where the first sum runs over each pair of consecutive points $n$, $n+1$ on the 
 This surface has two properties a simpler multiplane formula would lack:
 
 - **Empty planes do nothing.** Between lenses a ray travels in a straight line in comoving coordinates, so planes without lenses are skipped, and adding or moving one leaves $\varphi$ unchanged.
-- **Flat points are images.** Its slope is $\nabla_{\boldsymbol{\theta}}\varphi = \boldsymbol{\beta}(\boldsymbol{\theta}) - \boldsymbol{\beta}_s$, which is zero exactly where a traced ray lands on the source.
+- **Flat points are images.** Its slope is zero exactly where a traced ray lands on the source. For one lens plane the slope is $\nabla_{\boldsymbol{\theta}}\varphi = \boldsymbol{\beta}(\boldsymbol{\theta}) - \boldsymbol{\beta}_s$; with several it is a distance-weighted version of the same difference.
 
 By default $\boldsymbol{\beta}_s$ and the source redshift are those of the last source you selected. Untick **Use last selected source** (in this view's **Fermat Potential** section under **View**) to put the source at $(0, 0)$ at z<sub>s</sub> ref instead; this is also used before any source has been selected.
 
@@ -169,20 +171,20 @@ For a smooth lens (no point masses), the number of minima plus maxima minus the 
 
 ### Display
 
-The contours are drawn per pixel on the GPU, with spacing $0.002\,\text{FOV}^2$ arcsec² times **Spacing**, so their density stays similar as you zoom. **Scale** Linear spaces them evenly in $\varphi$; Asinh spaces them evenly in $s\,\operatorname{asinh}(\varphi/s)$ with $s = 6$ arcsec², which thins them where $\varphi$ is steep. Contours fade out toward the edge of the view, starting 60% of the way out from the centre. The contour through each saddle image is drawn thicker and brighter, since it separates regions of the surface. The flat points are marked with a circle (I), diamond (II) or triangle (III).
+The contours are drawn per pixel on the GPU, with spacing $0.002\,\text{FOV}^2$ arcsec² times **Spacing**, so their density stays similar as you zoom. **Scale** Linear spaces them evenly in $\varphi$; Asinh spaces them evenly in $6\,\operatorname{asinh}(\varphi/6)$, with $\varphi$ in arcsec², which thins them where $\varphi$ is steep. Contours fade out toward the edge of the view, starting 60% of the way out from the centre. The contour through each saddle image is drawn thicker and brighter, since it separates regions of the surface. The flat points are found on a 56 × 56 grid over the view (so images outside it are not marked) and marked with a circle (I), diamond (II) or triangle (III).
 
 ### Lensing potentials by model
 
-Each lens's potential $\psi$ is the function whose slope is its deflection, $\nabla\psi = \hat{\boldsymbol{\alpha}}$. The symbols are those of <a href="/caustica-documentation/lens-models/">§5</a>: $\mathbf{u}$ is the position relative to the lens centre, $x_r, y_r$ its components along the lens axes, $r_e$ the elliptical radius, $s$ the core radius, and $\boldsymbol{\theta} = (\theta_x, \theta_y)$ the position relative to $(0, 0)$.
+Each lens's potential $\psi$ is the function whose slope is its deflection, $\nabla\psi = \hat{\boldsymbol{\alpha}}$. The symbols are those of <a href="/caustica-documentation/lens-models/">§5</a>: $\mathbf{u}$ is the position relative to the lens centre, $x_r, y_r$ its components along the lens axes, $r_e$ the elliptical radius, $s$ the core radius, and $\boldsymbol{\theta} = (\theta_x, \theta_y)$ the ray's position on the lens plane relative to $(0, 0)$. For the external shear, $\gamma_\text{ext}$ is its strength (its **γ** control); for it and the constant deflection, $\omega$ is the direction set by the **φ** control.
 
 | Model | $\psi$ |
 |---|---|
 | Point mass | $b^2 \ln\lvert\mathbf{u}\rvert$ ($\lvert\mathbf{u}\rvert$ no smaller than 0.001″) |
 | SIE / NIE | $\displaystyle\frac{bq}{\sqrt{1-q^2}}\left[x_r\arctan\frac{\sqrt{1-q^2}\,x_r}{r_e+s} + y_r\operatorname{arctanh}\frac{\sqrt{1-q^2}\,y_r}{r_e+q^2 s}\right] - \frac{bqs}{2}\ln\Big[(r_e+s)^2 + (1-q^2)\,x_r^2\Big]$ |
 | EPL | $\mathbf{u}\cdot\hat{\boldsymbol{\alpha}}/(2-t)$, with $t = \gamma'-1$ |
-| External shear | $\tfrac{\gamma}{2}\left[(\theta_x^2-\theta_y^2)\cos 2\varphi + 2\theta_x\theta_y\sin 2\varphi\right]$ |
+| External shear | $\tfrac{\gamma_\text{ext}}{2}\left[(\theta_x^2-\theta_y^2)\cos 2\omega + 2\theta_x\theta_y\sin 2\omega\right]$ |
 | External convergence | $\tfrac{\kappa}{2}\lvert\boldsymbol{\theta}\rvert^2$ |
-| Constant deflection | $\alpha\,(\theta_x\cos\varphi + \theta_y\sin\varphi)$ |
+| Constant deflection | $\alpha\,(\theta_x\cos\omega + \theta_y\sin\omega)$ |
 
 The last SIE / NIE term corrects for the core and vanishes as $s \to 0$. The EPL form is exact; it diverges at $\gamma' = 3$, which the code avoids by keeping $2 - t$ at least $10^{-3}$ from zero.
 
@@ -192,7 +194,7 @@ Only differences in $\varphi$ between images mean anything; its zero point is a 
 
 ### Time delays (days)
 
-**View** → **Display** → **Time delays** labels each point-source image with its arrival time in days after the first image to arrive. It needs a visible point source behind a lens with at least two images, and is greyed out otherwise. The delay between images $i$ and $j$ is
+**View** → **Display** → **Time delays** labels each point-source image with its arrival time in days after the first image to arrive. It is greyed out until a visible point source sits behind a lens, and the labels appear once that source has two or more images. The delay between images $i$ and $j$ is
 
 $$\Delta t_{ij} = \frac{K}{c}\,\big(\varphi_i - \varphi_j\big),$$
 

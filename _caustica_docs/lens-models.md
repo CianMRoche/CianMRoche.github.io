@@ -6,7 +6,7 @@ order: 6
 
 Each lens model gives the bending angle $\hat{\boldsymbol{\alpha}}$ (arcsec) of a ray passing at $\mathbf{u} = \boldsymbol{\theta}_k - (c_x, c_y)$ from the lens centre $(c_x, c_y)$, where $\boldsymbol{\theta}_k$ is the ray's position on the lens plane (<a href="/caustica-documentation/multiplane/">§3</a>). This is the physical bending, which does not depend on any source; the distance weight $D_{kj}/D_j$ is applied separately (<a href="/caustica-documentation/multiplane/">§3</a>).
 
-For the point mass, SIE, NIE and EPL, a line under the object's controls shows its Einstein radius $\theta_E$, the radius of the ring this lens alone would form for a source at z<sub>s</sub> ref (<a href="/caustica-documentation/lensing-quantities/">§4</a>). With $w = D_{ls}/D_s$ (lens-to-source over observer-to-source distance), it is $b\sqrt{w}$ for the point mass, $b\,w$ for the SIE and NIE (ignoring the NIE's core), and $b\,w^{1/(\gamma'-1)}$ for the EPL. It shows a dash when z<sub>s</sub> ref is not behind the lens.
+For the point mass, SIE, NIE and EPL, a line under the object's controls shows its Einstein radius $\theta_E$, the radius of the ring this lens alone would form for a source at z<sub>s</sub> ref (<a href="/caustica-documentation/lensing-quantities/">§4</a>). With $w = D_{ls}/D_s$ (lens-to-source over observer-to-source distance), it is $b\sqrt{w}$ for the point mass, $b\,w$ for the SIE and NIE (ignoring the NIE's core), and $b\,w^{1/(\gamma'-1)}$ for the EPL. These are the values for a round lens, so they somewhat overestimate a flattened lens's ring. It shows a dash when z<sub>s</sub> ref is not behind the lens, or for an EPL with $\gamma' = 1$.
 
 ## Point mass
 
@@ -60,7 +60,7 @@ An SIE with a finite core: the density levels off inside the core radius instead
 
 ## EPL (Elliptical Power Law)
 
-An SIE whose density slope is free, using the exact deflection of Tessore & Metcalf (2015), ported from [lenstronomy](https://github.com/lenstronomy/lenstronomy). The projected density goes as $r_e^{1-\gamma'}$.
+An SIE whose density slope is free, using the exact deflection of Tessore & Metcalf (2015), ported from [lenstronomy](https://github.com/lenstronomy/lenstronomy). The projected density goes as $R^{1-\gamma'}$, with $R$ the elliptical radius defined below.
 
 | Symbol | Control | Meaning |
 |---|---|---|

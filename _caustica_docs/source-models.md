@@ -9,13 +9,13 @@ A ray reaching a plane at position $\boldsymbol{\beta}$ (arcsec) picks up the su
 $$\mathbf{d} = \boldsymbol{\beta} - (c_x, c_y), \qquad \begin{pmatrix}x_r \\ y_r\end{pmatrix} = R(-\varphi)\,\mathbf{d}, \qquad r_\text{ell}^2 = x_r^2 + (y_r/q)^2,$$
 
 where $\mathbf{d}$ is the offset from the source centre, $R(-\varphi)$ is the rotation by $-\varphi$, and $(x_r, y_r)$ is the offset along the source's major and minor axes.
-This differs from the lens elliptical radius (<a href="/caustica-documentation/lens-models/">§5</a>) by a factor of $q$: here $\sigma$ is the semi-major axis of the isophote, as in galaxy photometry, while lenses follow Kormann et al. (1994) so that their deflection scale $b$ does not depend on $q$.
+This differs from the lens elliptical radius (<a href="/caustica-documentation/lens-models/">§5</a>) by a factor of $q$: here $\sigma$ is the semi-major axis of a contour of equal brightness, as in galaxy photometry, while lenses follow Kormann et al. (1994) so that their deflection scale $b$ does not depend on $q$.
 
 | Symbol | Control | Meaning |
 |---|---|---|
 | $(c_x, c_y)$ | drag the marker | Source centre on its plane (arcsec) |
 | $\varphi$ | φ | Position angle of the major axis (radians) |
-| $q$ | q | Axis ratio minor/major, $0 \lt q \leq 1$ |
+| $q$ | q | Axis ratio minor/major, 0.05 to 1 |
 | $\sigma$ | σ | Scale radius (arcsec), rendered no smaller than 0.01″ |
 | $A$ | A | Amplitude, the peak surface brightness |
 | | Color | Colour the profile is drawn in (white by default) |
@@ -61,9 +61,9 @@ A filled ellipse with a sharp edge. Here $\sigma$ is the semi-major axis, set as
 
 ## Point source
 
-A point source models a quasar or other compact object. The code finds every image-plane position $\boldsymbol{\theta}_i$ that maps to the source centre, $\boldsymbol{\beta}(\boldsymbol{\theta}_i) = (c_x, c_y)$, and draws a dot at each. Here $\sigma$ (**Size**) is the dot radius in arcsec, $A$ its opacity, and **Color** its colour; there is no $q$ or $\varphi$. The dots are drawn over the image rather than added to the light, so they are not stretched by lensing (like a PSF-limited quasar image) and do not go through the brightness stretch below. The **Unlensed** view shows a single dot at $(c_x, c_y)$.
+A point source models a quasar or other compact object. The code finds every image-plane position $\boldsymbol{\theta}_i$ that maps to the source centre, $\boldsymbol{\beta}(\boldsymbol{\theta}_i) = (c_x, c_y)$, and draws a dot at each. Here $\sigma$ (**Size**) is the dot radius in arcsec, $A$ its opacity, and **Color** its colour; there is no $q$ or $\varphi$. The dots are drawn over the image rather than added to the light, so they are not stretched by lensing (like a real quasar image, a point blurred only by the telescope) and do not go through the brightness stretch below. The **Unlensed** view shows a single dot at $(c_x, c_y)$.
 
-Sign changes of $\boldsymbol{\beta} - (c_x, c_y)$ on a coarse grid of $\boldsymbol{\theta}$ give starting guesses, and Newton-Raphson with a backtracking line search refines each until $\lvert\boldsymbol{\beta}(\boldsymbol{\theta}) - (c_x, c_y)\rvert^2 \lt 10^{-14}$ arcsec². Solutions closer than $10^{-5}$″ are merged. The grid is the **Point source** setting under **Settings**: 150, 300 (default), 600 or 1200 points across the field. Denser grids find images near caustics more reliably but are slower.
+Sign changes of $\boldsymbol{\beta} - (c_x, c_y)$ on a coarse grid of $\boldsymbol{\theta}$ give starting guesses, and Newton's method (repeated straight-line steps toward the solution, shortened when a step overshoots) refines each until $\lvert\boldsymbol{\beta}(\boldsymbol{\theta}) - (c_x, c_y)\rvert^2 \lt 10^{-14}$ arcsec². Solutions closer than $10^{-5}$″ are merged. Images are searched for within a square $\max(1.1 \times \text{FOV}, 3″)$ across, so images well outside the view are not found. The grid is the **Point source** setting under **Settings**: 150, 300 (default), 600 or 1200 points across the field. Denser grids find images near caustics more reliably but are slower.
 
 <div class="doc-warning" markdown="1">
 **Heads up.** A point source never forms arcs or rings; use a Gaussian or uniform disc for those. Highly demagnified images (such as the central image of an SIE) can be missed by the grid search.
@@ -71,7 +71,7 @@ Sign changes of $\boldsymbol{\beta} - (c_x, c_y)$ on a coarse grid of $\boldsymb
 
 ## Pasted image
 
-Select the object and paste a picture with Ctrl+V (Cmd+V), or use **Load image…** in its controls. It is centred on $(c_x, c_y)$, with its height set to the field of view when you load it (later zooming does not resize it). Here $\sigma$ is **Scale**, a multiplier on that size, and $A$ is **Brightness**. There is no $q$, $\varphi$ or **Color**. The picture is sampled bilinearly from a mipmap chain. At most four pasted images are drawn at once; any more (the farthest by redshift) are not drawn, and a warning on the image says so.
+Select the object and paste a picture with Ctrl+V (Cmd+V), or use **Load image…** in its controls. It is centred on $(c_x, c_y)$, and its height is half the FOV at the moment you load it, times **Scale** (later zooming does not resize it). Here $\sigma$ is **Scale** and $A$ is **Brightness**; there is no $q$, $\varphi$ or **Color**. The picture is sampled smoothly from a set of pre-shrunk copies (mipmaps), so it stays clean when shrunk. In the light theme, where the lensed image is shown inverted, a pasted picture is inverted with it (it shows as a negative); the background and observation are not. At most four pasted images are drawn at once; any more (the farthest by redshift) are not drawn, and a warning on the image says so.
 
 A pasted image is opaque: its dark pixels hide what is behind them rather than letting the background through (<a href="/caustica-documentation/background-image/">§7</a>). Its coverage $C$ is 1 inside the picture and falls to 0 over a soft border,
 

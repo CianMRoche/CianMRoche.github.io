@@ -8,7 +8,7 @@ Two pictures can sit behind the lensed image. The **Background** is decoration: 
 
 ## Field colour
 
-The empty field behind everything has a flat colour, **Colors** → **Field**. It also fills the margins a **Contain** fit leaves (below). It follows the light/dark theme like everything else on the image, so the default black field is white in the light theme; the colour picker shows the colour as it appears.
+The empty field behind everything has a flat colour, **Colors** → **Field** (saved in configs as `bgColor`). It also fills the margins a **Contain** fit leaves (below). It follows the light/dark theme like everything else on the image, so the default black field is white in the light theme; the colour picker shows the colour as it appears.
 
 Its main use is with a pasted-image source (<a href="/caustica-documentation/source-models/#pasted-image">§6</a>), whose rectangular edge shows because the picture and the field differ there. **Match image** sets the field to the average colour of a band a few pixels deep around the pasted image's border (ignoring transparent pixels), which hides the edge; the source's own **Edge blend** softens what is left. It uses the selected pasted image, or else the first one in the scene.
 
@@ -37,15 +37,15 @@ Load a picture with **Upload image…** under **Background**. The eye button bes
 | Stretch | $(1, 1)$ | Fills the panel, distorting a non-square picture |
 | Tile (mirrored) | as Contain | Whole picture visible, mirror-repeated to fill the rest (no edge, so no Edge blend) |
 
-A span of 1 means the panel covers the picture's full width (or height). **Zoom** $k$ (0.25 to 5) divides the span, magnifying the picture, and **Offset X / Y** $\boldsymbol{\delta}$ ($-1$ to 1, in half-panel widths, positive to the right and up) move it. A point at position $\mathbf{v}$ in the panel (0 to 1 on each axis) shows the picture at
+A span of 1 means the panel covers the picture's full width (or height). **Zoom** $k$ (0.25 to 5) divides the span, magnifying the picture, and **Offset X / Y** $\boldsymbol{\delta}$ ($-1$ to 1, in half-panel widths, positive to the right and up) move it. A point at position $\mathbf{x}$ in the panel (0 to 1 on each axis, measured from the bottom left) shows the picture at
 
-$$\mathbf{uv} = \Big(\mathbf{v} - \tfrac{1}{2} - \tfrac{1}{2}\boldsymbol{\delta}\Big) \odot \frac{\mathbf{s}}{k} \;+\; \frac{1}{2},$$
+$$\mathbf{uv} = \Big(\mathbf{x} - \tfrac{1}{2} - \tfrac{1}{2}\boldsymbol{\delta}\Big) \odot \frac{\mathbf{s}}{k} \;+\; \frac{1}{2},$$
 
-where $\mathbf{uv}$ is the position in the picture (0 to 1 on each axis, with $v$ counted from the top), $\mathbf{s} = (s_x, s_y)$, and $\odot$ multiplies component by component.
+where $\mathbf{uv}$ is the position in the picture (0 to 1 on each axis, also from its bottom left), $\mathbf{s} = (s_x, s_y)$, and $\odot$ multiplies component by component.
 
 **Zoom with FOV.** By default the background is fixed to the panel, so changing the FOV does not zoom it. With **Zoom with FOV** on, it is fixed to the sky instead: the span is multiplied by FOV/FOV₀, where FOV₀ is the FOV when the picture was loaded or the option turned on. A picture that belongs at a definite place on the sky should be an observation instead.
 
-**Reset framing** restores Fit, Zoom, the offsets, Brightness, Edge blend and Zoom with FOV, and shows the picture if it was hidden.
+**Reset framing** restores Fit, Zoom, the offsets, Brightness, Edge blend and Zoom with FOV, sets FOV₀ to the current FOV, and shows the picture if it was hidden.
 
 **Configs.** The framing is saved as `bgFit`, `bgZoom`, `bgOffX`, `bgOffY`, `bgBright`, `bgEdgeBlend`, `bgSkyLock` and `bgHidden`, and checked against the ranges above on loading. A picture you upload is not saved (nor FOV₀). A config can name one of the pictures shipped with the presets with `bgImage`. Loading a config without `bgImage` removes a picture that came from a preset but keeps one you uploaded.
 
@@ -59,9 +59,9 @@ Load the observed image under **Observation** (the eye icon). It is placed on th
 - **Use lensed image** makes the lensed image as it is now the observation. It is drawn as in a tab showing the lensed-image view (with the instrument model, if one is on), over the current observation if that is shown, but without the background, overlays or point-source dots, on a black field. Its pixel scale is the FOV divided by the render width in pixels (**Settings** → render scale), centred, so it lies exactly where the light was. It starts hidden from the lensed view, with Brightness 1 and Edge blend 0. Delensing it through the same lens model should give back the sources, which is a useful check.
 - **Open the delensed view** opens the **Delensed image** view beside the current one, or goes to its tab.
 
-**In the scene drawer.** The left end of the line-of-sight strip (z = 0) is drawn as the observer's eye. Clicking it shows or hides the observation's card at the left of the drawer; the card starts hidden each time the app opens. The card shows the picture where it sits on the sky, with its masks. Clicking the card opens the Observation panel.
+**In the scene drawer.** The left end of the line-of-sight strip (z = 0) is drawn as the observer's eye. Clicking it shows or hides the observation's card at the left of the drawer; the card starts hidden each time the app opens, unless a config shows it. The card shows the picture where it sits on the sky, with its masks. Clicking the card opens the Observation panel.
 
-**Configs.** The observation is saved as `obsImage` (only for pictures shipped with the site, as for `bgImage`), `obsPixel`, `obsOffX`, `obsOffY`, `obsBright`, `obsEdge` and `obsShown`, and its masks as a top-level `masks:` list (below). The **Image recreation** preset (<a href="/caustica-documentation/presets/">§11</a>) loads its quasar photograph this way, at $p = 0.003125$″. Older configs that gave the background a pixel scale (`bgPixel` above 0) load it as the observation, and masks stored on planes move to the observation.
+**Configs.** The observation is saved as `obsImage` (only for pictures shipped with the site, as for `bgImage`), `obsPixel`, `obsOffX`, `obsOffY`, `obsBright`, `obsEdge`, `obsShown` and `obsCard` (whether its card is shown), and its masks as a top-level `masks:` list (below). The **Image recreation** preset (<a href="/caustica-documentation/presets/">§11</a>) loads its quasar photograph this way, at $p = 0.003125$″. Older configs that gave the background a pixel scale (`bgPixel` above 0) load it as the observation, and masks stored on planes move to the observation.
 
 ## Delensed view
 
@@ -80,20 +80,20 @@ Four rules keep the result clean:
 - Each corner's $\lvert\mu\rvert$ is limited to 20 times the triangle's own area ratio, which removes occasional bad values next to a singular centre.
 - Weights are capped at $\lvert\mu\rvert = 100$, so thin triangles along a critical curve cannot dominate.
 
-Source pixels that nothing reaches show the empty field. The view needs a GPU that can render to floating-point images (almost all can); the Observation panel says if it cannot. As a check, a Gaussian source rendered through an SIE and delensed is recovered to 0.03% (rms, relative to its peak), with its centre within a pixel and its total brightness within 0.04%.
+Source pixels that nothing reaches are left plain black (white in the light theme), not the **Field** colour. The view needs a GPU that can render to floating-point images (almost all can); the Observation panel says if it cannot. As a check, a Gaussian source rendered through an SIE and delensed is recovered to 0.03% (rms, relative to its peak), with its centre within a pixel and its total brightness within 0.04%.
 
-**Display.** Like the other source-plane views, it hides the image-plane overlays (critical curves, point-source images and time delays, stretch whiskers) but keeps the caustics, the lens, source and mask markers, and the ruler. The picture's own tones are shown in either theme, with the observation's **Brightness** and **Edge blend** applied to each observed pixel before the averaging. With no observation, the view says how to add one.
+**Display.** Like the other source-plane views, it hides the image-plane overlays (critical curves, point-source images and time delays, stretch whiskers) but keeps the caustics, the lens, source and mask markers, and the ruler. The picture's own tones are shown in either theme, with the observation's **Brightness** and **Edge blend** applied to each observed pixel before the averaging; here Edge blend fades toward plain black (white in the light theme). With no observation, the view says how to add one.
 
-**Masks.** A mask removes an elliptical patch of the observation before delensing, usually over the lens galaxy (whose light would otherwise be spread over the source plane) or a foreground star. A source point whose images are all masked shows the empty field; one with an unmasked image is built from that alone. Masks belong to the observation, not to a plane.
+**Masks.** A mask removes an elliptical patch of the observation before delensing, usually over the lens galaxy (whose light would otherwise be spread over the source plane) or a foreground star. A source point whose images are all masked is left blank; one with an unmasked image is built from that alone. Masks belong to the observation, not to a plane.
 
 | Symbol | Control | Meaning |
 |---|---|---|
 | $(c_x, c_y)$ | drag the marker | Centre on the sky (arcsec) |
 | $r$ | Size (″) | Semi-major axis, 0.01″ to 20″ |
-| $q$ | q | Axis ratio minor/major |
-| $\varphi$ | φ (rad) | Position angle of the major axis |
+| $q$ | q | Axis ratio minor/major, 0.05 to 1 |
+| $\varphi$ | φ (rad) | Position angle of the major axis, 0 to π |
 
-A mask covers $x_r^2 + (y_r/q)^2 \le r^2$, with $(x_r, y_r)$ the offset from its centre along its axes, as for sources (<a href="/caustica-documentation/source-models/">§6</a>). Place one with the mask tool (key **4**, or **+ Mask** in the Observation panel), available while there is an observation, by clicking the image in any view or the observation's card. The Observation panel lists the masks, each with an eye to switch it off and a × to delete it. Masks are drawn as grey markers in every view except the line-art lensed image; in the lensed-image view and on the card they also show their outline and a light fill. They affect only the delensed view, are applied exactly at each pixel, and up to 16 are used (the panel says if more are on). They are saved in a config as `masks:` entries with `cx`, `cy`, `r`, `q`, `phi` and `hidden`.
+Select a mask (on the image, its card, or the Observation panel's list) to edit these in the **Object** panel. A mask covers $x_r^2 + (y_r/q)^2 \le r^2$, with $(x_r, y_r)$ the offset from its centre along its axes, as for sources (<a href="/caustica-documentation/source-models/">§6</a>). Place one with the mask tool (key **4**, or **+ Mask** in the Observation panel), available while there is an observation, by clicking the image in any view or the observation's card. The Observation panel lists the masks, each with an eye to switch it off and a × to delete it. Masks are drawn as grey markers in every view except the line-art lensed image; in the lensed-image view and on the card they also show their outline and a light fill. They affect only the delensed view, are applied exactly at each pixel, and up to 16 are used (the panel says if more are on). They are saved in a config as `masks:` entries with `cx`, `cy`, `r`, `q`, `phi` and `hidden`.
 
 <div class="doc-warning" markdown="1">
 **Heads up.** The lens galaxy's own light is traced back like everything else unless a mask covers it. The blurring of the telescope is not undone either, so the reconstruction is as blurred as the observation, and differently in each image, since each is magnified by a different amount.

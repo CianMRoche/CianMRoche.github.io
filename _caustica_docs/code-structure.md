@@ -19,22 +19,22 @@ Caustica is plain JavaScript with no framework or build step, in `/assets/causti
 - **Cosmology** (<a href="/caustica-documentation/cosmology/">§2</a>): `comovingDist`, `angDiamDist`, `angDiamDistBetween`, and `precomputeDistances(planes)`, which builds the distance tables for a set of planes.
 - **Deflections** (<a href="/caustica-documentation/lens-models/">§5</a>): one function per model, matching the shader's.
 - **Ray tracing**: `traceRay` follows one ray through the planes (<a href="/caustica-documentation/multiplane/">§3</a>); `traceSourceGrid` traces a whole grid.
-- **Curves** (<a href="/caustica-documentation/critical-curves/">§9</a>): `computeCriticalCurves` finds critical curves and caustics on a traced grid, and `computeDiscImageOutlines` finds the line-art disc outlines on the same grid. `chainSegments`, `smoothPolylines` and `chainCurves` join and smooth the pieces.
+- **Curves** (<a href="/caustica-documentation/critical-curves/">§9</a>): `computeCriticalCurves` finds critical curves and caustics on a traced grid, and `computeDiscImageOutlines` finds the line-art disc outlines on a grid traced to each disc's plane. `chainSegments`, `smoothPolylines` and `chainCurves` join and smooth the pieces.
 
 ## `renderer.js`
 
-The `Renderer` class owns the WebGL2 context. `main.js` hands it the scene with `setScene(...)`, plus properties for the background, observation, masks and detector. One fragment shader repeats the physics of `lens.js` on the GPU (ray tracing, deflections, source profiles, potentials, colour maps), so each pixel is computed independently. Its limits, `MAX_PLANES` (8) and `MAX_OBJECTS` (32 per type), are exported so the interface can warn about them.
+The `Renderer` class owns the WebGL2 context. `main.js` hands it the scene with `setScene(...)`, plus properties for the background, observation, masks and detector. One fragment shader repeats the physics of `lens.js` on the GPU (ray tracing, deflections, source profiles, potentials, colour maps), so each pixel is computed independently. Its limits, `MAX_PLANES` (8), `MAX_OBJECTS` (32 lenses and 32 sources), `MAX_PASTED` (4 pasted images) and `MAX_MASKS` (16), are exported so the interface can warn about them. On a GPU that cannot fit 32 objects, the shader is rebuilt with fewer (down to 8), and `renderer.maxObjects` reports the number used.
 
 Each frame is one of:
 
-- **Lensed image or Unlensed**: per pixel, trace to each source's plane, add up the light, apply the brightness stretch, and put the background and observation behind it (<a href="/caustica-documentation/background-image/#compositing">§7</a>). With an instrument on, this is drawn off-screen, blurred and binned (`_detectorPlan`, `_blurInPlace`, `_runDetectorPasses`; <a href="/caustica-documentation/instrument/">§8</a>).
-- **Quantity map** (<a href="/caustica-documentation/lensing-quantities/">§4</a>): $\kappa$, $\gamma$, $\lvert\mu\rvert$, $\lvert\boldsymbol{\alpha}\rvert$ and parity come from the Jacobian, using four extra rays per pixel; the Fermat contours from the arrival-time surface. The image-number counts are drawn on the overlay instead.
+- **Lensed image**: per pixel, trace to each source's plane, add up the light, apply the brightness stretch, and put the background and observation behind it (<a href="/caustica-documentation/background-image/#compositing">§7</a>). **Unlensed** is drawn the same way with the lenses removed and no background or observation. With an instrument on, this is drawn off-screen, blurred and binned (`_detectorPlan`, `_blurInPlace`, `_runDetectorPasses`; <a href="/caustica-documentation/instrument/">§8</a>).
+- **Quantity map** (<a href="/caustica-documentation/lensing-quantities/">§4</a>): $\kappa$, $\gamma$, $\lvert\mu\rvert$, $\lvert\boldsymbol{\alpha}\rvert$ and parity come from four extra rays per pixel ($\lvert\boldsymbol{\alpha}\rvert$ from their mean $\boldsymbol{\beta}$, the others from the Jacobian); the Fermat contours from the arrival-time surface. The image-number counts are drawn on the overlay instead.
 - **Delensed image** (`_drawDelensed`): three passes. The main shader writes each grid point's $\boldsymbol{\beta}$ and $\lvert\mu\rvert$ to a floating-point image; a mesh pass draws the grid's triangles at their source positions, adding up $\lvert\mu\rvert$-weighted colour; a last pass divides out the weights (<a href="/caustica-documentation/background-image/#delensed-view">§7</a>).
 - **Source magnification** (`_drawSourceMag`): the same mesh, adding up only $\lvert\mu\rvert$, then coloured like a map.
 
 ## `main.js`
 
-**State.** `state` holds the scene and the focused view's settings. `state.planes` is the list of planes, sorted by redshift, each with its `objects` (`type`, `model`, `cx`, `cy`, `params`, `hidden`, and `hybridId` for the two halves of a hybrid). Masks live on `state.obs`, beside the planes, so nothing that traces rays sees them. `CONFIG_DEFAULTS` gives the starting value of every view setting. `record()` takes an undo snapshot after each scene edit, and `undo()` / `redo()` restore them.
+**State.** `state` holds the scene and the focused view's settings. `state.planes` is the list of planes, sorted by redshift, each with its `objects` (`type`, `model`, `cx`, `cy`, `params`, `hidden`, and `hybridId` for the two halves of a hybrid). Masks live on `state.obs`, beside the planes, so nothing that traces rays sees them. `CONFIG_DEFAULTS` gives the starting value of every view setting. `record()` takes an undo snapshot just before a scene edit (`beginAction()` / `commitAction()` do this once for a whole drag or slider move), and `undo()` / `redo()` restore them.
 
 **Views.** `_panes` holds one or two panes, each with its tabs and its own copy of the per-view settings, and `_focusPane` is the one last clicked. `state` always holds the focused pane's values; `_withPane(i, fn)` swaps a pane's values in while it is drawn. `PANE_OWN_KEYS` (curve, caustic and marker toggles) always belong to each pane, and the `LINK_GROUPS` do once unlinked (`setLink`). `setVizMode` sets the focused pane's view.
 
@@ -63,7 +63,7 @@ Each frame is one of:
 
 ## `style.css`
 
-Colours are CSS variables, with `html[data-theme="dark"]` overrides for the dark theme. The layout is a CSS grid: on a computer, the image area and scene drawer, then the panels, then the icon column on the right. At 640 px wide or less it becomes one scrolling column, and short landscape windows (480 px tall or less) ask for a taller window. In the light theme the lensed-image canvas is inverted with a CSS filter (kept in step with `glCanvasInverted()` in `main.js`).
+Colours are CSS variables, with `html[data-theme="dark"]` overrides for the dark theme. The layout is a CSS grid: on a computer, the tool column, the image area and scene drawer, the panels, then the icon column on the right. At 640 px wide or less it becomes one scrolling column, and short landscape windows (480 px tall or less) ask for a taller window. In the light theme the lensed-image canvas is inverted with a CSS filter (kept in step with `glCanvasInverted()` in `main.js`).
 
 ## `gif.js` + `gif.worker.js`
 
