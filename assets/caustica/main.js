@@ -9196,7 +9196,9 @@ function _buildCompositeCanvas() {
     ctx.fillRect(0, 0, off.width, off.height);
     ctx.globalCompositeOperation = 'source-over';
   }
-  ctx.drawImage(ov, 0, 0);
+  // The overlay is always at the screen's full pixel ratio, the GL canvas at the
+  // Render scale; scale the overlay onto the GL frame so the two line up at any scale.
+  ctx.drawImage(ov, 0, 0, off.width, off.height);
   _drawColorbarOnto(ctx, off.width, off.height);
   return off;
 }
@@ -9634,7 +9636,7 @@ function _compositeToLiveNow() {
     ctx.fillRect(0, 0, lc.width, lc.height);
     ctx.globalCompositeOperation = 'source-over';
   }
-  ctx.drawImage(ov, 0, 0);
+  ctx.drawImage(ov, 0, 0, lc.width, lc.height);   // overlay onto the GL frame, as in buildCompositeCanvas
   _drawColorbarOnto(ctx, lc.width, lc.height);
 }
 
